@@ -120,5 +120,5 @@ existing commands and review controls, `python3 -I -B tests/run.py`.
   references, credentials, caches and logs. Compare source hashes again.
 - [x] Request one independent whole-change review against the spec and review focus;
   reproduce and fix material findings, then rerun affected/full checks as needed.
-- [ ] Commit using the existing public Git identity, publish to the approved public
-  repository without force, and verify the remote commit and clean local state.
+- [x] Commit using the existing public Git identity, publish to the approved public
+  repository without force, and verify the remote commit and local state.
