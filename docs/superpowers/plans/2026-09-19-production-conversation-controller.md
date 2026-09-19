@@ -136,7 +136,7 @@ scenario and required result fields; add each named case with its owning task.
 **Files:** create controller/protocol helpers, protocol/controller tests and fixture harness from the file map.
 **Interfaces:** `EditorPipe(input_fd, output_fd)`, `read_ready() -> list[Frame]`, `enqueue(serial,event)`, `flush_ready()`, `eof`; `Controller(config, pipe).run() -> int`. Construction launches no ACP worker.
 
-- [ ] Add protocol tests for fragmented UTF-8, duplicate/escaped keys, NaN/infinity, bool-as-integer, depth/token/byte/count limits, partial EOF, extra keys and duplicate/future/stale serials. A repeated or stale command never replays work; unknown/future identity fails the binding.
+- [x] Add protocol tests for fragmented UTF-8, duplicate/escaped keys, NaN/infinity, bool-as-integer, depth/token/byte/count limits, partial EOF, extra keys and duplicate/future/stale serials. A repeated or stale command never replays work; unknown/future identity fails the binding.
 
 ```python
 def test_duplicate_decoded_key_is_rejected(self):
@@ -157,10 +157,10 @@ def test_close_before_first_turn_starts_no_worker(self):
     self.assertEqual(observed["controller_returncode"], 0)
 ```
 
-- [ ] Run `python3 -I -B tests/run.py nvim_ai_conversation_protocol nvim_ai_conversation_controller`; first failure must be the missing production boundary/validation, not missing fixture dependencies.
-- [ ] Implement strict decoding and closed command validation mirroring the owner fields. Add `decode_command(raw: bytes) -> Frame`. Bind once on the first accepted command; permit an initial close at turn/worker zero. Serial must be the next positive safe integer. Stale frames consume limits and cannot invoke a second operation.
-- [ ] Use nonblocking stdin/stdout and bounded queues. Allow at most 64 pending commands and 2 MiB raw command bytes; reject malformed input instead of silently dropping a cancel. Limit queued output to 32 MiB and each oldest frame's delivery to 5 seconds, without renewing that deadline on partial writes. Add `exercise("editor-output-blocked")` with a pipe that is deliberately not drained: assert bounded exit and no worker left running. Repeat with a live worker in Task 5.
-- [ ] Run both new suites plus `ai_conversation_driver`; commit `feat: add bounded conversation controller protocol`.
+- [x] Run `python3 -I -B tests/run.py nvim_ai_conversation_protocol nvim_ai_conversation_controller`; first failure must be the missing production boundary/validation, not missing fixture dependencies.
+- [x] Implement strict decoding and closed command validation mirroring the owner fields. Add `decode_command(raw: bytes) -> Frame`. Bind once on the first accepted command; permit an initial close at turn/worker zero. Serial must be the next positive safe integer. Stale frames consume limits and cannot invoke a second operation.
+- [x] Use nonblocking stdin/stdout and bounded queues. Allow at most 64 pending commands and 2 MiB raw command bytes; reject malformed input instead of silently dropping a cancel. Limit queued output to 32 MiB and each oldest frame's delivery to 5 seconds, without renewing that deadline on partial writes. Add `exercise("editor-output-blocked")` with a pipe that is deliberately not drained: assert bounded exit and no worker left running. Repeat with a live worker in Task 5.
+- [x] Run both new suites plus `ai_conversation_driver`; commit `feat: add bounded conversation controller protocol`.
 
 ## Task 3: Share workspace preparation and complete a real answer-only turn
 
