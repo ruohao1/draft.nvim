@@ -202,6 +202,45 @@ class WorkerTest(unittest.TestCase):
         self.assertFalse(self.worker.close().settled)
         self.assertLess(time.monotonic() - started, 2)
 
+    def test_write_wait_can_interrupt_a_partial_prompt_without_splicing_cancel(self):
+        self.worker.close()
+        attempts = []
+        interrupt = False
+
+        def on_write_wait():
+            if interrupt:
+                attempts.append(time.monotonic())
+                return len(attempts) >= 2
+            return False
+
+        self.worker = self.spawn(on_write_wait=on_write_wait)
+        self.worker.request("fixture/blocked-input", {})
+        interrupt = True
+        started = time.monotonic()
+        with self.assertRaisesRegex(acp.ProtocolError, "interrupted"):
+            self.worker.begin("session/prompt", {"text": "x" * (1024 * 1024)}, timeout=10)
+        self.assertLess(time.monotonic() - started, .5)
+        with self.assertRaises(acp.ProtocolError):
+            self.worker.notify("session/cancel", {})
+        result = self.worker.close()
+        self.assertTrue(result.reaped and result.output_closed)
+        self.assertFalse(result.settled)
+
+    def test_write_wait_also_interrupts_a_blocked_client_reply(self):
+        self.worker.close()
+        replying = []
+
+        def client_request(message):
+            replying.append(message)
+            return {"result": {"text": "x" * (1024 * 1024)}}
+
+        self.worker = self.spawn(on_request=client_request, on_write_wait=lambda: bool(replying))
+        with self.assertRaisesRegex(acp.ProtocolError, "interrupted"):
+            self.worker.request("fixture/blocked-reply", {})
+        result = self.worker.close()
+        self.assertTrue(result.reaped and result.output_closed)
+        self.assertFalse(result.settled)
+
     def test_client_file_and_terminal_operations_are_denied(self):
         self.assertEqual(self.worker.request("fixture/client-operations", {"outside": str(self.source)}),
                          {"denied": 2})

@@ -42,6 +42,52 @@ local function act(owner, action)
   return owner:dispatch(action, owner:snapshot().view_revision)
 end
 
+scenario("bounded progress is display-only and unknown fields fail closed", function()
+  local owner, driver = fixture()
+  assert(act(owner, { kind = "submit", text = "read the selected file" }))
+  assert(driver:emit(1, { kind = "submitted", model = "fixture/model" }))
+  assert(
+    driver:emit(
+      1,
+      { kind = "progress", tool_id = "read-1", title = "Read file", status = "completed" }
+    )
+  )
+  eq(owner:snapshot().phase, "generating")
+  eq(
+    owner:snapshot().turns[1].progress,
+    { tool_id = "read-1", title = "Read file", status = "completed" }
+  )
+  driver:emit(1, {
+    kind = "progress",
+    tool_id = "read-1",
+    title = "Read file",
+    status = "completed",
+    path = "secret",
+  })
+  eq(owner:snapshot().recovery_required, true)
+end)
+
+scenario("progress fields have closed byte and status bounds", function()
+  for _, change in ipairs({
+    { title = string.rep("x", 257) },
+    { tool_id = "" },
+    { status = "approved" },
+  }) do
+    local owner, driver = fixture()
+    assert(act(owner, { kind = "submit", text = "read" }))
+    assert(driver:emit(1, { kind = "submitted", model = "fixture/model" }))
+    driver:emit(
+      1,
+      vim.tbl_extend(
+        "force",
+        { kind = "progress", tool_id = "id", title = "Read", status = "pending" },
+        change
+      )
+    )
+    eq(owner:snapshot().recovery_required, true)
+  end
+end)
+
 scenario("construction and observation are passive and detached", function()
   local owner, driver, options = fixture()
   local view = owner:snapshot()

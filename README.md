@@ -9,9 +9,15 @@ Draft has two editing workflows:
 - **Staged OpenCode edits:** select saved files, let OpenCode edit isolated
   copies, and approve each frozen proposal **before it reaches your project**.
 
-This is an early Linux extraction. Persistent conversations and their chat UI
-are still in development; there is no `:NvimAIChat` command. Staged follow-ups
-start a fresh generation against pending proposals, not a persistent chat.
+This is an early Linux extraction. The internal conversation controller retains
+OpenCode context across explicit turns with fresh, isolated workers. Chat UI is
+still in development; there is no `:NvimAIChat` command. Existing staged follow-ups
+continue to start a fresh generation against pending proposals.
+
+The controller uses the same saved-source checks, frozen reviews and guarded
+publisher as staging. It is an internal API for the upcoming chat integration.
+Its [validation record](docs/validation/2026-09-19-conversation-controller.md)
+separates ordinary fixtures from actual pinned OpenCode with a local provider.
 
 ## Requirements
 

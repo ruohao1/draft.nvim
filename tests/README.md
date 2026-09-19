@@ -83,7 +83,8 @@ files directly in an isolated environment:
 - `NVIM_AI_STAGED_REAL_OPENCODE=/absolute/path`: staged native edit tools against
   a loopback scripted provider (`nvim_ai_staged.py`, `nvim_ai_staged_multi.py`).
 - `NVIM_AI_ACP_REAL_OPENCODE=/absolute/path`: retained-session/owner-death proofs
-  with a scripted provider (`nvim_ai_acp_resume.py`, `nvim_ai_conversation_lifetime.py`).
+  with a scripted provider (`nvim_ai_acp_resume.py`, `nvim_ai_conversation_lifetime.py`)
+  and the production controller (`nvim_ai_conversation_interop.py`).
 - `NVIM_AI_CACHE_REAL=1`: installed OpenCode cache audit
   (`nvim_ai_opencode_cache.py`; the binary must also be on PATH).
 
@@ -91,6 +92,37 @@ These flags are deliberately not forwarded by the standard runner. The shell
 scripts `nvim-ai-opencode-probe.sh` and `nvim-ai-opencode-compat.sh` are optional
 installed-binary probes. `ai_transport_manual.lua` is an interactive transport
 demo and is never part of automated testing.
+
+Run the production-controller proof from the checkout with a canonical path to
+the installed **1.18.30** executable. This exact invocation constructs an
+allowlisted environment and removes only its own disposable profile directories:
+
+```sh
+python3 - <<'PY'
+import os, pathlib, subprocess, sys, tempfile
+os.umask(0o077)
+with tempfile.TemporaryDirectory(prefix="draft-pinned-controller-", dir="/tmp") as scratch:
+    env = {"PATH": os.defpath, "LANG": "C.UTF-8",
+           "NVIM_AI_ACP_REAL_OPENCODE": "/absolute/path/to/opencode"}
+    for key in ("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
+                "XDG_CACHE_HOME", "XDG_RUNTIME_DIR"):
+        path = pathlib.Path(scratch) / key.lower()
+        path.mkdir(mode=0o700)
+        env[key] = str(path)
+    result = subprocess.run([sys.executable, "-I", "-B",
+                             "tests/nvim_ai_conversation_interop.py", "-v"], env=env)
+    sys.exit(result.returncode)
+PY
+```
+
+The four cases check real assistant/native-tool continuity without prompt replay,
+model/profile reapplication, cooperative cancellation/resume, actual restoration
+errors, and provider context overflow without compaction or replay. They observe
+the production controller's real ACP calls and worker metadata. The restoration
+fault substitutes a nonexistent session ID only in the test observer; the real
+backend returns the error. No database bytes are inspected, changed or repaired.
+Synthetic request contents stay in test fixtures; production diagnostics remain
+content-free. Every owned listener must stop, and close must remove retained state.
 
 ## What the tests establish
 
@@ -109,10 +141,12 @@ The install suite copies the plugin to a directory containing spaces, launches
 Neovim from an unrelated cwd, exercises real sibling helpers/controller fixtures,
 and generates and resolves the public help tags.
 
-Conversation tests exercise internal state owners, the ACP worker, storage and
-the editor-side controller pipe. The pipe uses a separate scripted controller;
-there is no production conversation controller or user-facing chat integration.
-Passing those tests does not make persistent chat available.
+Conversation tests exercise internal owners, the production controller, ACP
+workers, retained storage, review receipts, cancellation/backpressure and process
+lifetime. A separate scripted controller remains in the isolated pipe unit suite.
+Real headless tests exercise the production factory, guarded publication, dirty
+hidden aliases, frozen-panel changes, source-refresh failures and editor EOF.
+Passing these internal engine tests does not make the unfinished chat UI available.
 
 The first extraction is validated on Linux with Neovim 0.12.4, Python 3.14.4,
 Bubblewrap 0.11.1, Git 2.53.0 and tmux 3.6. This is not a claim that older Neovim,

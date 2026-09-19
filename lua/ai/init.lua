@@ -52,6 +52,9 @@ function M.setup(options)
     if state.stopped then
       return nil, "AI runtime is stopped"
     end
+    if state.conversation then
+      return nil, "Close the conversation before standalone staged activity"
+    end
     if native_running then
       return nil, "Wait for the native lifecycle operation before staging"
     end
@@ -73,12 +76,48 @@ function M.setup(options)
   end
   local staged =
     require("ai.staged").setup(options.staged, before_staging, options.keymaps ~= false)
+  function runtime:conversation(config)
+    if type(config) ~= "table" then
+      return nil, "Invalid trusted conversation configuration"
+    end
+    local allowed, why = before_staging()
+    if not allowed then
+      return nil, why
+    end
+    if staged.busy() then
+      return nil, "Finish or cancel the staged turn/dialog before starting a conversation"
+    end
+    local lease = {}
+    state.conversation = lease
+    local callback = config.on_close
+    local configured = vim.tbl_extend("force", {}, config, {
+      on_close = function()
+        if state.conversation == lease then
+          state.conversation = nil
+          state.generation = state.generation + 1
+        end
+        if type(callback) == "function" then
+          callback()
+        end
+      end,
+    })
+    local ran, owner, reason = pcall(require("ai.conversation_controller").new, configured)
+    if not ran or not owner then
+      state.conversation = nil
+      return nil, ran and reason or "Conversation construction failed"
+    end
+    lease.owner = owner
+    return owner
+  end
   local function native_transaction(callback, ...)
     if state.stopped or native_running then
       return nil, "AI native lifecycle is busy or stopped"
     end
     if staged.busy() then
       return nil, "Finish or cancel the staged turn/dialog before native activity"
+    end
+    if state.conversation then
+      return nil, "Close the conversation before native activity"
     end
     native_running = true
     local ok, result, why = pcall(callback, ...)
@@ -94,6 +133,9 @@ function M.setup(options)
     end
     if state.stopped then
       return nil, "AI runtime is stopped"
+    end
+    if state.conversation then
+      return nil, "Close the conversation before native activity"
     end
     if vim.uv.os_uname().sysname ~= "Linux" then
       return nil, "AI launch is disabled outside Linux"
@@ -721,6 +763,9 @@ function M.setup(options)
   function runtime:shutdown()
     if state.stopped then
       return state.shutdown_result
+    end
+    if state.conversation then
+      return nil, "Close the conversation before stopping the runtime"
     end
     state.stopped = true
     display:stop()

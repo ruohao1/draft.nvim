@@ -103,6 +103,10 @@ for line in sys.stdin:
         send({"id": request["id"], "result": {}})
         while True:
             time.sleep(1)
+    elif request.get("method") == "fixture/blocked-reply":
+        send({"id": "client", "method": "fixture/client", "params": {}})
+        while True:
+            time.sleep(1)
     elif request.get("method") == "fixture/client-operations":
         for index, method in enumerate(("fs/write_text_file", "terminal/create")):
             send({"id": index, "method": method, "params": {"path": request["params"]["outside"],
