@@ -377,6 +377,12 @@ class EngineTest(unittest.TestCase):
         return pid, task, store
 
     def test_real_neovim_eof_closes_the_production_factory_and_worker(self):
+        self.check_editor_eof("conversation_production_editor.lua")
+
+    def test_public_chat_editor_eof_closes_controller_and_worker(self):
+        self.check_editor_eof("chat_production_editor.lua")
+
+    def check_editor_eof(self, fixture):
         nvim = shutil.which("nvim")
         self.assertIsNotNone(nvim)
         gate = self.scratch / "editor-exit"
@@ -393,7 +399,7 @@ class EngineTest(unittest.TestCase):
             env[key] = str(path)
         editor = subprocess.Popen([nvim, "--clean", "--headless", "-u", "NONE", "-i", "NONE",
             "--cmd", "lua vim.opt.rtp:prepend(vim.env.DRAFT_TEST_ROOT)", "-l",
-            str(ROOT / "tests/fixtures/ai/conversation_production_editor.lua")],
+            str(ROOT / "tests/fixtures/ai" / fixture)],
             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, umask=0o077)
         owned = []
         try:

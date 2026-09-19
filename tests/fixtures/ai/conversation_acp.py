@@ -155,6 +155,8 @@ for raw in sys.stdin:
                        {'sessionUpdate': 'tool_call', 'toolCallId': 'read-1', 'title': 'Read selected file', 'status': 'completed'}):
             send({'method': 'session/update', 'params': {
                 'sessionId': 'wrong-session' if case == 'wrong-session' else session, 'update': update}})
+        if case == 'stream':
+            audit({'ready': case}, wait=True)
         answer(identifier, {'stopReason': 'refusal' if case == 'bad-stop' else 'end_turn'})
 if case in ('slow-exit', 'held-edit'):
     audit({'ready': case}, wait=True)

@@ -156,7 +156,12 @@ function M.new(options)
           vim.fn.winrestview(saved)
         end)
       end
-      vim.wo[win].winbar = (" Draft · " .. (latest.phase or "idle")):gsub("%%", "%%%%")
+      vim.wo[win].winbar = (
+        " Draft · "
+        .. (latest.phase or "idle")
+        .. " · "
+        .. (latest.desired_model or "")
+      ):gsub("%%", "%%%%")
     end
   end
 
@@ -265,6 +270,7 @@ function M.new(options)
       vim.wo[win].wrap = true
       vim.wo[win].signcolumn = "no"
       vim.wo[win].foldenable = false
+      vim.wo[win].statusline = kind == "input" and " Draft message" or " Draft conversation"
       vim.wo[win].winbar = kind == "input" and " Compose · Ctrl-S send · Enter newline"
         or " Draft"
     end
