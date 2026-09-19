@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Private staging preferences only: never read credentials or invoke a provider."""
+import fcntl
 import importlib.util
 import json
 import os
@@ -89,6 +90,9 @@ def open_directory(directory, create=False):
     try:
         for index, fd in enumerate(parent.fds):
             directory_node(os.fstat(fd), leaf=index == len(parent.fds) - 1)
+        # Lock the stable directory inode: each save replaces the record inode.
+        # Closing the parent releases this lock after all validation and I/O.
+        fcntl.flock(parent.fd, fcntl.LOCK_EX if create else fcntl.LOCK_SH)
         parent.verify()
         return parent
     except BaseException:

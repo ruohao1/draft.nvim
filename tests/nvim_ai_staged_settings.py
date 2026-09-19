@@ -203,8 +203,24 @@ class StagedSettingsTest(unittest.TestCase):
         choices = [dict(ENABLED, model="fixture/model-" + str(i)) for i in range(8)]
         with ThreadPoolExecutor(max_workers=4) as pool:
             results = list(pool.map(lambda value: self.invoke("save", value), choices))
-        self.assertTrue(all(result["ok"] for result in results))
+        self.assertTrue(all(result["ok"] for result in results), results)
         self.assertIn(self.invoke()["settings"], choices)
+        self.assertEqual(list(self.directory.iterdir()), [self.record])
+
+    def test_concurrent_loads_observe_whole_private_records(self):
+        self.seed()
+        choices = [dict(ENABLED, model="fixture/model-" + str(i)) for i in range(16)]
+        operations = [value for choice in choices for value in (None, choice, None)]
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(
+                lambda value: self.invoke("load" if value is None else "save", value),
+                operations,
+            ))
+        self.assertTrue(all(result["ok"] for result in results), results)
+        for result in results:
+            self.assertIn(result["settings"], [ENABLED, *choices])
+        self.assertIn(self.invoke()["settings"], choices)
+        self.assertEqual(self.record.stat().st_mode & 0o7777, 0o600)
         self.assertEqual(list(self.directory.iterdir()), [self.record])
 
 
