@@ -29,6 +29,8 @@ class Turn:
         self.stage = None
         self.frozen = None
         self.stopped = self.graceful = self.store_valid = False
+        self.cancelling = self.cancel_confirmed = False
+        self.on_write_wait = None
 
     def emit(self, kind, **fields):
         self.events.append(dict(kind=kind, **fields))
@@ -54,7 +56,8 @@ class Turn:
             port = reserved.getsockname()[1]
         argv += ['--hostname', '127.0.0.1', '--port', str(port), '--mdns=false']
         self.startup_deadline = time.monotonic() + 60
-        self.worker = self.store.start(argv, env=env, on_notification=self.notification, on_request=self.request)
+        self.worker = self.store.start(argv, env=env, on_notification=self.notification,
+                                       on_request=self.request, on_write_wait=self.on_write_wait)
         self.begin('initialize', {'protocolVersion': 1,
             'clientInfo': {'name': 'draft-conversation', 'version': '0.1'},
             'clientCapabilities': {'fs': {'readTextFile': False, 'writeTextFile': False}, 'terminal': False}})
@@ -110,7 +113,8 @@ class Turn:
             text = content.get('text')
             if not isinstance(text, str) or len(text.encode()) > 1024 * 1024:
                 raise protocol.Refused('ACP answer chunk exceeds display budget')
-            self.emit('text', text=text)
+            if not self.cancelling:
+                self.emit('text', text=text)
         elif kind in ('tool_call', 'tool_call_update'):
             tool_id, title, status = update.get('toolCallId'), update.get('title'), update.get('status')
             # ACP updates may omit unchanged presentation fields.
@@ -126,7 +130,8 @@ class Turn:
             if len(self.tools) >= 20000 and tool_id not in self.tools:
                 raise protocol.Refused('ACP tool progress budget exceeded')
             self.tools[tool_id] = (title, status)
-            self.emit('progress', tool_id=tool_id, title=title, status=status)
+            if not self.cancelling:
+                self.emit('progress', tool_id=tool_id, title=title, status=status)
 
     def request(self, message):
         if message['method'] != 'session/request_permission':
@@ -175,6 +180,18 @@ class Turn:
                         'Shell tools are disabled.\n\n' + self.command['message']}]})
                     self.emit('submitted', model=self.command['model'], models=self.models)
             elif self.stage == 'session/prompt':
+                if self.cancelling:
+                    if result.get('stopReason') != 'cancelled':
+                        raise protocol.Refused('ACP cancellation was not confirmed')
+                    self.store.stop(outcome='cancelled')
+                    self.stopped = self.graceful = self.store_valid = self.cancel_confirmed = True
+                    staging.discard_workspace(self.task)
+                    self.task = None
+                    self.emit('cancelled', stopped=True, graceful=True, store_valid=True,
+                              tokens_retired=True, cancel_confirmed=True)
+                    self.done = True
+                    events, self.events = self.events, []
+                    return events
                 self.emit('stopping')
                 if result.get('stopReason') != 'end_turn':
                     raise protocol.Refused('ACP turn did not finish normally')
@@ -191,9 +208,21 @@ class Turn:
         events, self.events = self.events, []
         return events
 
+    def cancel(self):
+        self.cancelling = True
+        if (self.done or self.worker is None or self.worker.fault
+                or self.stage != 'session/prompt' or not self.submitted):
+            return self.fail()
+        # The controller removed the handled command before entering notify.
+        # Its write hook still observes fresh close/EOF or malformed input.
+        self.worker.deadline = min(self.worker.deadline, time.monotonic() + 5)
+        self.worker.notify('session/cancel', {'sessionId': self.session})
+        return []
+
     def fail(self):
         self.events = []
-        self.emit('stopping')
+        if not self.cancelling:
+            self.emit('stopping')
         if self.worker is not None:
             try:
                 self.store.stop(outcome='failed')
@@ -218,9 +247,13 @@ class Turn:
                 retired = True
             except OSError:
                 pass
-        self.emit('settled', outcome='failed', stopped=self.stopped, graceful=self.graceful,
-                  store_valid=self.store_valid, tokens_retired=retired,
-                  submission='submitted' if self.submitted else 'not_submitted')
+        if self.cancelling:
+            self.emit('cancelled', stopped=self.stopped, graceful=self.graceful,
+                      store_valid=self.store_valid, tokens_retired=retired, cancel_confirmed=False)
+        else:
+            self.emit('settled', outcome='failed', stopped=self.stopped, graceful=self.graceful,
+                      store_valid=self.store_valid, tokens_retired=retired,
+                      submission='submitted' if self.submitted else 'not_submitted')
         self.done = True
         events, self.events = self.events, []
         return events

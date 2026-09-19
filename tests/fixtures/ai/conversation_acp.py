@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import socket
 import sys
+import time
 
 
 config = json.loads(Path('/opt/config.json').read_text())
@@ -48,6 +49,10 @@ for raw in sys.stdin:
     method, identifier = message.get('method'), message.get('id')
     audit({'method': method, 'params': message.get('params')})
     if method == 'initialize':
+        if case == 'startup-cancel':
+            audit({'ready': 'startup-cancel'})
+            while True:
+                time.sleep(1)
         assert message['params']['clientCapabilities'] == {
             'fs': {'readTextFile': False, 'writeTextFile': False}, 'terminal': False}
         answer(identifier, {'protocolVersion': 1, 'agentInfo': {
@@ -62,8 +67,23 @@ for raw in sys.stdin:
         assert params['sessionId'] == session
         value = 'wrong' if case == 'wrong-confirmation' else params['value']
         answer(identifier, {'configOptions': choices(**{params['configId']: value})})
+        if params['configId'] == 'mode' and case == 'blocked-prompt':
+            audit({'ready': 'blocked-prompt'})
+            while True:
+                time.sleep(1)
     elif method == 'session/prompt':
         assert message['params']['sessionId'] == session
+        if case in ('cancel', 'flood-cancel'):
+            audit({'ready': case})
+            if case == 'flood-cancel':
+                for _ in range(4000):
+                    send({'method': 'session/update', 'params': {'sessionId': session, 'update': {
+                        'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'text'}}}})
+            cancel = json.loads(next(sys.stdin))
+            assert cancel == {'jsonrpc': '2.0', 'method': 'session/cancel', 'params': {'sessionId': session}}
+            audit({'cancel_received': True})
+            answer(identifier, {'stopReason': 'cancelled'})
+            continue
         for index, denied in enumerate(('fs/read_text_file', 'fs/write_text_file', 'terminal/create')):
             send({'id': 'denied-' + str(index), 'method': denied, 'params': {'sessionId': session}})
             assert json.loads(next(sys.stdin))['error']['code'] == -32601

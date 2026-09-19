@@ -191,7 +191,7 @@ def test_answer_finishes_without_proposal(self):
 **Files:** Worker, turn/controller helpers, `tests/nvim_ai_acp_worker.py`, fault peer and controller tests.
 **Interfaces:** optional Worker `on_write_wait: () -> bool`, forwarded through `Store.start`; true interrupts the write with a trusted protocol fault. Callback only drains/validates editor input and records intent; it never recursively calls ACP or a publisher.
 
-- [ ] Add real peer cases for cancel during initialize, normal generating cancel, a peer that never reads a large prompt, blocked client-capability reply and a notification flood. Synchronize with pipe/readiness markers, not repeated sleep-based races.
+- [x] Add real peer cases for cancel during initialize, normal generating cancel, a peer that never reads a large prompt, blocked client-capability reply and a notification flood. Synchronize with pipe/readiness markers, not repeated sleep-based races.
 
 ```python
 def test_cancel_interrupts_backpressured_prompt(self):
@@ -203,10 +203,10 @@ def test_cancel_interrupts_backpressured_prompt(self):
     self.assertEqual(observed["tokens"], [])
 ```
 
-- [ ] Run worker/controller suites to show blocked input currently delays interruption. Add the hook before bounded write waits in `_send`; keep existing callers unchanged when omitted. Preserve Store's independent metadata guard.
-- [ ] Between normal polls, process cancel before new work. If the prompt frame was fully sent, issue one `session/cancel` and await the matching prompt's `cancelled` result for at most 5 seconds. If a write was interrupted, never splice another JSON message into that frame or claim graceful resumability. Clear the handled cancel intent before its own notify call; fresh close/EOF must still interrupt a blocked cancellation write.
-- [ ] Add a startup-cancel regression: no `session/prompt`, no invented cancellation acknowledgement, no false idle-success event. Safe retry is permitted only when all existing owner proof fields can be established; otherwise explicit recovery remains required. Close can still clean a proven-stopped tainted store.
-- [ ] Run `nvim_ai_acp_worker nvim_ai_conversation_store nvim_ai_conversation_controller ai_conversation`; commit `fix: service conversation cancellation during ACP backpressure`.
+- [x] Run worker/controller suites to show blocked input currently delays interruption. Add the hook before bounded write waits in `_send`; keep existing callers unchanged when omitted. Preserve Store's independent metadata guard.
+- [x] Between normal polls, process cancel before new work. If the prompt frame was fully sent, issue one `session/cancel` and await the matching prompt's `cancelled` result for at most 5 seconds. If a write was interrupted, never splice another JSON message into that frame or claim graceful resumability. Clear the handled cancel intent before its own notify call; fresh close/EOF must still interrupt a blocked cancellation write.
+- [x] Add a startup-cancel regression: no `session/prompt`, no invented cancellation acknowledgement, no false idle-success event. Safe retry is permitted only when all existing owner proof fields can be established; otherwise explicit recovery remains required. Close can still clean a proven-stopped tainted store.
+- [x] Run `nvim_ai_acp_worker nvim_ai_conversation_store nvim_ai_conversation_controller ai_conversation`; commit `fix: service conversation cancellation during ACP backpressure`.
 
 ## Task 5: Resume eligible sessions and supervise editor loss
 

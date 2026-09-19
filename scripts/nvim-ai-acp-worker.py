@@ -63,9 +63,10 @@ class Exit(namedtuple("Exit", "reaped output_closed forced returncode fault pend
 
 class Worker:
     def __init__(self, command, *, env, rpc_timeout=15, stop_timeout=3,
-                 on_notification=None, on_request=None, guard=None):
+                 on_notification=None, on_request=None, guard=None, on_write_wait=None):
         self.rpc_timeout, self.stop_timeout = rpc_timeout, stop_timeout
         self.on_notification, self.on_request = on_notification, on_request
+        self.on_write_wait = on_write_wait
         self.guard, self.guard_due = guard, 0
         self.pending, self.fault, self.exit = None, None, None
         self.serial, self.count, self.received_bytes = 0, 0, 0
@@ -176,6 +177,15 @@ class Worker:
         offset = 0
         while offset < len(payload):
             self._poll_guard()
+            if self.on_write_wait is not None:
+                try:
+                    interrupted = self.on_write_wait()
+                except Exception:
+                    self._fail("ACP write interruption check failed")
+                if interrupted:
+                    # The pipe may contain a partial frame. A cancel must never
+                    # be appended to it; shutdown is the only next operation.
+                    self._fail("ACP input write interrupted")
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 self._fail("ACP input deadline exceeded")

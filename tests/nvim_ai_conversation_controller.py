@@ -152,8 +152,9 @@ class EngineTest(unittest.TestCase):
         self.serial += 1
         if kind in ("start", "revise"):
             self.turn += 1
-            extra = dict(message="Answer without editing.", sources=[{"path": "example.txt",
-                "snapshot_sha256": hashlib.sha256(self.source.read_bytes()).hexdigest()}], **extra)
+            extra.setdefault("message", "Answer without editing.")
+            extra.setdefault("sources", [{"path": "example.txt",
+                "snapshot_sha256": hashlib.sha256(self.source.read_bytes()).hexdigest()}])
         command = dict(kind=kind, conversation_id="a" * 32, owner_generation=1,
             turn_id=self.turn, worker_generation=self.turn, root=str(self.root),
             selection=["example.txt"], model="fixture/model", **extra)
@@ -220,6 +221,49 @@ class EngineTest(unittest.TestCase):
                 event = self.receive("settled")
                 self.assertEqual(event["outcome"], "failed")
                 self.assertNotIn("proposal", event)
+                self.stop()
+
+    def wait_ready(self, case):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if {"ready": case} in self.audit:
+                return
+            threading.Event().wait(.01)
+        self.fail("ACP readiness marker not received: " + case)
+
+    def test_normal_and_flooded_generation_cancel_cleanly(self):
+        for case in ("cancel", "flood-cancel"):
+            with self.subTest(case=case):
+                self.serial = self.turn = 0
+                self.audit.clear()
+                self.spawn(case)
+                self.send("start")
+                self.receive("submitted")
+                self.wait_ready(case)
+                started = time.monotonic()
+                self.send("cancel")
+                event = self.receive("cancelled")
+                self.assertTrue(event["cancel_confirmed"] and event["store_valid"] and event["tokens_retired"])
+                self.assertLess(time.monotonic() - started, 2)
+                self.assertEqual(self.source.read_bytes(), b"original text\n")
+                self.stop()
+
+    def test_startup_and_backpressured_prompt_cancel_require_recovery(self):
+        for case in ("startup-cancel", "blocked-prompt"):
+            with self.subTest(case=case):
+                self.serial = self.turn = 0
+                self.audit.clear()
+                self.spawn(case)
+                self.send("start", message="é" * 16000)
+                self.wait_ready(case)
+                started = time.monotonic()
+                self.send("cancel")
+                event = self.receive("cancelled")
+                self.assertTrue(event["stopped"] and event["tokens_retired"])
+                self.assertFalse(event["store_valid"])
+                self.assertFalse(event.get("cancel_confirmed", False))
+                self.assertLess(time.monotonic() - started, 4.2)
+                self.assertFalse(any(item.get("method") == "session/prompt" for item in self.audit))
                 self.stop()
 
 

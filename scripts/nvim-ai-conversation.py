@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """One trusted editor/controller lifetime; ACP workers are created by explicit turns."""
 import argparse
+from collections import deque
 import importlib.util
 import os
 from pathlib import Path
@@ -45,6 +46,24 @@ class Controller:
         self.store = self.turn = self.active = None
         self.sequence = 0
         self.closing = False
+        self.inbox = deque()
+
+    def collect(self):
+        for frame in self.pipe.read_ready():
+            if self.binding.accept(frame):
+                self.inbox.append(frame)
+        if len(self.inbox) > 64:
+            raise protocol.Refused("Editor command queue budget exceeded")
+
+    def write_wait(self):
+        self.collect()
+        return self.pipe.eof or any(frame["command"]["kind"] in ("cancel", "close") for frame in self.inbox)
+
+    def failed(self):
+        events = self.turn.fail()
+        if not self.pipe.eof and not any(frame["command"]["kind"] in ("cancel", "close") for frame in self.inbox):
+            for event in events:
+                self.emit(event)
 
     def emit(self, event):
         self.sequence += 1
@@ -61,8 +80,6 @@ class Controller:
     def dispatch(self, frame):
         if self.closing:
             raise protocol.Refused("Command follows controller close")
-        if not self.binding.accept(frame):
-            return
         command = frame["command"]
         if command["kind"] == "close":
             self.cleanup()
@@ -76,33 +93,48 @@ class Controller:
             if self.store is None:
                 self.store = storage.Store()
             self.turn = turns.Turn(self.config, self.store, self.pipe)
+            self.turn.on_write_wait = self.write_wait
             try:
                 self.turn.start(command)
             except FAILURES:
-                for event in self.turn.fail():
-                    self.emit(event)
+                self.failed()
+        elif command["kind"] == "cancel":
+            if self.turn is None:
+                raise protocol.Refused("No turn can be cancelled")
+            self.active = frame
+            try:
+                events = self.turn.cancel()
+            except FAILURES:
+                events = self.turn.fail()
+            for event in events:
+                self.emit(event)
         else:
             raise protocol.Refused("Conversation command is not available")
 
     def run(self):
         try:
             while True:
-                for frame in self.pipe.read_ready():
-                    self.dispatch(frame)
+                self.collect()
+                while self.inbox:
+                    self.dispatch(self.inbox.popleft())
                 if self.pipe.eof and not self.closing:
                     return 0
                 if self.turn is not None and not self.turn.done:
                     try:
                         events = self.turn.advance()
                     except FAILURES:
-                        events = self.turn.fail()
+                        self.failed()
+                        events = []
                     for event in events:
                         self.emit(event)
                 self.pipe.flush_ready()
                 if self.closing and not self.pipe.writing:
                     return 0
+                # Worker.poll already supplies the bounded wait for active
+                # turns. Sleeping again here delays every 64-message batch.
+                pause = 0 if self.inbox or (self.turn is not None and not self.turn.done) else .05
                 select.select([] if self.pipe.eof else [self.pipe.input],
-                              [self.pipe.output] if self.pipe.writing else [], [], .05)
+                              [self.pipe.output] if self.pipe.writing else [], [], pause)
         finally:
             self.cleanup()
 
