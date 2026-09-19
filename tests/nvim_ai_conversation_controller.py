@@ -368,12 +368,63 @@ class EngineTest(unittest.TestCase):
                 self.assertEqual(methods.count("session/prompt"), 2 if case == "cancel" else 1)
                 self.stop()
 
-    def worker_paths(self):
-        pid = int(Path(f"/proc/{self.child.pid}/task/{self.child.pid}/children").read_text().strip())
+    def worker_paths(self, controller=None):
+        controller = controller or self.child.pid
+        pid = int(Path(f"/proc/{controller}/task/{controller}/children").read_text().strip())
         args = Path(f"/proc/{pid}/cmdline").read_bytes().split(b'\0')
         task = next(Path(os.fsdecode(arg)).parent for arg in args if arg.endswith(b'/staging'))
         store = next(Path(os.fsdecode(arg)).parent for arg in args if arg.endswith(b'/backend-store'))
         return pid, task, store
+
+    def test_real_neovim_eof_closes_the_production_factory_and_worker(self):
+        nvim = shutil.which("nvim")
+        self.assertIsNotNone(nvim)
+        gate = self.scratch / "editor-exit"
+        self.config.write_text(json.dumps({"root": str(self.root), "selection": self.selection,
+            "opencode": str(self.peer), "model": "fixture/model",
+            "provider": {"fixture": {"options": {"testCase": "cancel", "auditPort": self.server.server_address[1]}}}}))
+        self.config.chmod(0o600)
+        env = {"PATH": str(Path(nvim).parent) + os.pathsep + os.defpath, "LANG": "C.UTF-8",
+            "DRAFT_EDITOR_CONFIG": str(self.config), "DRAFT_EDITOR_GATE": str(gate),
+            "DRAFT_TEST_ROOT": str(ROOT), "NVIM_LOG_FILE": "/dev/null"}
+        for key in ("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR"):
+            path = self.scratch / key.lower()
+            path.mkdir(mode=0o700)
+            env[key] = str(path)
+        editor = subprocess.Popen([nvim, "--clean", "--headless", "-u", "NONE", "-i", "NONE",
+            "--cmd", "lua vim.opt.rtp:prepend(vim.env.DRAFT_TEST_ROOT)", "-l",
+            str(ROOT / "tests/fixtures/ai/conversation_production_editor.lua")],
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, umask=0o077)
+        owned = []
+        try:
+            self.wait_ready("cancel")
+            controller = int(Path(f"/proc/{editor.pid}/task/{editor.pid}/children").read_text().strip())
+            controller_fd = os.pidfd_open(controller)
+            owned.append((controller, controller_fd))
+            args = Path(f"/proc/{controller}/cmdline").read_bytes().split(b'\0')
+            launch = Path(os.fsdecode(args[args.index(b'--config') + 1]))
+            worker, task, store = self.worker_paths(controller)
+            worker_fd = os.pidfd_open(worker)
+            owned.append((worker, worker_fd))
+            gate.touch()
+            out, error = editor.communicate(timeout=12)
+            self.assertEqual(editor.returncode, 0, out + error)
+            self.assertTrue(select.select([controller_fd], [], [], 12)[0], "Controller survived editor EOF")
+            self.assertTrue(select.select([worker_fd], [], [], 0)[0], "Worker survived its controller")
+            self.assertFalse(task.exists() or store.exists() or launch.parent.exists())
+            self.assertEqual(self.source.read_bytes(), b"original text\n")
+        finally:
+            if editor.poll() is None:
+                editor.kill()
+            editor.communicate(timeout=3)
+            for pid, fd in owned:
+                if not select.select([fd], [], [], 0)[0]:
+                    signal.pidfd_send_signal(fd, signal.SIGKILL)
+                try:
+                    os.waitpid(pid, 0)
+                except ChildProcessError:
+                    pass
+                os.close(fd)
 
     def test_changed_missing_and_oversized_idle_stores_never_launch_again(self):
         for damage in ("changed", "missing", "oversized"):

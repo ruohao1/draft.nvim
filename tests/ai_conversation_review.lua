@@ -87,6 +87,23 @@ local function receipt(sequence, phase, first, second)
   }
 end
 
+scenario("source refresh failure retains confirmed receipts and fences remaining work", function()
+  local owner, driver = fixture()
+  assert(complete(owner, driver))
+  assert(decide(owner, "approve", "first.txt"))
+  driver:emit(2, {
+    kind = "decided",
+    receipt = receipt(1, "review_ready", "accepted", "pending"),
+    sources_valid = false,
+  })
+  local view = owner:snapshot()
+  eq(view.phase, "failed")
+  eq(view.publication_recovery, true)
+  eq(view.rounds[1].files[1].state, "accepted")
+  eq(view.rounds[1].files[2].state, "blocked")
+  assert(not decide(owner, "approve", "second.txt"))
+end)
+
 scenario("a proven frozen proposal opens a detached review without publishing", function()
   local owner, driver = fixture()
   local proposed = proposal()

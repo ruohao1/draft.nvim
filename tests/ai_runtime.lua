@@ -251,6 +251,50 @@ end
 
 local ok, err = xpcall(function()
   do
+    local f = fixture()
+    local config = {
+      root = f.root,
+      selection = { "demo.lua" },
+      model = "fixture/model",
+      opencode = "/usr/bin/true",
+    }
+    local owner = assert(f.runtime:conversation(config))
+    eq(owner:snapshot().phase, "idle", "runtime conversation construction remains passive")
+    assert(not f.runtime:conversation(config), "A second owner must not acquire the runtime lease")
+    assert(not f.runtime:open(), "An idle conversation still excludes native activity")
+    assert(not f.runtime:shutdown(), "Shutdown cannot discard an unclosed conversation lease")
+    assert(owner:dispatch({ kind = "close" }, owner:snapshot().view_revision))
+    assert(vim.wait(3000, function()
+      return owner:snapshot().phase == "closed"
+    end, 10))
+    assert(f.runtime:open(), "Confirmed close releases the conversation lease")
+    assert(not f.runtime:conversation(config), "An active native pane excludes a conversation")
+    f.runtime:shutdown()
+  end
+  do
+    local f = fixture({
+      configure = function(value)
+        value.options.select = function(items, _, callback)
+          value.pick, value.choice = callback, items[2]
+        end
+      end,
+    })
+    assert(f.runtime:prompt("n"))
+    local owner = assert(f.runtime:conversation({
+      root = f.root,
+      selection = { "demo.lua" },
+      model = "fixture/model",
+      opencode = "/usr/bin/true",
+    }))
+    assert(owner:dispatch({ kind = "close" }, owner:snapshot().view_revision))
+    assert(vim.wait(3000, function()
+      return owner:snapshot().phase == "closed"
+    end, 10))
+    f.pick(f.choice)
+    eq(#f.invocations, 0, "a picker predating the conversation cannot launch after it closes")
+    assert(f.runtime:shutdown())
+  end
+  do
     local f = staging_fixture()
     local staged = require("ai.staged")
     assert(f.runtime:native_prompt("n"))
@@ -335,6 +379,12 @@ local ok, err = xpcall(function()
     end
     vim.cmd("NvimAIStage")
     assert(submit and staged.busy(), "staged instruction dialog owns the workflow")
+    assert(not f.runtime:conversation({
+      root = f.root,
+      selection = { "demo.lua" },
+      model = "fixture/model",
+      opencode = "/usr/bin/true",
+    }), "staged dialog excludes conversation")
     for _, operation in ipairs({ "open", "backend", "native_prompt" }) do
       assert(not f.runtime[operation](f), "native activity waits for the instruction dialog")
     end
@@ -1243,10 +1293,22 @@ local ok, err = xpcall(function()
   )
   vim.cmd("NvimAIStage TEST:approve")
   assert(not require("ai.staged").busy(), "queued native opening blocks direct staging")
+  assert(not f.runtime:conversation({
+    root = f.root,
+    selection = { "demo.lua" },
+    model = "fixture/model",
+    opencode = "/usr/bin/true",
+  }), "queued native opening excludes conversation")
   eq(#f.invocations, 0, "compatibility checking never starts a provider TUI early")
   assert(f.runtime:close(), "explicit close cancels the queued native opening")
   vim.cmd("NvimAIStage TEST:approve")
   await_staged()
+  assert(not f.runtime:conversation({
+    root = f.root,
+    selection = { "demo.lua" },
+    model = "fixture/model",
+    opencode = "/usr/bin/true",
+  }), "pending staged review excludes conversation")
   require("ai.staged").cancel()
   assert(f.runtime:shutdown())
 

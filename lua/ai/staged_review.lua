@@ -490,6 +490,9 @@ function M.open(frozen, captured, options)
   end
   local handle = {}
   function handle:show(path)
+    if state.phase ~= "review_ready" then
+      return nil, "This review handle is retired"
+    end
     for index, item in ipairs(state.files) do
       if item.path == path then
         return show_file(state, index)
@@ -498,7 +501,7 @@ function M.open(frozen, captured, options)
     return nil, "File is outside this frozen review"
   end
   function handle:intact()
-    return sources_unchanged(state) and frozen_unchanged(state)
+    return state.phase == "review_ready" and sources_unchanged(state) and frozen_unchanged(state)
   end
   function handle:decide(choice, path)
     if
@@ -521,7 +524,14 @@ function M.open(frozen, captured, options)
     local verdict = writer(state, choice, false)
     finish(state, verdict)
     local refreshed = choice ~= "approve" or refresh_accepted(state, prior)
-    return verdict, refreshed and nil or "Accepted source buffers could not be safely refreshed"
+    local reason
+    if
+      not refreshed
+      or (state.phase ~= "applied" and state.phase ~= "review_ready" and state.phase ~= "rejected")
+    then
+      reason = "Accepted source buffers or writer evidence require recovery"
+    end
+    return verdict, reason
   end
   function handle:retire()
     -- This handle owns only editor eligibility; Python retires writer authority.

@@ -2,6 +2,8 @@
 -- new is passive. One driver owns one process and one conversation for life.
 -- argv is trusted configuration, never a user action or agent-supplied command.
 -- Events assert controller-validated evidence; process exit does not create it.
+-- The production adapter may run the existing guarded local writer synchronously
+-- (at most its 5000 ms wait) before sending decide through this prompt-returning pipe.
 local M = {}
 local uv = vim.uv
 local MAX_FRAME, MAX_BYTES, MAX_EVENTS = 8 * 1024 * 1024, 32 * 1024 * 1024, 20000

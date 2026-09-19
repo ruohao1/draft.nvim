@@ -175,6 +175,10 @@ Do not move the project write into an asynchronous controller callback.
 After that operation, the controller validates the actual decision journal through
 a public receipt-reading method owned by `nvim-ai-staged-decisions.py`. It accepts
 the expected intent and identity, not caller-supplied success booleans or receipts.
+After receiving the authoritative decision, the trusted editor adapter can attach
+`sources_valid=false` when normal accepted-source refresh fails. The owner records
+the confirmed receipt before fencing remaining decisions and requiring recovery.
+This field is editor evidence; it cannot grant publication or cleanup authority.
 Receipt uncertainty fences remaining decisions and preserves earlier confirmed
 outcomes. The existing publisher stays the only implementation of project writes.
 

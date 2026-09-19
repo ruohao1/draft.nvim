@@ -1,7 +1,9 @@
 -- Editor-owned conversation state. No ACP, filesystem, writer or UI operations.
 -- The injected trusted driver owns effects; construction/observation are passive.
 -- Passive lifecycle/review owner; no real driver, renderer or writer is wired yet.
--- send(command, receive, disconnected) must return true promptly. The optional
+-- send(command, receive, disconnected) returns promptly, except the trusted
+-- production adapter's existing guarded local publisher may wait up to 5 s.
+-- The optional
 -- third callback reports permanent controller loss even between completed turns;
 -- it never proves worker shutdown or cleanup. Synchronous events are held
 -- until that acceptance; a failed send never proves that no effect occurred.
@@ -124,7 +126,7 @@ local EVENTS = {
     tokens_retired = true,
     receipt = true,
   },
-  decided = { receipt = true },
+  decided = { receipt = true, sources_valid = true },
 }
 for _, fields in pairs(EVENTS) do
   for _, key in ipairs({
@@ -586,12 +588,21 @@ function M.new(options)
       return fail("Unexpected predecessor review evidence")
     end
     if event.kind == "decided" and state.phase == "publishing" then
+      if event.sources_valid ~= nil and type(event.sources_valid) ~= "boolean" then
+        return fail("Invalid editor source validation")
+      end
       local valid, failed = decision_result(event.receipt)
       if not valid then
         return fail("Invalid decision receipt; explicit recovery required")
       end
       if failed then
         return fail("Writer outcome requires recovery; confirmed file decisions are retained")
+      end
+      if event.sources_valid == false then
+        state.publication_recovery = true
+        return fail(
+          "Accepted source buffers require recovery; confirmed file decisions are retained"
+        )
       end
       lease = lease + 1
     elseif
