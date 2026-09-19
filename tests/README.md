@@ -18,6 +18,14 @@ editor handles, credentials or real-agent opt-in environment variables.
 Logs go under ignored `.test-results/`; failed-suite scratch is retained under
 the exact `/tmp/draft-tests-*` path printed by the runner.
 
+Create development checkouts with `umask 022`. Draft refuses group- or
+world-writable helpers and executable fixtures. If a checkout was created with
+a shared-write umask, correct those file permissions before running the suite:
+
+```sh
+chmod go-w scripts/nvim-ai*.py tests/nvim-ai*.sh
+```
+
 Choose individual suites by filename stem:
 
 ```sh
@@ -30,6 +38,22 @@ them. Run each Lua suite in a separate clean Neovim process. A restricted
 container that masks `/tmp` or Bubblewrap ownership, blocks sockets, or disables
 user namespaces cannot run the confinement fixtures. Use a suitable Linux test
 environment; do not relax production ownership or sandbox checks.
+
+## Linux CI
+
+[Linux tests](../.github/workflows/linux-tests.yml) runs the complete default
+suite on pull requests and pushes, and supports manual dispatch. It uses the
+GitHub-hosted Ubuntu 24.04 image, its system Python 3, and Neovim 0.12.4 from the
+official release with a pinned SHA-256 checksum. Both GitHub actions are pinned
+to commits. Git, Bubblewrap, tmux, ripgrep and ACL tools come from Ubuntu's
+configured package repositories; their versions are printed in each run.
+
+CI uses `/usr/bin/python3` consistently with the nested confinement fixtures.
+It checks user, PID and network namespace creation before running the suite.
+All confinement tests remain enabled, and installed-OpenCode probes remain
+explicit opt-ins. Test logs are uploaded as `linux-test-logs` for seven days,
+including after a test failure. The job has a 25-minute deadline, with the
+runner's existing per-suite deadlines inside it.
 
 ## Installed OpenCode audit (optional)
 

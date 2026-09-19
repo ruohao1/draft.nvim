@@ -1,0 +1,69 @@
+name: Linux tests
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Provider-free suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Linux test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends acl bubblewrap git python3 ripgrep tmux
+
+      - name: Install Neovim 0.12.4
+        run: |
+          archive="$RUNNER_TEMP/nvim-linux-x86_64.tar.gz"
+          curl --fail --location --retry 3 \
+            https://github.com/neovim/neovim/releases/download/v0.12.4/nvim-linux-x86_64.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' \
+            012bf3fcac5ade43914df3f174668bf64d05e049a4f032a388c027b1ebd78628 \
+            "$archive" | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - name: Report versions and verify namespaces
+        run: |
+          nvim --version
+          /usr/bin/python3 --version
+          git --version
+          bwrap --version
+          tmux -V
+          rg --version
+          setfacl --version
+          bwrap --unshare-user --unshare-pid --unshare-net --die-with-parent \
+            --ro-bind / / --proc /proc --dev /dev -- /bin/true
+
+      - name: Run every provider-free suite
+        run: /usr/bin/python3 -I -B tests/run.py
+
+      - name: Upload test logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-test-logs
+          path: .test-results/run-*/*.log
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
