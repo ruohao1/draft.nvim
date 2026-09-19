@@ -1,0 +1,86 @@
+# Testing Draft
+
+The default suite uses disposable files, fake agent processes, local pipes,
+Bubblewrap and private tmux servers. It does not use a live editor, the default
+tmux server, real account credentials, or paid model requests.
+
+Run from any directory, passing the path to the runner:
+
+```sh
+python3 -I -B tests/run.py
+```
+
+Dependencies are Linux, Neovim, Python 3, Git, tmux, Bubblewrap and a POSIX shell.
+`setfacl` enables an extra inherited-ACL publication test. The runner builds an
+allowlisted child environment, supplies a disposable HOME and XDG directories,
+sets a private umask, and applies a per-suite deadline. It does not inherit
+editor handles, credentials or real-agent opt-in environment variables.
+Logs go under ignored `.test-results/`; failed-suite scratch is retained under
+the exact `/tmp/draft-tests-*` path printed by the runner.
+
+Choose individual suites by filename stem:
+
+```sh
+python3 -I -B tests/run.py draft_setup draft_state ai_runtime
+python3 -I -B tests/run.py nvim_ai_acp_worker ai_conversation_driver
+```
+
+The review suite needs private root/platform variables; the runner supplies
+them. Run each Lua suite in a separate clean Neovim process. A restricted
+container that masks `/tmp` or Bubblewrap ownership, blocks sockets, or disables
+user namespaces cannot run the confinement fixtures. Use a suitable Linux test
+environment; do not relax production ownership or sandbox checks.
+
+## Installed OpenCode audit (optional)
+
+The deterministic managed-OpenCode suite explicitly skips its installed-binary
+artifact audit by default. To include that audit, pass the canonical path to
+OpenCode **1.18.30**:
+
+```sh
+python3 -I -B tests/run.py --opencode /absolute/path/to/opencode ai_opencode_managed
+```
+
+This tests local compatibility commands and disposable artifact trees, without a
+model request. It is distinct from the default fixtures.
+
+Additional Python interoperability cases are opt-in when running those test
+files directly in an isolated environment:
+
+- `NVIM_AI_STAGED_REAL_OPENCODE=/absolute/path`: staged native edit tools against
+  a loopback scripted provider (`nvim_ai_staged.py`, `nvim_ai_staged_multi.py`).
+- `NVIM_AI_ACP_REAL_OPENCODE=/absolute/path`: retained-session/owner-death proofs
+  with a scripted provider (`nvim_ai_acp_resume.py`, `nvim_ai_conversation_lifetime.py`).
+- `NVIM_AI_CACHE_REAL=1`: installed OpenCode cache audit
+  (`nvim_ai_opencode_cache.py`; the binary must also be on PATH).
+
+These flags are deliberately not forwarded by the standard runner. The shell
+scripts `nvim-ai-opencode-probe.sh` and `nvim-ai-opencode-compat.sh` are optional
+installed-binary probes. `ai_transport_manual.lua` is an interactive transport
+demo and is never part of automated testing.
+
+## What the tests establish
+
+Native suites cover identity, private state, transport, context, sandbox
+manifests, session lifecycle, review/rejection, scope grants and event handling.
+Staging suites cover selection, settings, dirty-source guards, frozen proposals,
+incremental/batch publication, receipts, partial failures and follow-ups.
+The sandbox shell fixture exercises actual confinement with a fake agent.
+The native lifecycle harness exercises the public Draft facade through private
+tmux panes with fake Codex, Claude and OpenCode processes. Optional terminal UI
+cases can be selected explicitly, for example
+`sh tests/nvim-ai-native.sh prompt` or `sh tests/nvim-ai-native.sh review`.
+Use Neovim 0.12+ on PATH for these direct invocations.
+
+The install suite copies the plugin to a directory containing spaces, launches
+Neovim from an unrelated cwd, exercises real sibling helpers/controller fixtures,
+and generates and resolves the public help tags.
+
+Conversation tests exercise internal state owners, the ACP worker, storage and
+the editor-side controller pipe. The pipe uses a separate scripted controller;
+there is no production conversation controller or user-facing chat integration.
+Passing those tests does not make persistent chat available.
+
+The first extraction is validated on Linux with Neovim 0.12.4, Python 3.14.4,
+Bubblewrap 0.11.1, Git 2.53.0 and tmux 3.6. This is not a claim that older Neovim,
+macOS, Windows or every real backend/account workflow is supported.

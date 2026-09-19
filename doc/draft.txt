@@ -1,0 +1,174 @@
+*draft.txt*  Explicit AI context and review for Neovim
+
+Draft is an early Linux plugin. Its public Lua module is "draft". Internal
+modules remain under "ai", and commands retain the NvimAI prefix.
+
+SETUP                                                        *draft* *draft-setup*
+
+Add the plugin directory to 'runtimepath' with your plugin manager, then: >lua
+    require("draft").setup()
+<
+Setup is passive: it registers commands and exit handlers without launching a
+provider, reading credentials or creating a session. Configure once per editor;
+repeated setup calls return the existing runtime. Restart after changing options
+or updating the plugin. Use one Draft installation per Neovim process.
+
+REQUIREMENTS                                                *draft-requirements*
+
+Linux, Neovim 0.12+ with LuaJIT, Python 3, Git, a POSIX shell, and working Bubblewrap
+user/PID namespaces. The tested versions are Neovim 0.12.4 and Python 3.14.4.
+Python helpers use only the standard library. Staged file discovery requires rg.
+Tmux is optional; its full integration recommends 3.7+. Native terminals are
+used outside tmux. macOS and Windows launch are disabled.
+
+Install/authenticate your chosen CLI separately. Managed OpenCode and staging
+require exactly OpenCode 1.18.30 / ACP 1. Other releases fail closed.
+
+Run :checkhealth draft for local diagnostics. The nvim-ai health name is a
+compatibility alias. Health does not create Draft state or submit a prompt.
+
+OPTIONS                                                          *draft-options*
+>lua
+    require("draft").setup({
+      keymaps = false,
+      width = 40,
+      tmux_project_pairs = false,
+      staged = {
+        -- enabled = true,
+        -- model = "provider/model",
+        -- auth_file = "/absolute/path/to/auth.json",
+      },
+      -- status = { redraw = function() ... end },
+    })
+<
+keymaps                 Enable supplied global mappings. Default: false.
+                        Review-buffer mappings always remain available.
+width                   Native companion split width. Default: 40.
+tmux_project_pairs      Opt into the legacy session-pair routing convention.
+                        Default: false; ordinary use stays in the editor window.
+                        When enabled, the editor session's
+                        @dotfiles_project_shell must identify a shell session
+                        with matching project path, @dotfiles_project_role=shell,
+                        and @dotfiles_project_editor pointing back to the editor.
+                        Stale/mismatched pairs refuse launch.
+staged                  Session-only staging preferences. Explicit enabled/model/
+                        auth_file choices override saved preferences. See below.
+status.redraw           Optional native-status redraw callback. The default uses
+                        Neovim's redrawstatus command.
+
+Advanced staged options include provider (an explicit OpenCode provider config
+table), root, opencode, python and bwrap executable paths. These are not saved by
+the setup dialog. No shell launch string is accepted. Keep executable overrides
+canonical, owned by root or your user, and not group/world writable.
+
+require("draft").compact() returns compact native status, suitable for a custom
+statusline. It does not start the companion.
+
+COMMANDS                                                        *draft-commands*
+
+:NvimAIOpen             Open a read-only native companion or focus the existing one.
+:NvimAIBackend [name]   Choose codex, claude or opencode. In pre_write mode, select
+                        OpenCode staging without opening a native companion.
+:NvimAIPrompt           Prompt using the saved review mode (initially native).
+                        A range/visual selection is supported only in native mode.
+:NvimAINativePrompt    Explicitly prepare native after-write context and baseline,
+                        paste without submitting, and focus the companion.
+:NvimAIReviewMode [mode]
+                        Confirm/save pre_write or native. Sends no prompt.
+:NvimAIReview          Review changes already written by the native companion.
+:NvimAIReview!         Confirm abandonment of recovery data and close the companion.
+                        Does not revert project files.
+:NvimAIGrants [path]   Inspect/revoke temporary external-directory grants.
+:NvimAIStatus          Show status for the selected review mode.
+:NvimAIClose           Close the native companion and revoke grants.
+
+:NvimAIStageSetup      Choose model/auth path; confirm Save and enable.
+:NvimAIStage [text]    Stage the saved current file; ask for an instruction if absent.
+:NvimAIStageFiles [files...]
+                        Select saved files with a picker or explicit paths.
+:NvimAIStageReview     Return to/select a file in staged review.
+:NvimAIStageFollowup [text]
+                        Start a fresh generation revising pending proposals only.
+:NvimAIStageApprove    Approve the current file and advance to the next pending one.
+:NvimAIStageReject     Reject the current file and stay on it.
+:NvimAIStageApproveAll Confirm publication of remaining visited changed diffs.
+:NvimAIStageRejectAll  Confirm rejection of remaining proposals.
+:NvimAIStageCancel     Cancel generation or pending proposals.
+:NvimAIStageStatus     Show phase, selection and private artifact path.
+:NvimAIStageReset      Confirm forgetting preferences and disabling staging.
+
+NATIVE AFTER-WRITE REVIEW                                   *draft-native-review*
+
+Native agents can write within their authorized scope before you inspect the
+review. Approval acknowledges those writes; rejection attempts guarded recovery
+from the saved baseline. This is not pre-write protection. Inspect transferred
+prompts and explicitly submit them in the native CLI.
+
+One native runtime pins one physical project/worktree. Native activity and staged
+turns/dialogs exclude each other. Before staging, close the native companion and
+resolve or explicitly abandon its review. A damaged baseline blocks further
+writable launches; abandonment is an explicit choice, not automatic recovery.
+
+STAGED PRE-WRITE REVIEW                                     *draft-staged-review*
+
+Run :NvimAIStageSetup to choose an explicit provider/model and optional existing
+auth-file path, then Save and enable. Saving preferences does not read credentials
+or submit work. The auth file must be canonical, owned by you and mode 0600.
+On submission only the chosen provider's validated credential is copied to a
+temporary profile. Shell credential variables and project OpenCode configuration
+are not inherited.
+
+Staging copies only 1-16 explicitly selected existing saved files. OpenCode edits
+the copies; its worker stops before proposals are frozen and shown for approval.
+Your explicit approval is required before the trusted writer changes the project.
+The review is of final frozen proposals, not each intermediate sandbox edit.
+
+Both originals and proposed contents have a 1 MiB aggregate limit. Each file must
+be owned, single-link, regular UTF-8 text with mode 0644 or 0755, Unix newlines,
+no BOM/NUL, a final newline (or empty contents), and at most 20,000 lines. ACLs
+are refused. Source or loaded-buffer changes invalidate stale approval.
+
+Review-buffer keys: a approve/advance, r reject, A/R confirmed batch decisions,
+]f/[f next/previous file, f revise pending proposals, q cancel pending proposals.
+Batch approval requires visiting changed diffs. Closing the tab cancels pending
+proposals. Earlier accepted writes are never undone by cancel/reject/follow-up.
+
+Follow-ups use a new generation, not persistent conversation history. They seed
+pending proposals only and retire predecessor approval tokens. Do not replay a
+token after a partial, failed or uncertain publication.
+
+GLOBAL MAPPINGS                                                 *draft-mappings*
+
+Off by default. Set mapleader before setup({ keymaps = true }) to enable:
+    <leader>aa  open/focus             <leader>ap  prompt (normal/visual)
+    <leader>ab  backend                <leader>ar  native review
+    <leader>ag  grants                 <leader>as  status
+    <leader>ax  close                  <leader>ae  staged edit
+    <leader>ac  staging setup          <leader>af  staged file picker
+
+STATE AND LIMITS                                                    *draft-state*
+
+Native runtime: $XDG_RUNTIME_DIR/draft.nvim/, or /tmp/draft.nvim-<uid>/.
+Native records: $XDG_STATE_HOME/draft.nvim/, or ~/.local/state/draft.nvim/.
+Staged preferences: stdpath("state")/draft.nvim/staged/settings.json.
+Compatibility cache: stdpath("cache")/draft.nvim/opencode-compat/.
+
+No automatic adoption of legacy companion state occurs. Preferences contain an
+auth-file path, not credentials. Staged snapshots/receipts retain file contents in
+private /tmp/nvim-ai-staged-* directories; native backend records may also contain
+sensitive session data. These paths must remain private.
+
+Publication is not atomic across files. External same-user writers can race a
+final rename. Filesystem confinement is not a network firewall or protection
+against other programs running as your user. Inspect files and receipts after an
+uncertain outcome; no automatic rollback or token retry is promised.
+
+Crash recovery and retention management remain incomplete. Only inspect/remove
+an exact artifact path identified by status when no owned worker can still use
+it. Do not sweep temporary-directory families.
+
+Persistent conversations, their production controller, and chat UI are unfinished.
+There is no NvimAIChat command. Linux fixtures are not cross-provider live-account
+acceptance. See tests/README.md in the repository for verification commands.
+
+ vim:tw=80:ts=8:noet:ft=help:norl:

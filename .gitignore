@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.superpowers/
+.test-results/
+.worktrees/
+nvim.log
+.nvimlog
