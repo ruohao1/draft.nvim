@@ -1,0 +1,107 @@
+name: Linux tests
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Provider-free suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Linux test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            acl apparmor bison bubblewrap build-essential git \
+            libevent-dev libncurses-dev pkg-config python3 ripgrep
+
+      - name: Allow Bubblewrap namespaces on the disposable runner
+        run: |
+          # Ubuntu restricts unprivileged user namespaces unless an executable
+          # has an AppArmor profile allowing them. Keep the global restriction.
+          sudo tee /etc/apparmor.d/draft-ci-bwrap > /dev/null <<'PROFILE'
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile draft-ci-bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          PROFILE
+          sudo apparmor_parser --replace /etc/apparmor.d/draft-ci-bwrap
+
+      - name: Install tmux 3.6
+        run: |
+          archive="$RUNNER_TEMP/tmux-3.6.tar.gz"
+          curl --fail --location --retry 3 \
+            https://github.com/tmux/tmux/releases/download/3.6/tmux-3.6.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' \
+            136db80cfbfba617a103401f52874e7c64927986b65b1b700350b6058ad69607 \
+            "$archive" | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/tmux-3.6"
+          ./configure --prefix=/usr
+          make --jobs=2
+          # Nested fixtures deliberately restrict PATH to system directories.
+          sudo install --mode=0755 tmux /usr/bin/tmux
+
+      - name: Install Neovim 0.12.4
+        run: |
+          archive="$RUNNER_TEMP/nvim-linux-x86_64.tar.gz"
+          curl --fail --location --retry 3 \
+            https://github.com/neovim/neovim/releases/download/v0.12.4/nvim-linux-x86_64.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' \
+            012bf3fcac5ade43914df3f174668bf64d05e049a4f032a388c027b1ebd78628 \
+            "$archive" | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - name: Report versions and verify namespaces
+        run: |
+          nvim --version
+          /usr/bin/python3 --version
+          git --version
+          bwrap --version
+          tmux -V
+          rg --version
+          setfacl --version
+          if ! bwrap --unshare-user --unshare-pid --unshare-net --die-with-parent \
+            --ro-bind / / --proc /proc --dev /dev -- /bin/true; then
+            sysctl kernel.apparmor_restrict_unprivileged_userns || true
+            cat /proc/self/attr/current || true
+            sudo rg --line-number 'bwrap|userns' /etc/apparmor.d \
+              /sys/kernel/security/apparmor/profiles || true
+            sudo journalctl --dmesg --no-pager --grep='apparmor' --lines=20 || true
+            exit 1
+          fi
+
+      - name: Run every provider-free suite
+        run: /usr/bin/python3 -I -B tests/run.py
+
+      - name: Upload test logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-test-logs
+          path: .test-results/run-*/*.log
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

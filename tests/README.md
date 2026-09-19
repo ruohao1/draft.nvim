@@ -10,13 +10,21 @@ Run from any directory, passing the path to the runner:
 python3 -I -B tests/run.py
 ```
 
-Dependencies are Linux, Neovim, Python 3, Git, tmux, Bubblewrap and a POSIX shell.
+Dependencies are Linux, Neovim, Python 3, Git, tmux 3.6, Bubblewrap and a POSIX shell.
 `setfacl` enables an extra inherited-ACL publication test. The runner builds an
 allowlisted child environment, supplies a disposable HOME and XDG directories,
 sets a private umask, and applies a per-suite deadline. It does not inherit
 editor handles, credentials or real-agent opt-in environment variables.
 Logs go under ignored `.test-results/`; failed-suite scratch is retained under
 the exact `/tmp/draft-tests-*` path printed by the runner.
+
+Create development checkouts with `umask 022`. Draft refuses group- or
+world-writable helpers and executable fixtures. If a checkout was created with
+a shared-write umask, correct those file permissions before running the suite:
+
+```sh
+chmod go-w scripts/nvim-ai*.py tests/nvim-ai*.sh
+```
 
 Choose individual suites by filename stem:
 
@@ -30,6 +38,31 @@ them. Run each Lua suite in a separate clean Neovim process. A restricted
 container that masks `/tmp` or Bubblewrap ownership, blocks sockets, or disables
 user namespaces cannot run the confinement fixtures. Use a suitable Linux test
 environment; do not relax production ownership or sandbox checks.
+
+## Linux CI
+
+[Linux tests](../.github/workflows/linux-tests.yml) runs the complete default
+suite on pull requests and pushes, and supports manual dispatch. It uses the
+GitHub-hosted Ubuntu 24.04 image, its system Python 3, Neovim 0.12.4, and tmux 3.6.
+Both release archives have pinned SHA-256 checksums, and both GitHub actions are
+pinned to commits. Git, Bubblewrap, ripgrep, ACL tools and tmux build dependencies
+come from Ubuntu's configured package repositories; runtime versions are printed
+in each run. Ubuntu's tmux 3.4 has a percentage-split regression, so CI builds the
+same tmux 3.6 version used in the local transport validation.
+
+CI uses `/usr/bin/python3` consistently with the nested confinement fixtures.
+The job loads an AppArmor user-namespace profile attached to `/usr/bin/bwrap`
+on the disposable runner; Ubuntu's global namespace restriction remains enabled.
+It checks user, PID and network namespace creation before running the suite.
+All confinement tests remain enabled, and installed-OpenCode probes remain
+explicit opt-ins. Test logs are uploaded as `linux-test-logs` for seven days,
+including after a test failure. The job has a 25-minute deadline, with the
+runner's existing per-suite deadlines inside it.
+
+Hosted validation on 2026-09-19: [46/46 suites passed](https://github.com/ruohao1/draft.nvim/actions/runs/35463990214)
+with the expected installed-agent opt-in skips. The Ubuntu 24.04 runner image
+`20260907.300.1` provided Python 3.12.3, Git 2.55.0, Bubblewrap 0.9.0,
+ripgrep 14.1.0 and ACL tools 2.3.2, alongside the pinned Neovim 0.12.4 and tmux 3.6.
 
 ## Installed OpenCode audit (optional)
 
