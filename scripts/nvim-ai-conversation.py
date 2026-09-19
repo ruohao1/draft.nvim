@@ -47,6 +47,8 @@ class Controller:
         self.sequence = 0
         self.closing = False
         self.inbox = deque()
+        self.session = None
+        self.transcript_bytes = 0
 
     def collect(self):
         for frame in self.pipe.read_ready():
@@ -66,6 +68,10 @@ class Controller:
                 self.emit(event)
 
     def emit(self, event):
+        if event["kind"] == "text":
+            self.transcript_bytes += len(event["text"].encode())
+            if self.transcript_bytes > protocol.MAX_OUTPUT:
+                raise protocol.Refused("Conversation transcript budget exceeded")
         self.sequence += 1
         event.update({key: self.active["command"][key] for key in protocol.IDENTITIES})
         event["sequence"] = self.sequence
@@ -90,9 +96,14 @@ class Controller:
             if self.turn is not None and (not self.turn.done or not self.turn.store_valid):
                 raise protocol.Refused("Prior turn does not authorize another worker")
             self.active = frame
+            self.transcript_bytes += len(command["message"].encode())
+            if command["turn_id"] > 64 or self.transcript_bytes > protocol.MAX_OUTPUT:
+                raise protocol.Refused("Conversation turn or transcript budget exceeded")
             if self.store is None:
                 self.store = storage.Store()
-            self.turn = turns.Turn(self.config, self.store, self.pipe)
+            if self.turn is not None and self.turn.store_valid:
+                self.session = self.turn.session
+            self.turn = turns.Turn(self.config, self.store, self.pipe, session=self.session)
             self.turn.on_write_wait = self.write_wait
             try:
                 self.turn.start(command)
@@ -115,6 +126,9 @@ class Controller:
         try:
             while True:
                 self.collect()
+                if self.pipe.eof or any(frame["command"]["kind"] == "close" for frame in self.inbox):
+                    # Admission of owner loss fences all queued generation.
+                    self.inbox = deque(frame for frame in self.inbox if frame["command"]["kind"] == "close")
                 while self.inbox:
                     self.dispatch(self.inbox.popleft())
                 if self.pipe.eof and not self.closing:

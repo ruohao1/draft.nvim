@@ -21,9 +21,10 @@ protocol = helper('nvim-ai-conversation-protocol')
 
 
 class Turn:
-    def __init__(self, config, store, editor_pipe):
+    def __init__(self, config, store, editor_pipe, *, session=None):
         self.config, self.store, self.pipe = config, store, editor_pipe
-        self.task = self.worker = self.session = None
+        self.task = self.worker = None
+        self.session = session
         self.events = []
         self.done = self.submitted = False
         self.stage = None
@@ -89,7 +90,7 @@ class Turn:
                 raise protocol.Refused('Invalid ACP option value')
             if len(set(values)) != len(values) or desired not in values:
                 raise protocol.Refused('Requested ACP option is not advertised')
-            if confirmed == key and option.get('currentValue') != desired:
+            if (confirmed == key or confirmed == 'mode') and option.get('currentValue') != desired:
                 raise protocol.Refused('ACP did not confirm the requested option')
             available[key] = values
         provider = self.command['model'].split('/', 1)[0]
@@ -160,9 +161,16 @@ class Turn:
                         or not isinstance(info, dict) or info.get('version') != '1.18.30'
                         or not isinstance(sessions, dict) or not isinstance(sessions.get('resume'), dict)):
                     raise protocol.Refused('Pinned ACP version and resume capability required')
-                self.begin('session/new', {'cwd': staging.PROJECT, 'mcpServers': []})
-            elif self.stage == 'session/new':
-                self.session = result.get('sessionId')
+                params = {'cwd': staging.PROJECT, 'mcpServers': []}
+                if self.session is not None:
+                    self.begin('session/resume', dict(params, sessionId=self.session))
+                else:
+                    self.begin('session/new', params)
+            elif self.stage in ('session/new', 'session/resume'):
+                if self.stage == 'session/new':
+                    self.session = result.get('sessionId')
+                elif 'sessionId' in result and result['sessionId'] != self.session:
+                    raise protocol.Refused('ACP resumed a different session')
                 if not protocol.opaque(self.session):
                     raise protocol.Refused('Missing ACP session identity')
                 self.options(result)
@@ -197,6 +205,8 @@ class Turn:
                     raise protocol.Refused('ACP turn did not finish normally')
                 self.store.stop(outcome='completed')
                 self.stopped = self.graceful = self.store_valid = True
+                if self.on_write_wait is not None and self.on_write_wait():
+                    raise protocol.Refused('Editor ownership changed before workspace freeze')
                 self.frozen = staging.freeze_workspace(self.task, self.command['root'], self.selected, multi=True)
                 if self.frozen['phase'] != 'unchanged':
                     # Review registration is added by the controller's review boundary.

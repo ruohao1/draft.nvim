@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Scripted ACP process running inside the production Bubblewrap boundary."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import socket
@@ -12,11 +13,15 @@ config = json.loads(Path('/opt/config.json').read_text())
 options = config['provider']['fixture']['options']
 case = options['testCase']
 session = 'fixture-session'
+model, mode = 'fixture/model', 'build'
 
 
-def audit(value):
+def audit(value, wait=False):
     with socket.create_connection(('127.0.0.1', options['auditPort']), timeout=2) as stream:
         stream.sendall(json.dumps(value).encode() + b'\n')
+        if wait:
+            stream.settimeout(15)
+            assert stream.recv(32) == b'continue\n'
 
 
 def send(value):
@@ -44,6 +49,8 @@ assert os.environ['OPENCODE_SERVER_PASSWORD']
 assert 'NVIM_STAGED_SENTINEL' not in os.environ
 assert Path('/tmp/backend-state').is_dir()
 assert not Path('/tmp/backend-state/../proposal.json').exists()
+audit({'profile_inode': os.stat('/tmp/agent').st_ino,
+       'listener_key_hash': hashlib.sha256(os.environ['OPENCODE_SERVER_PASSWORD'].encode()).hexdigest()})
 for raw in sys.stdin:
     message = json.loads(raw)
     method, identifier = message.get('method'), message.get('id')
@@ -62,17 +69,45 @@ for raw in sys.stdin:
         assert message['params'] == {'cwd': '/tmp/project', 'mcpServers': []}
         Path(os.environ['OPENCODE_DB']).write_bytes(b'synthetic private store')
         answer(identifier, {'sessionId': session, 'configOptions': choices()})
+    elif method == 'session/resume':
+        assert message['params'] == {'cwd': '/tmp/project', 'mcpServers': [], 'sessionId': session}
+        assert Path(os.environ['OPENCODE_DB']).stat().st_size > 0
+        if case == 'resume-fails':
+            send({'id': identifier, 'error': {'code': -32000, 'message': 'fixture resume refusal'}})
+        else:
+            answer(identifier, {'configOptions': choices()})
     elif method == 'session/set_config_option':
         params = message['params']
         assert params['sessionId'] == session
         value = 'wrong' if case == 'wrong-confirmation' else params['value']
-        answer(identifier, {'configOptions': choices(**{params['configId']: value})})
+        if params['configId'] == 'model':
+            model = value
+        else:
+            mode = value
+        answer(identifier, {'configOptions': choices(model, mode)})
         if params['configId'] == 'mode' and case == 'blocked-prompt':
             audit({'ready': 'blocked-prompt'})
             while True:
                 time.sleep(1)
     elif method == 'session/prompt':
         assert message['params']['sessionId'] == session
+        if case == 'held-answer':
+            audit({'ready': case}, wait=True)
+        if case == 'output-blocked':
+            audit({'ready': case})
+            for _ in range(8):
+                send({'method': 'session/update', 'params': {'sessionId': session, 'update': {
+                    'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'x' * (1024 * 1024)}}}})
+            assert not sys.stdin.read()
+            break
+        if case == 'descendant':
+            if os.fork() == 0:
+                os.setsid()
+                while True:
+                    time.sleep(1)
+            audit({'ready': case})
+            assert not sys.stdin.read()
+            break
         if case in ('cancel', 'flood-cancel'):
             audit({'ready': case})
             if case == 'flood-cancel':
@@ -97,4 +132,6 @@ for raw in sys.stdin:
             send({'method': 'session/update', 'params': {
                 'sessionId': 'wrong-session' if case == 'wrong-session' else session, 'update': update}})
         answer(identifier, {'stopReason': 'refusal' if case == 'bad-stop' else 'end_turn'})
+if case == 'slow-exit':
+    audit({'ready': 'slow-exit'}, wait=True)
 audit({'exiting': True})

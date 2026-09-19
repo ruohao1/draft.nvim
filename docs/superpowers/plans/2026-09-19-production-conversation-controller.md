@@ -213,7 +213,7 @@ def test_cancel_interrupts_backpressured_prompt(self):
 **Files:** controller/turn helpers, controller/lifetime tests and real-process fixture peer.
 **Interfaces:** controller retains exactly one backend session ID and one Store; `Store.stop(outcome="completed"|"cancelled")` receives only validated semantic outcomes. All other stops taint continuation.
 
-- [ ] Add two explicit answer turns with different worker PIDs, the same resumed session ID, a fresh per-worker profile and no transcript replay. Add clean-cancel-then-resume and failed-resume-without-fallback cases.
+- [x] Add two explicit answer turns with different worker PIDs, the same resumed session ID, a fresh per-worker profile and no transcript replay. Add clean-cancel-then-resume and failed-resume-without-fallback cases.
 
 ```python
 def test_resume_is_explicit_and_worker_free_between_turns(self):
@@ -225,11 +225,11 @@ def test_resume_is_explicit_and_worker_free_between_turns(self):
     self.assertTrue(observed["idle_has_no_worker"])
 ```
 
-- [ ] Run the new cases red, then preserve Store/session binding across fully stopped turns. Revalidate options after every resume, with no automatic request on model choice. Keep prior trusted file outcomes in a bounded structured context block; the new user message remains separate. Reject before startup at the existing turn/transcript limits.
-- [ ] Test corrupt/missing/oversized store, RPC error, non-normal stop reason, forced exit and unknown reap outcome. Validate metadata through Store only. No host SQL, checkpoints, repair or blessing by file hash. Add a case proving `session/new`/prompt counts do not increase after resume refusal.
-- [ ] Close controller stdin during startup, generation, stopping, idle and pending review preparation. Also kill the exact owned controller and exercise a descendant-held ACP pipe. Observe actual pidfd/reap/EOF/listener evidence using the lifetime suite's existing ownership pattern; keep unsafe mounted state instead of deleting it early.
-- [ ] Implement idempotent bounded owner-loss cleanup. Once EOF/close is admitted, no queued turn starts. Full worker stop precedes token retirement and Store.close. Clean close requires stdout drain and zero controller exit; failed cleanup must not emit `closed` success.
-- [ ] Run `nvim_ai_conversation_controller nvim_ai_conversation_store nvim_ai_conversation_lifetime nvim_ai_acp_worker ai_conversation_driver`; commit `feat: retain conversation sessions across supervised workers`.
+- [x] Run the new cases red, then preserve Store/session binding across fully stopped turns. Revalidate options after every resume, with no automatic request on model choice. Keep prior trusted file outcomes in a bounded structured context block; the new user message remains separate. Reject before startup at the existing turn/transcript limits.
+- [x] Test corrupt/missing/oversized store, RPC error, non-normal stop reason, forced exit and unknown reap outcome. Validate metadata through Store only. No host SQL, checkpoints, repair or blessing by file hash. Add a case proving `session/new`/prompt counts do not increase after resume refusal.
+- [x] Close controller stdin during startup, generation, stopping, idle and pending review preparation. Also kill the exact owned controller and exercise a descendant-held ACP pipe. Observe actual pidfd/reap/EOF/listener evidence using the lifetime suite's existing ownership pattern; keep unsafe mounted state instead of deleting it early.
+- [x] Implement idempotent bounded owner-loss cleanup. Once EOF/close is admitted, no queued turn starts. Full worker stop precedes token retirement and Store.close. Clean close requires stdout drain and zero controller exit; failed cleanup must not emit `closed` success.
+- [x] Run `nvim_ai_conversation_controller nvim_ai_conversation_store nvim_ai_conversation_lifetime nvim_ai_acp_worker ai_conversation_driver`; commit `feat: retain conversation sessions across supervised workers`.
 
 ## Task 6: Integrate frozen proposals, receipts and follow-up retirement
 

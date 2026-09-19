@@ -1,11 +1,12 @@
 """Production controller exercised through separate processes and private pipes."""
 import json
 import hashlib
-import importlib.util
+import ctypes
 import os
 from pathlib import Path
 import select
 import shutil
+import signal
 import socketserver
 import subprocess
 import sys
@@ -95,6 +96,19 @@ class ControllerTest(unittest.TestCase):
 
 
 class EngineTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.libc = ctypes.CDLL(None, use_errno=True)
+        cls.previous_subreaper = ctypes.c_int()
+        if (cls.libc.prctl(37, ctypes.byref(cls.previous_subreaper), 0, 0, 0) != 0
+                or cls.libc.prctl(36, 1, 0, 0, 0) != 0):
+            raise OSError(ctypes.get_errno(), "Cannot own test orphan reaping")
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.libc.prctl(36, cls.previous_subreaper.value, 0, 0, 0) != 0:
+            raise OSError(ctypes.get_errno(), "Cannot restore subreaper state")
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="draft-engine-test-", dir="/tmp")
         self.addCleanup(self.directory.cleanup)
@@ -109,10 +123,16 @@ class EngineTest(unittest.TestCase):
         self.peer.chmod(0o700)
         self.audit, self.events, self.buffer = [], [], bytearray()
         audit = self.audit
+        self.gate = threading.Event()
+        gate = self.gate
 
         class Handler(socketserver.StreamRequestHandler):
             def handle(self):
-                audit.append(json.loads(self.rfile.readline()))
+                value = json.loads(self.rfile.readline())
+                audit.append(value)
+                if value.get("ready") in ("held-answer", "slow-exit"):
+                    gate.wait(timeout=15)
+                    self.wfile.write(b'continue\n')
 
         self.server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -123,6 +143,7 @@ class EngineTest(unittest.TestCase):
         self.turn = 0
 
     def stop_server(self):
+        self.gate.set()
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=3)
@@ -138,6 +159,7 @@ class EngineTest(unittest.TestCase):
         self.addCleanup(self.stop)
 
     def stop(self):
+        self.gate.set()
         if self.child.poll() is None:
             self.child.stdin.close()
             try:
@@ -265,6 +287,175 @@ class EngineTest(unittest.TestCase):
                 self.assertLess(time.monotonic() - started, 4.2)
                 self.assertFalse(any(item.get("method") == "session/prompt" for item in self.audit))
                 self.stop()
+
+    def test_two_explicit_turns_resume_one_session_with_fresh_workers(self):
+        self.spawn("held-answer")
+        workers, tasks = [], []
+        for _ in range(2):
+            self.audit[:] = [item for item in self.audit if "ready" not in item]
+            self.gate.clear()
+            self.send("start")
+            self.receive("submitted")
+            self.wait_ready("held-answer")
+            pid = int(Path(f"/proc/{self.child.pid}/task/{self.child.pid}/children").read_text().strip())
+            workers.append(pid)
+            args = Path(f"/proc/{pid}/cmdline").read_bytes().split(b'\0')
+            tasks.append(next(Path(os.fsdecode(arg)).parent for arg in args if arg.endswith(b'/staging')))
+            self.gate.set()
+            self.assertEqual(self.receive("settled")["outcome"], "answer")
+            self.assertFalse(Path(f"/proc/{pid}").exists())
+            self.assertFalse(tasks[-1].exists())
+        self.assertNotEqual(*workers)
+        self.assertNotEqual(*tasks)
+        methods = [item["method"] for item in self.audit if "method" in item]
+        self.assertEqual(methods.count("session/new"), 1)
+        self.assertEqual(methods.count("session/resume"), 1)
+        self.assertEqual(methods.count("session/prompt"), 2)
+        resumes = [item["params"]["sessionId"] for item in self.audit if item.get("method") == "session/resume"]
+        self.assertEqual(resumes, ["fixture-session"])
+        profiles = [item for item in self.audit if "profile_inode" in item]
+        self.assertNotEqual(profiles[0]["listener_key_hash"], profiles[1]["listener_key_hash"])
+
+    def test_clean_cancellation_can_resume_but_resume_failure_never_falls_back(self):
+        for case in ("cancel", "resume-fails"):
+            with self.subTest(case=case):
+                self.serial = self.turn = 0
+                self.audit.clear()
+                self.spawn(case)
+                self.send("start")
+                if case == "cancel":
+                    self.receive("submitted")
+                    self.wait_ready(case)
+                    self.send("cancel")
+                    self.assertTrue(self.receive("cancelled")["store_valid"])
+                else:
+                    self.assertEqual(self.receive("settled")["outcome"], "answer")
+                self.send("start")
+                if case == "cancel":
+                    self.receive("submitted")
+                    self.send("cancel")
+                    self.assertTrue(self.receive("cancelled")["store_valid"])
+                else:
+                    self.assertEqual(self.receive("settled")["outcome"], "failed")
+                methods = [item.get("method") for item in self.audit]
+                self.assertEqual(methods.count("session/new"), 1)
+                self.assertEqual(methods.count("session/resume"), 1)
+                self.assertEqual(methods.count("session/prompt"), 2 if case == "cancel" else 1)
+                self.stop()
+
+    def worker_paths(self):
+        pid = int(Path(f"/proc/{self.child.pid}/task/{self.child.pid}/children").read_text().strip())
+        args = Path(f"/proc/{pid}/cmdline").read_bytes().split(b'\0')
+        task = next(Path(os.fsdecode(arg)).parent for arg in args if arg.endswith(b'/staging'))
+        store = next(Path(os.fsdecode(arg)).parent for arg in args if arg.endswith(b'/backend-store'))
+        return pid, task, store
+
+    def test_changed_missing_and_oversized_idle_stores_never_launch_again(self):
+        for damage in ("changed", "missing", "oversized"):
+            with self.subTest(damage=damage):
+                self.serial = self.turn = 0
+                self.audit.clear()
+                self.gate.clear()
+                self.spawn("held-answer")
+                self.send("start")
+                self.wait_ready("held-answer")
+                _, _, store = self.worker_paths()
+                self.gate.set()
+                self.assertEqual(self.receive("settled")["outcome"], "answer")
+                db = store / "backend-store/opencode.db"
+                if damage == "missing":
+                    db.unlink()
+                elif damage == "changed":
+                    db.write_bytes(b"changed private artifact")
+                else:
+                    with db.open("r+b") as stream:
+                        stream.truncate(65 * 1024 * 1024)
+                self.send("start")
+                self.assertEqual(self.receive("settled")["outcome"], "failed")
+                self.assertEqual([item.get("method") for item in self.audit].count("session/prompt"), 1)
+                self.assertEqual([item.get("method") for item in self.audit].count("initialize"), 1)
+                self.stop()
+                self.assertFalse(store.exists())
+
+    def test_editor_eof_stops_workers_before_discarding_owned_state(self):
+        for case in ("startup-cancel", "cancel", "slow-exit", "held-answer"):
+            with self.subTest(case=case):
+                self.serial = self.turn = 0
+                self.audit.clear()
+                self.gate.clear()
+                self.spawn(case)
+                self.send("start")
+                self.wait_ready(case)
+                pid, task, store = self.worker_paths()
+                worker_fd = os.pidfd_open(pid)
+                try:
+                    self.child.stdin.close()
+                    self.gate.set()
+                    self.child.wait(timeout=10)
+                    self.assertTrue(select.select([worker_fd], [], [], 0)[0])
+                    self.assertFalse(task.exists())
+                    self.assertFalse(store.exists())
+                    self.assertEqual(self.source.read_bytes(), b"original text\n")
+                finally:
+                    os.close(worker_fd)
+                self.stop()
+
+    def test_editor_eof_when_idle_discards_store_without_another_worker(self):
+        self.spawn("held-answer")
+        self.send("start")
+        self.wait_ready("held-answer")
+        _, task, store = self.worker_paths()
+        self.gate.set()
+        self.receive("settled")
+        self.child.stdin.close()
+        self.child.wait(timeout=3)
+        self.assertFalse(task.exists() or store.exists())
+        self.assertEqual([item.get("method") for item in self.audit].count("initialize"), 1)
+
+    def test_blocked_editor_output_also_reaps_a_live_worker(self):
+        self.spawn("output-blocked")
+        self.send("start")
+        self.wait_ready("output-blocked")
+        pid, task, store = self.worker_paths()
+        worker_fd = os.pidfd_open(pid)
+        try:
+            self.child.wait(timeout=9)
+            self.assertNotEqual(self.child.returncode, 0)
+            self.assertTrue(select.select([worker_fd], [], [], 0)[0])
+            self.assertFalse(task.exists() or store.exists())
+        finally:
+            os.close(worker_fd)
+
+    def test_controller_death_reaps_descendant_held_pipe_and_retains_unadopted_evidence(self):
+        self.spawn("descendant")
+        self.send("start")
+        self.receive("submitted")
+        self.wait_ready("descendant")
+        pid, task, store = self.worker_paths()
+        worker_fd = os.pidfd_open(pid)
+        try:
+            self.child.kill()
+            self.child.wait(timeout=3)
+            self.assertTrue(select.select([worker_fd], [], [], 5)[0], "Owned namespace survived controller death")
+            self.assertEqual(os.waitpid(pid, 0)[0], pid)
+            # Test-only ownership, matching the lifetime suite: this process has
+            # no other live subprocesses, only this controller's adopted tree.
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                try:
+                    adopted, _ = os.waitpid(-1, os.WNOHANG)
+                except ChildProcessError:
+                    break
+                if not adopted:
+                    time.sleep(.01)
+            else:
+                self.fail("Owned descendant was not reaped")
+            self.assertTrue(task.exists() and store.exists())
+            self.assertEqual(self.source.read_bytes(), b"original text\n")
+            shutil.rmtree(task)
+            shutil.rmtree(store)
+        finally:
+            os.close(worker_fd)
 
 
 if __name__ == "__main__":
