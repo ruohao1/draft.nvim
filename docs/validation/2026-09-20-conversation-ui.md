@@ -53,3 +53,42 @@ The complete default suite passed **56/56**, with the expected installed-provide
 opt-in skips. `stylua --check lua tests` and `git diff --check` passed. Independent
 review, exact-head CI and post-merge CI are delivery gates tracked in ISQ-234 and
 its linked PR. The milestone remains open for the three sibling issues.
+
+## Independent review and retention fix
+
+The fresh whole-branch review of `1772149..fabf180` found one Important issue and
+no Critical or Minor findings: disabling persistent undo files had left in-memory
+transcript undo enabled. Replacing the bounded projection repeatedly retained its
+earlier contents in Neovim's undo tree.
+
+The transcript now disables undo before its first render; the editable composer
+keeps normal undo. The regression observes real undo history after scheduled
+renders, failed before the fix and passed afterward. The reviewer's 100-render
+probe (approximately 2 MiB per projection) grew from 12,064 to 225,528 KiB RSS
+before the fix. Repeating that probe on the fixed code finished at 16,968 KiB with
+an empty transcript undo tree. This is an observed fixture result, not a universal
+process-memory bound.
+
+## Controller backpressure regression
+
+The post-review full run exposed an existing timing-sensitive controller failure:
+a text notification could remain in the turn's event buffer while the same ACP
+poll blocked writing a client-capability denial. With no event handed to the
+editor pipe, its five-second delivery deadline had not started. A targeted trace
+showed one pending turn event and no queued editor output throughout the timeout.
+
+The controller now drains pending events and services editor output from its
+existing write-wait hook, while checking Close/Cancel/EOF first. Normal polling
+uses the same event drain, so streamed events are delivered once. No timeout,
+confinement check or cleanup requirement was relaxed.
+
+The peer fixture now forces small pipes and blocks on two denial replies rather
+than relying on a large flood's scheduling. Before the fix, the unread-editor
+test timed out and a new reading-editor test received no text. Afterward, both
+passed: the former observed worker exit and task/store removal within its
+existing deadline; the latter received the complete chunk exactly once and
+confirmed explicit Close cleaned up the blocked worker. The controller suite
+now contains 29 tests.
+
+The complete post-fix rerun passed **56/56** default suites, including all **29**
+controller tests. Formatting and whitespace checks passed.
