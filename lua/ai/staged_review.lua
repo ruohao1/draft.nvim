@@ -276,11 +276,15 @@ local function visible_review(state)
 end
 
 local function frozen_unchanged(state)
+  if state.deferred and not state.panels then
+    return true -- Material was validated, but no editor panels have existed yet.
+  end
   -- Even hidden and already-decided panels remain the immutable review record.
   for _, item in ipairs(state.files) do
     for _, panel in ipairs({ { item.left, item.oldText }, { item.right, item.newText } }) do
       if
-        not vim.api.nvim_buf_is_valid(panel[1])
+        not panel[1]
+        or not vim.api.nvim_buf_is_valid(panel[1])
         or vim.bo[panel[1]].modified
         or not vim.deep_equal(vim.api.nvim_buf_get_lines(panel[1], 0, -1, false), lines(panel[2]))
       then
@@ -358,10 +362,7 @@ show_file = function(state, index)
   return true
 end
 
-local function preview(state, first)
-  vim.cmd("tabnew")
-  state.tab = vim.api.nvim_get_current_tabpage()
-  local empty = vim.api.nvim_get_current_buf()
+local function create_panels(state)
   state.panels = {}
   local function panel(text)
     local buf = vim.api.nvim_create_buf(false, true)
@@ -395,20 +396,44 @@ local function preview(state, first)
   for _, item in ipairs(state.files) do
     item.left, item.right = panel(item.oldText), panel(item.newText)
   end
-  state.windows = { vim.api.nvim_get_current_win() }
-  vim.api.nvim_win_set_buf(0, state.files[1].left)
-  if vim.api.nvim_buf_is_valid(empty) then
-    vim.api.nvim_buf_delete(empty, {})
+end
+
+local function present(state, first)
+  if state.tab and vim.api.nvim_tabpage_is_valid(state.tab) then
+    local wins = vim.api.nvim_tabpage_list_wins(state.tab)
+    for _, win in ipairs(wins) do
+      if not state.panels[vim.api.nvim_win_get_buf(win)] then
+        return nil, "The review tab was repurposed; its windows are preserved"
+      end
+    end
+    vim.api.nvim_set_current_tabpage(state.tab)
+    state.windows = { wins[1], wins[2] }
+  else
+    vim.cmd("tabnew")
+    state.tab = vim.api.nvim_get_current_tabpage()
+    local empty = vim.api.nvim_get_current_buf()
+    state.windows = { vim.api.nvim_get_current_win() }
+    vim.api.nvim_win_set_buf(state.windows[1], state.files[first].left)
+    if vim.api.nvim_buf_get_name(empty) == "" and not vim.bo[empty].modified then
+      vim.api.nvim_buf_delete(empty, {})
+    end
   end
-  vim.cmd("botright vnew")
-  local second_empty = vim.api.nvim_get_current_buf()
-  state.windows[2] = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(0, state.files[1].right)
-  if vim.api.nvim_buf_is_valid(second_empty) then
-    vim.api.nvim_buf_delete(second_empty, {})
+  if not state.windows[2] then
+    state.windows[2] = vim.api.nvim_open_win(state.files[first].right, true, {
+      split = "right",
+      win = state.windows[1],
+    })
   end
-  assert(show_file(state, first or 1), "Review windows disappeared")
+  if not show_file(state, first) then
+    return nil, "Review windows disappeared"
+  end
   vim.cmd("wincmd =")
+  return true
+end
+
+local function preview(state, first)
+  create_panels(state)
+  assert(present(state, first or 1))
   state.phase = "review_ready"
 end
 
@@ -460,6 +485,7 @@ function M.open(frozen, captured, options)
     frozen.proposal, frozen.id, options.python, true
   state.actions, state.controls =
     options.actions, options.controls or "Frozen proposal — review before deciding"
+  state.deferred = options.defer == true
   local first, total = nil, 0
   for index, item in ipairs(state.files) do
     local value = frozen.files[index]
@@ -493,9 +519,18 @@ function M.open(frozen, captured, options)
     if state.phase ~= "review_ready" then
       return nil, "This review handle is retired"
     end
+    if not self:intact() then
+      return nil, "Captured sources or frozen panels changed; cancel or close this review"
+    end
     for index, item in ipairs(state.files) do
       if item.path == path then
-        return show_file(state, index)
+        if not state.panels then
+          create_panels(state)
+        end
+        if show_file(state, index) then
+          return true
+        end
+        return present(state, index)
       end
     end
     return nil, "File is outside this frozen review"
@@ -507,6 +542,7 @@ function M.open(frozen, captured, options)
     if
       state.phase ~= "review_ready"
       or (choice ~= "approve" and choice ~= "reject")
+      or not state.index
       or state.files[state.index].path ~= path
     then
       return nil, "Open this pending file in its frozen review before deciding"
@@ -540,7 +576,11 @@ function M.open(frozen, captured, options)
   end
   handle.close = handle.retire
   if first then
-    preview(state, first)
+    if state.deferred then
+      state.phase = "review_ready"
+    else
+      preview(state, first)
+    end
   else
     state.phase = "settled"
   end

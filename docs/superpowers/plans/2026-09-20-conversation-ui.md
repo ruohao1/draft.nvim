@@ -110,7 +110,7 @@ assert(chat:send())
 **Files:** modify `lua/ai/conversation_controller.lua`, `lua/ai/staged_review.lua`, `lua/ai/chat.lua`; extend `tests/ai_staged_shared.lua`, `tests/ai_conversation_controller.lua`, `tests/ai_chat.lua`.
 **Interfaces:** factory accepts trusted boolean `defer_review`; passes `defer=true` to the shared review handle. Existing callers remain eager by default. `handle:show(path)` creates/focuses windows explicitly; `intact()` covers immutable material before first display and all created panels afterward.
 
-- [ ] Add a failing production editor case: submit an editing turn while source focus remains active; wait for review; assert no diff tab or focus change. Explicit `show` must then display the correct old/new bytes without modifying disk.
+- [x] Add a failing production editor case: submit an editing turn while source focus remains active; wait for review; assert no diff tab or focus change. Explicit `show` must then display the correct old/new bytes without modifying disk.
 
 ```lua
 local tabs, focus = #vim.api.nvim_list_tabpages(), vim.api.nvim_get_current_win()
@@ -122,9 +122,9 @@ assert(vim.api.nvim_get_current_win() == focus)
 assert(frozen_view:show("example.txt"))
 ```
 
-- [ ] Run focused case; expect eager-focus behavior to fail. Split material validation/buffer creation from window presentation. Before first show recheck captured sources. Reopen valid existing panels without resetting visits or blessing missing/changed buffers.
-- [ ] Add tests for source/hidden-alias drift before first open, changed/removed panels before reopen, cancelled unopened review, and stale file-selection callbacks. Wire explicit ChatReview with fixed current review identities. Preserve cancel/close cleanup paths after local guard refusal.
-- [ ] Run `ai_conversation_controller ai_staged_shared ai_staged ai_staged_multi ai_staged_refine ai_chat`; expect all pass. Commit `feat: open conversation diffs only on explicit navigation`.
+- [x] Run focused case; expect eager-focus behavior to fail. Split material validation/buffer creation from window presentation. Before first show recheck captured sources. Reopen valid existing panels without resetting visits or blessing missing/changed buffers.
+- [x] Add tests for source/hidden-alias drift before first open, changed/removed panels before reopen, cancelled unopened review, and stale file-selection callbacks. Wire explicit ChatReview with fixed current review identities. Preserve cancel/close cleanup paths after local guard refusal.
+- [x] Run `ai_conversation_controller ai_staged_shared ai_staged ai_staged_multi ai_staged_refine ai_chat`; expect all pass. Commit `feat: open conversation diffs only on explicit navigation`.
 
 ## Task 5: Prove the public flow, document and integrate
 

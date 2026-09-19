@@ -163,6 +163,23 @@ local ok, reason = xpcall(function()
     source_generation = 1,
     files = { { path = "example.txt", state = "pending" } },
   })
+  local previews = 0
+  last().config.on_review({
+    show = function(_, selected)
+      assert(selected == "example.txt")
+      previews = previews + 1
+      return true
+    end,
+  })
+  assert(last().config.defer_review == true)
+  assert(chat:review())
+  local stale_review = #pending
+  compose("changed before preview choice")
+  choose(stale_review, 1)
+  assert(previews == 0)
+  assert(chat:review())
+  choose(nil, 1)
+  assert(previews == 1 and #last().driver.requests == 1, "preview must never dispatch a decision")
   assert(chat:close())
   local stale_close = #pending
   compose("edited while confirmation open")
@@ -174,9 +191,13 @@ local ok, reason = xpcall(function()
   chat:open()
   choose(stale_cancel)
   assert(last().owner:snapshot().phase == "review")
+  assert(chat:review())
+  local retired_review = #pending
   assert(chat:cancel())
   choose()
   assert(last().owner:snapshot().phase == "cancelling")
+  choose(retired_review, 1)
+  assert(previews == 1, "review choice must be fenced by the current owner revision")
   assert(last().driver:emit({
     kind = "cancelled",
     stopped = true,

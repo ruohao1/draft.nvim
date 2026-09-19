@@ -115,6 +115,7 @@ function M.new(options)
         config.selection[#config.selection + 1] = file.path
       end
       local created
+      config.defer_review = true
       config.on_review = function(handle)
         if owner == created then
           frozen = { owner = created, handle = handle, review = created:snapshot().review }
@@ -241,7 +242,35 @@ function M.new(options)
   end
 
   function chat:review()
-    return refusal("No frozen preview is available")
+    local state = owner and owner:snapshot()
+    local binding = frozen
+    if
+      not state
+      or state.phase ~= "review"
+      or not state.review
+      or not binding
+      or binding.owner ~= owner
+      or not binding.review
+      or binding.review.id ~= state.review.id
+      or binding.review.revision ~= state.review.revision
+      or binding.review.token ~= state.review.token
+    then
+      return refusal("No current frozen preview is available")
+    end
+    local paths = {}
+    for _, file in ipairs(state.review.files) do
+      paths[#paths + 1] = file.path
+    end
+    local valid = fence()
+    vim.ui.select(paths, { prompt = "Open frozen proposal preview" }, function(path)
+      if path and vim.list_contains(paths, path) and valid() and frozen == binding then
+        local ran, result, reason = pcall(binding.handle.show, binding.handle, path)
+        if not ran or not result then
+          refusal(ran and (reason or "Cannot show frozen preview") or "Cannot show frozen preview")
+        end
+      end
+    end)
+    return true
   end
 
   function chat:actions()
