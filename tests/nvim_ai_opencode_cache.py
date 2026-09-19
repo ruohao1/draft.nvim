@@ -26,7 +26,7 @@ class CompatibilityCacheTest(unittest.TestCase):
         self.executable = self.root / "fixture-executable"
         shutil.copyfile("/usr/bin/true", self.executable)
         self.executable.chmod(0o700)
-        self.runtime = self.root / "nvim"
+        self.runtime = self.root / "plugins with spaces/draft.nvim"
         shutil.copytree(RUNTIME / "lua/ai", self.runtime / "lua/ai")
         (self.runtime / "scripts").mkdir()
         for name in ("nvim-ai-review.py", "nvim-ai-opencode-cache.py"):
@@ -38,7 +38,8 @@ class CompatibilityCacheTest(unittest.TestCase):
         env = dict(os.environ, CACHE_TEST_DIRECTORY=str(self.cache),
                    CACHE_TEST_EXECUTABLE=str(self.executable), CACHE_TEST_REAL="1" if real else "0",
                    CACHE_TEST_FAIL="1" if fail else "0", NVIM_LOG_FILE="/dev/null",
-                   CACHE_TEST_PASSIVE="1" if passive else "0", CACHE_TEST_DRIFT=drift)
+                   CACHE_TEST_PASSIVE="1" if passive else "0", CACHE_TEST_DRIFT=drift,
+                   DRAFT_TEST_RUNTIME=str(self.runtime))
         env["CACHE_TEST_RUNTIME"] = "1" if runtime else "0"
         env["XDG_CACHE_HOME"] = str(self.root / "xdg-cache")
         env["CACHE_TEST_PLATFORM_CHANGE"] = "1" if platform_change else "0"
@@ -47,7 +48,7 @@ class CompatibilityCacheTest(unittest.TestCase):
         for key in ("TMUX", "TMUX_PANE", "NVIM_APPNAME"):
             env.pop(key, None)
         result = subprocess.run([shutil.which("nvim"), "--clean", "--headless", "-u", "NONE", "-i", "NONE",
-            "--cmd", "set runtimepath^=" + str(self.runtime), "-l", str(SCRIPT)],
+            "--cmd", "lua vim.opt.rtp:prepend(vim.env.DRAFT_TEST_RUNTIME)", "-l", str(SCRIPT)],
             env=env, capture_output=True, timeout=25)
         self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
         return json.loads(result.stdout)

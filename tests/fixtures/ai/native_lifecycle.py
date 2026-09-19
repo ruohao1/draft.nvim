@@ -86,7 +86,7 @@ class Lifecycle:
         setup = 'vim.o.shell="/bin/sh"; vim.notify=function(message) vim.fn.writefile({message},' + json.dumps(str(notifications)) + ',"a") end; vim.ui.select=function(items,_,callback) callback(items[#items],#items) end; require("draft").setup({confirm=function() return true end})'
         if native_ui:
             setup = 'vim.o.shell="/bin/sh"; vim.o.cmdheight=3; require("draft").setup({keymaps=true})'
-        argv = ["env", "-u", "NVIM_APPNAME", *(f"{key}={value}" for key, value in self.env.items() if key in ("HOME", "PATH", "SHELL", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "NVIM_LOG_FILE")), f"XDG_STATE_HOME={state}", f"XDG_RUNTIME_DIR={runtime}", self.nvim, "--clean", "--headless", "-u", "NONE", "-i", "NONE", "--listen", str(sock), "--cmd", f"set runtimepath^={self.nvim_root}", "-c", f"cd {self.root / 'root'}", "-c", f"edit {self.root / 'root/main.lua'}", "-c", f"lua {setup}"]
+        argv = ["env", "-u", "NVIM_APPNAME", *(f"{key}={value}" for key, value in self.env.items() if key in ("HOME", "PATH", "SHELL", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "NVIM_LOG_FILE")), f"XDG_STATE_HOME={state}", f"XDG_RUNTIME_DIR={runtime}", f"DRAFT_TEST_RUNTIME={self.nvim_root}", self.nvim, "--clean", "--headless", "-u", "NONE", "-i", "NONE", "--listen", str(sock), "--cmd", "lua vim.opt.rtp:prepend(vim.env.DRAFT_TEST_RUNTIME)", "-c", f"cd {self.root / 'root'}", "-c", f"edit {self.root / 'root/main.lua'}", "-c", f"lua {setup}"]
         if native_ui:
             argv.remove("--headless")
         self.tm("respawn-pane", "-k", "-t", pane, "exec " + shlex.join(argv))

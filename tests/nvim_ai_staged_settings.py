@@ -41,11 +41,13 @@ class StagedSettingsTest(unittest.TestCase):
     def editor(self, action="read"):
         env = dict(os.environ, STAGED_TEST_DIRECTORY=str(self.directory), STAGED_TEST_ACTION=action,
                    STAGED_TEST_AUTH=str(self.auth), XDG_DATA_HOME=str(self.root / "data"),
-                   XDG_STATE_HOME=str(self.root / "state"), NVIM_LOG_FILE="/dev/null")
+                   XDG_STATE_HOME=str(self.root / "state"), NVIM_LOG_FILE="/dev/null",
+                   DRAFT_TEST_RUNTIME=str(RUNTIME))
         for key in ("TMUX", "TMUX_PANE", "NVIM_APPNAME"):
             env.pop(key, None)
         result = subprocess.run([shutil.which("nvim"), "--clean", "--headless", "-u", "NONE", "-i", "NONE",
-            "--cmd", "set runtimepath^=" + str(RUNTIME), "-l", str(HERE / "fixtures/ai/staged_settings.lua")],
+            "--cmd", "lua vim.opt.rtp:prepend(vim.env.DRAFT_TEST_RUNTIME)",
+            "-l", str(HERE / "fixtures/ai/staged_settings.lua")],
             env=env, capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
         return json.loads(result.stdout)
