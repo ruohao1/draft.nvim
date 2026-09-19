@@ -1,6 +1,6 @@
 -- Editor-owned conversation state. No ACP, filesystem, writer or UI operations.
 -- The injected trusted driver owns effects; construction/observation are passive.
--- Passive lifecycle/review owner; no real driver, renderer or writer is wired yet.
+-- The chat coordinator observes this owner; the production adapter owns effects.
 -- send(command, receive, disconnected) returns promptly, except the trusted
 -- production adapter's existing guarded local publisher may wait up to 5 s.
 -- The optional

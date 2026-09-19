@@ -1,6 +1,6 @@
 -- Public setup must be passive and respect a user's existing mappings.
 vim.g.mapleader = " "
-local keys = { "aa", "ap", "ab", "ar", "ag", "as", "ax", "ae", "ac", "af" }
+local keys = { "aa", "ap", "ab", "ar", "ag", "as", "ax", "ae", "ac", "af", "at" }
 local calls = 0
 local system = vim.system
 vim.system = function(...)
@@ -29,13 +29,21 @@ assert(options.keymaps == nil, "setup must not mutate caller options")
 assert(draft.setup() == runtime, "setup must be idempotent")
 assert(draft.compact() == "", "passive status must be empty")
 assert(package.loaded["ai.companion"] == nil, "setup must not construct a companion")
-assert(vim.fn.exists(":NvimAIChat") == 0, "unfinished conversations must not be exposed")
+assert(package.loaded["ai.chat"] == nil, "setup must not construct a conversation UI")
 for _, name in ipairs({
   "NvimAIOpen",
   "NvimAIPrompt",
   "NvimAIReview",
   "NvimAIStage",
   "NvimAIStageSetup",
+  "NvimAIChat",
+  "NvimAIChatNew",
+  "NvimAIChatSend",
+  "NvimAIChatHide",
+  "NvimAIChatCancel",
+  "NvimAIChatRetry",
+  "NvimAIChatClose",
+  "NvimAIChatReview",
 }) do
   assert(vim.fn.exists(":" .. name) == 2, "setup must register " .. name)
 end

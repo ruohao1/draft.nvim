@@ -31,6 +31,7 @@ Choose individual suites by filename stem:
 ```sh
 python3 -I -B tests/run.py draft_setup draft_state ai_runtime
 python3 -I -B tests/run.py nvim_ai_acp_worker ai_conversation_driver
+python3 -I -B tests/run.py ai_chat ai_chat_view ai_chat_controller nvim_ai_chat_ui
 ```
 
 The review suite needs private root/platform variables; the runner supplies
@@ -38,6 +39,37 @@ them. Run each Lua suite in a separate clean Neovim process. A restricted
 container that masks `/tmp` or Bubblewrap ownership, blocks sockets, or disables
 user namespaces cannot run the confinement fixtures. Use a suitable Linux test
 environment; do not relax production ownership or sandbox checks.
+
+## Conversation UI evidence
+
+`ai_chat_controller` exercises the public commands through the production
+runtime, controller, confinement and copied fake ACP peer: two explicit turns,
+streamed text/progress, eligible context resume, hidden cancellation, deferred
+frozen previews, source refusal and cleanup. `nvim_ai_install` repeats that flow
+from a plugin path with spaces and an unrelated cwd. The controller suite also
+observes public-chat Neovim EOF through process handles and checks private-state
+removal. These tests send no live-account requests.
+
+`nvim_ai_chat_ui` uses actual Enter/Ctrl-S/q keys in a private tmux server and
+Neovim TUI. Its semantic owner receives deterministic in-process provider events;
+it verifies input and layout, not ACP compatibility. It can capture the real
+wide/narrow terminal grids for review:
+
+```sh
+DRAFT_CHAT_CAPTURE_DIR=/tmp/draft-chat-captures \
+  python3 -I -B tests/nvim_ai_chat_ui.py -q
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-chat-captures/conversation-wide.ansi \
+  /tmp/draft-chat-captures/conversation-wide.png --columns 140
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-chat-captures/conversation-narrow.ansi \
+  /tmp/draft-chat-captures/conversation-narrow.png --columns 70
+```
+
+Only this optional PNG renderer needs Pillow and DejaVu Sans Mono. It translates
+captured cells/SGR colors; the plugin and default tests keep standard-library
+Python dependencies. The committed captures and acceptance record are in
+[`docs/validation/2026-09-20-conversation-ui.md`](../docs/validation/2026-09-20-conversation-ui.md).
 
 ## Linux CI
 

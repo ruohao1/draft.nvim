@@ -9,15 +9,16 @@ Draft has two editing workflows:
 - **Staged OpenCode edits:** select saved files, let OpenCode edit isolated
   copies, and approve each frozen proposal **before it reaches your project**.
 
-This is an early Linux extraction. The internal conversation controller retains
-OpenCode context across explicit turns with fresh, isolated workers. Chat UI is
-still in development; there is no `:NvimAIChat` command. Existing staged follow-ups
-continue to start a fresh generation against pending proposals.
+This is an early Linux extraction. `:NvimAIChat` offers multi-turn OpenCode
+questions beside your code, with streamed replies and explicit frozen previews.
+Chat approval/revision controls and a model picker are still planned; use the
+staged workflow below for pre-write approval today.
 
-The controller uses the same saved-source checks, frozen reviews and guarded
-publisher as staging. It is an internal API for the upcoming chat integration.
-Its [validation record](docs/validation/2026-09-19-conversation-controller.md)
-separates ordinary fixtures from actual pinned OpenCode with a local provider.
+Chat retains context across explicit turns with fresh isolated workers and the
+same saved-source and frozen-review guards as staging. The
+[UI validation record](docs/validation/2026-09-20-conversation-ui.md) covers
+synthetic providers; the [controller record](docs/validation/2026-09-19-conversation-controller.md)
+separately covers pinned OpenCode with a local scripted provider.
 
 ## Requirements
 
@@ -65,6 +66,51 @@ Configure options on the first setup call; repeated setup calls return the
 existing runtime. Restart Neovim after changing the plugin version or setup
 options. The internal `ai` module names and `NvimAI*` commands are retained;
 use one installation per Neovim process.
+
+## Ask questions in a conversation
+
+1. Save the file you want to discuss. Run `:NvimAIStageSetup`, choose an explicit
+   `provider/model` and optional existing auth-file path, then **Save and enable**.
+2. Run `:NvimAIChat`, or `:NvimAIChat src/one.lua src/two.lua` for an explicit
+   selection. Opening does not launch a provider, discover models or send work.
+3. Press `i` in the composer and type a question. Enter adds a newline;
+   **Ctrl-S** explicitly sends. Replies stream without moving your source cursor.
+4. Ask another question with Ctrl-S. Press Escape then `q` to hide; run
+   `:NvimAIChat` to reopen with the transcript and unsent draft intact.
+5. Run `:NvimAIChatClose` to stop the conversation and release its scope.
+   Closed history stays readable. Use `:NvimAIChatNew` for a fresh conversation.
+
+![Conversation beside code](docs/images/conversation-wide.png)
+
+| Command | Purpose |
+| --- | --- |
+| `:NvimAIChat [files...]` | Open or focus the current conversation |
+| `:NvimAIChatNew [files...]` | Start after confirmed close; confirm discarding an unsent draft |
+| `:NvimAIChatSend` | Submit the composer once, when the owner permits |
+| `:NvimAIChatHide` | Hide without stopping or submitting |
+| `:NvimAIChatCancel` | Cancel generation; confirm discarding a pending review |
+| `:NvimAIChatRetry` | Retry only a failure proven safe to retry |
+| `:NvimAIChatClose` | Close the owner; confirm discarding a pending review |
+| `:NvimAIChatReview` | Choose a frozen proposal file for a read-only preview |
+
+Inside either chat buffer, normal-mode `gi` focuses the composer, `gd` opens
+review, `gc` cancels, `gr` retries, `gx` closes, and `g?` shows available actions.
+Ctrl-S works in normal and insert modes; `q` hides only in normal mode. Return
+from a frozen preview with `:NvimAIChat`. Closing a preview tab does not accept
+or discard its proposal; use ChatCancel or ChatClose explicitly.
+
+The selection stays fixed for the conversation: 1–16 saved existing files,
+at most 1 MiB combined, with the same file requirements as staging. New without
+paths reuses the closed conversation's selection. Save dirty selected buffers
+before sending. A refused send preserves your draft. Native and standalone staged
+work remain excluded even while chat is hidden or idle, until close is confirmed.
+
+The default right column becomes a bottom layout below 100 columns. Editors
+smaller than 40 columns or 12 rows hide chat; resize and reopen explicitly.
+The view keeps the newest 2 MiB / 20,000 lines and labels omitted earlier text.
+The owner retains up to 64 turns / 32 MiB; composer submissions are limited to
+32 KiB and oversized drafts are refused intact. Chat scratch buffers disable
+swap files, persistent undo and modelines; no transcript archive is written.
 
 ## Start with pre-write approval
 
@@ -164,6 +210,7 @@ require("draft").setup({
 | `<leader>ae` | `NvimAIStage` |
 | `<leader>ac` | `NvimAIStageSetup` |
 | `<leader>af` | `NvimAIStageFiles` |
+| `<leader>at` | `NvimAIChat` |
 
 Staging can also be configured for the current editor:
 

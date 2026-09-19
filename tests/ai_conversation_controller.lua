@@ -139,10 +139,37 @@ local function finish(owner)
   wait_phase(owner, "closed")
 end
 local ok, reason = xpcall(function()
+  local tabs, focus = #vim.api.nvim_list_tabpages(), vim.api.nvim_get_current_win()
+  local deferred_view
+  local deferred = editing(nil, {
+    defer_review = true,
+    on_review = function(value)
+      deferred_view = value
+    end,
+  })
+  assert(act(deferred, { kind = "submit", text = "Propose an edit without opening windows." }))
+  wait_phase(deferred, "review")
+  assert(#vim.api.nvim_list_tabpages() == tabs and vim.api.nvim_get_current_win() == focus)
+  assert(deferred_view:show("example.txt"))
+  assert(vim.api.nvim_get_current_win() ~= focus)
+  assert(vim.api.nvim_get_current_line() == "proposed edit")
+  assert(table.concat(vim.fn.readfile(project .. "/example.txt"), "\n") == "original text")
+  finish(deferred)
+  assert(not deferred_view:show("example.txt"))
+  local unopened = editing(nil, { defer_review = true })
+  assert(act(unopened, { kind = "submit", text = "Propose then cancel without preview." }))
+  wait_phase(unopened, "review")
+  assert(act(unopened, { kind = "cancel" }))
+  wait_phase(unopened, "idle")
+  assert(#vim.api.nvim_list_tabpages() == tabs)
+  finish(unopened)
+  print("ok - production proposals remain passive until explicit frozen preview")
+
+  local prior_audit = #audit
   local owner = make()
   assert(driver_options[1].timeout_ms == 270000 and driver_options[1].stop_timeout_ms == 10000)
   assert(owner:snapshot().phase == "idle")
-  assert(#audit == 0, "Factory construction launched an ACP worker")
+  assert(#audit == prior_audit, "Factory construction launched an ACP worker")
   assert(not act(owner, { kind = "revise", text = "No review exists." }))
   assert(act(owner, { kind = "submit", text = "First explicit question." }))
   wait_phase(owner, "idle")
@@ -151,7 +178,8 @@ local ok, reason = xpcall(function()
   assert(#owner:snapshot().turns == 2)
   assert(owner:snapshot().turns[1].text == "A bounded answer.")
   local fresh, resumed = 0, 0
-  for _, event in ipairs(audit) do
+  for index = prior_audit + 1, #audit do
+    local event = audit[index]
     fresh = fresh + (event.method == "session/new" and 1 or 0)
     resumed = resumed + (event.method == "session/resume" and 1 or 0)
   end

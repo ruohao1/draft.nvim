@@ -10,6 +10,29 @@ for _, path in ipairs(files) do
 end
 local handle
 local ok, reason = xpcall(function()
+  local staged = require("ai.staged")
+  staged.setup({
+    enabled = true,
+    review_mode = "pre_write",
+    model = "fixture/model",
+    opencode = "/usr/bin/true",
+    root = root,
+    provider = { fixture = {} },
+  })
+  local config = assert(staged.conversation_options())
+  config.provider.fixture.changed = true
+  assert(not staged.conversation_options().provider.fixture.changed)
+  config = assert(staged.conversation_options())
+  config.selection = { "first.txt" }
+  local owner = assert(require("ai.conversation_controller").new(config))
+  assert(owner:snapshot().phase == "idle")
+  assert(owner:dispatch({ kind = "close" }, owner:snapshot().view_revision))
+  assert(vim.wait(3000, function()
+    return owner:snapshot().phase == "closed"
+  end, 10))
+  staged.setup({ enabled = false, review_mode = "native" })
+  assert(not staged.conversation_options())
+
   local captured = assert(sources.capture(files, root))
   assert(sources.unchanged(captured))
   local frozen = {
@@ -21,6 +44,56 @@ local ok, reason = xpcall(function()
       { path = "second.txt", oldText = "original text\n", newText = "proposed edit\n" },
     },
   }
+  local focus, tabs, buffers =
+    vim.api.nvim_get_current_win(), #vim.api.nvim_list_tabpages(), #vim.api.nvim_list_bufs()
+  handle = assert(review.open(frozen, captured, { defer = true }))
+  assert(#vim.api.nvim_list_tabpages() == tabs and vim.api.nvim_get_current_win() == focus)
+  assert(
+    #vim.api.nvim_list_bufs() == buffers,
+    "deferred review must not create panels or synthetic visits"
+  )
+  assert(handle:intact())
+  assert(not handle:decide("approve", "first.txt"))
+  handle:retire()
+  assert(not handle:show("first.txt"))
+
+  handle = assert(review.open(frozen, captured, { defer = true }))
+  local alias_path = root .. "/alias.txt"
+  assert(vim.uv.fs_symlink(files[1], alias_path))
+  local alias = vim.fn.bufadd(alias_path)
+  vim.fn.bufload(alias)
+  vim.api.nvim_buf_set_lines(alias, 0, -1, false, { "unsaved hidden alias" })
+  assert(not handle:intact() and not handle:show("first.txt"))
+  assert(#vim.api.nvim_list_tabpages() == tabs)
+  handle:retire()
+  vim.api.nvim_buf_delete(alias, { force = true })
+  vim.uv.fs_unlink(alias_path)
+  -- Neovim may coalesce an alias into the original buffer. A new review must
+  -- capture fresh evidence after that dirty-buffer fixture has been discarded.
+  captured = assert(sources.capture(files, root))
+
+  for _, damage in ipairs({ "changed", "missing" }) do
+    handle = assert(review.open(frozen, captured, { defer = true }))
+    assert(handle:show("second.txt"))
+    local panel = vim.api.nvim_get_current_buf()
+    assert(vim.api.nvim_buf_get_lines(panel, 0, -1, false)[1] == "proposed edit")
+    vim.cmd("tabclose")
+    assert(handle:show("first.txt"), "intact hidden panels must reopen without recreation")
+    assert(handle:intact())
+    vim.cmd("tabclose")
+    if damage == "changed" then
+      vim.bo[panel].modifiable = true
+      vim.api.nvim_buf_set_lines(panel, 0, -1, false, { "changed frozen bytes" })
+      vim.bo[panel].modified = false
+    else
+      vim.api.nvim_buf_delete(panel, { force = true })
+    end
+    assert(not handle:intact() and not handle:show("first.txt"))
+    assert(#vim.api.nvim_list_tabpages() == tabs, "damaged panels must not be recreated")
+    handle:retire()
+  end
+  print("ok - deferred frozen reviews preserve guards before first display and across reopening")
+
   handle = assert(
     review.open(frozen, captured, { python = assert(require("ai.tools").resolve("python3")) })
   )

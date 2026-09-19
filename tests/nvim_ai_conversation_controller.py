@@ -2,6 +2,7 @@
 import json
 import hashlib
 import ctypes
+import fcntl
 import importlib.util
 import os
 from pathlib import Path
@@ -377,6 +378,12 @@ class EngineTest(unittest.TestCase):
         return pid, task, store
 
     def test_real_neovim_eof_closes_the_production_factory_and_worker(self):
+        self.check_editor_eof("conversation_production_editor.lua")
+
+    def test_public_chat_editor_eof_closes_controller_and_worker(self):
+        self.check_editor_eof("chat_production_editor.lua")
+
+    def check_editor_eof(self, fixture):
         nvim = shutil.which("nvim")
         self.assertIsNotNone(nvim)
         gate = self.scratch / "editor-exit"
@@ -393,7 +400,7 @@ class EngineTest(unittest.TestCase):
             env[key] = str(path)
         editor = subprocess.Popen([nvim, "--clean", "--headless", "-u", "NONE", "-i", "NONE",
             "--cmd", "lua vim.opt.rtp:prepend(vim.env.DRAFT_TEST_ROOT)", "-l",
-            str(ROOT / "tests/fixtures/ai/conversation_production_editor.lua")],
+            str(ROOT / "tests/fixtures/ai" / fixture)],
             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, umask=0o077)
         owned = []
         try:
@@ -504,6 +511,8 @@ class EngineTest(unittest.TestCase):
 
     def test_output_deadline_interrupts_a_blocked_acp_client_reply(self):
         self.spawn("both-blocked")
+        # Keep the unread editor pipe smaller than the peer's single text chunk.
+        fcntl.fcntl(self.child.stdout, fcntl.F_SETPIPE_SZ, 4096)
         self.send("start")
         self.wait_ready("both-blocked")
         pid, task, store = self.worker_paths()
@@ -511,6 +520,25 @@ class EngineTest(unittest.TestCase):
         try:
             self.child.wait(timeout=10)
             self.assertNotEqual(self.child.returncode, 0)
+            self.assertTrue(select.select([worker_fd], [], [], 0)[0])
+            self.assertFalse(task.exists() or store.exists())
+        finally:
+            os.close(worker_fd)
+
+    def test_text_streams_and_close_interrupts_a_blocked_acp_client_reply(self):
+        self.spawn("both-blocked")
+        fcntl.fcntl(self.child.stdout, fcntl.F_SETPIPE_SZ, 4096)
+        self.send("start")
+        self.wait_ready("both-blocked")
+        pid, task, store = self.worker_paths()
+        worker_fd = os.pidfd_open(pid)
+        try:
+            self.assertEqual(self.receive("text", seconds=3)["text"], "x" * 8192)
+            self.send("close")
+            self.assertTrue(self.receive("closed", seconds=6)["cleaned"])
+            self.child.wait(timeout=3)
+            self.assertEqual(self.child.returncode, 0)
+            self.assertEqual(sum(event["kind"] == "text" for event in self.events), 1)
             self.assertTrue(select.select([worker_fd], [], [], 0)[0])
             self.assertFalse(task.exists() or store.exists())
         finally:

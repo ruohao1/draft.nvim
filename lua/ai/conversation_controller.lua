@@ -136,6 +136,7 @@ function M.new(options)
     stop_timeout_ms = true,
     on_close = true,
     on_review = true,
+    defer_review = true,
   }
   if not plain(options) then
     return nil, "Invalid trusted conversation configuration"
@@ -152,6 +153,7 @@ function M.new(options)
     or vim.uv.fs_realpath(options.root) ~= options.root
     or (options.on_close ~= nil and type(options.on_close) ~= "function")
     or (options.on_review ~= nil and type(options.on_review) ~= "function")
+    or (options.defer_review ~= nil and type(options.defer_review) ~= "boolean")
   then
     return nil, "Invalid conversation root, helper or callback"
   end
@@ -248,11 +250,14 @@ function M.new(options)
           local frozen = type(event.proposal) == "table"
             and inspect_review(python, event.review_ref, event.proposal.token)
           if frozen and sources.unchanged(turn_capture) then
-            replacement = review.open(
-              frozen,
-              turn_capture,
-              { python = python, decisions = event.prior_review and event.prior_review.files }
-            )
+            replacement = review.open(frozen, turn_capture, {
+              python = python,
+              decisions = event.prior_review and event.prior_review.files,
+              defer = options.defer_review,
+              controls = options.defer_review
+                  and "Frozen preview | :NvimAIChat to return | :NvimAIChatCancel to discard"
+                or nil,
+            })
           end
           guarded = replacement ~= nil and sources.unchanged(turn_capture)
         end
@@ -305,7 +310,9 @@ function M.new(options)
       end
       if accepted and event.kind == "decided" and view.review and handle then
         binding = view.review
-        handle:show(view.review.files[view.review.current_index].path)
+        if not options.defer_review then
+          handle:show(view.review.files[view.review.current_index].path)
+        end
       end
       if accepted and not view.review and handle then
         handle:close()

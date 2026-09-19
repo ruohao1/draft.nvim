@@ -97,6 +97,49 @@ COMMANDS                                                        *draft-commands*
 :NvimAIStageStatus     Show phase, selection and private artifact path.
 :NvimAIStageReset      Confirm forgetting preferences and disabling staging.
 
+:NvimAIChat [files...] Open/focus a conversation with a fixed saved-file scope.
+:NvimAIChatNew [files...]
+                        Start a new conversation after confirmed close.
+:NvimAIChatSend        Explicitly submit the composer.
+:NvimAIChatHide        Hide without cancelling, closing or sending.
+:NvimAIChatCancel      Cancel generation or confirm discarding pending review.
+:NvimAIChatRetry       Explicitly retry a failure proven safe to retry.
+:NvimAIChatClose       Close the owner and release its scope after cleanup.
+:NvimAIChatReview      Select a frozen proposal file for read-only preview.
+
+CONVERSATIONS                                                      *draft-chat*
+
+Run :NvimAIStageSetup to choose provider/model and Save and enable. Open a saved
+file and run :NvimAIChat. Opening is passive: no provider launch, authentication,
+model discovery or submission. Explicit paths select 1-16 saved files, at most
+1 MiB combined, under the same file requirements as |draft-staged-review|.
+Selection and root stay fixed until close; arguments cannot silently rebind them.
+
+Opening focuses the composer. Press i, type a question, and Ctrl-S to send.
+Enter inserts a newline. Send a second question with Ctrl-S to reuse eligible
+context. Streaming preserves source focus/cursor and your unsent draft. Reading
+older transcript text preserves its viewport; only tail followers auto-scroll.
+
+Chat-buffer keys: Ctrl-S send (normal/insert); q hide (normal); gi compose;
+gd review; gc cancel; gr retry; gx close; g? available actions. All are local to
+owned buffers. Opening a review is explicit and read-only. Return to chat with
+:NvimAIChat. Closing its diff tab does not decide or cancel the proposal.
+Chat approval/revision controls and model selection are planned separately.
+
+Hide/window closure preserves the owner and draft. Reopen with :NvimAIChat;
+there is no implicit send. An idle/hidden owner excludes native and standalone
+staged work. ChatClose releases this exclusion only after confirmed cleanup;
+closed history stays read-only. ChatNew replaces it after successful construction
+and confirms before discarding a nonempty draft. With no paths, New reuses the
+closed selection. Cancel/Close confirm before discarding pending frozen review.
+
+The right column defaults to 48 columns. Below 100 columns chat uses a bottom
+layout; below 40 columns or 12 rows it hides until explicitly reopened. User
+repurposed windows are preserved. The transcript shows at most the newest 2 MiB
+or 20,000 lines, with an omission marker. The owner has a 64-turn/32 MiB budget;
+submissions have a 32 KiB limit. Refused and oversized drafts remain intact.
+No transcript archive, swap or persistent undo is written by the chat view.
+
 NATIVE AFTER-WRITE REVIEW                                   *draft-native-review*
 
 Native agents can write within their authorized scope before you inspect the
@@ -145,6 +188,7 @@ Off by default. Set mapleader before setup({ keymaps = true }) to enable:
     <leader>ag  grants                 <leader>as  status
     <leader>ax  close                  <leader>ae  staged edit
     <leader>ac  staging setup          <leader>af  staged file picker
+    <leader>at  conversation
 
 STATE AND LIMITS                                                    *draft-state*
 
@@ -167,12 +211,10 @@ Crash recovery and retention management remain incomplete. Only inspect/remove
 an exact artifact path identified by status when no owned worker can still use
 it. Do not sweep temporary-directory families.
 
-An internal conversation controller retains OpenCode context across explicit
-turns, using fresh isolated workers and the existing guarded review publisher.
-The chat UI remains unfinished; there is no NvimAIChat command. Ordinary staged
-follow-ups still use fresh generations. Linux fixtures and pinned OpenCode with
-a local scripted provider are separate from cross-provider live-account
-acceptance. See tests/README.md for verification commands and the repository's
-docs/validation/2026-09-19-conversation-controller.md for controller evidence.
+Conversations retain OpenCode context across explicit turns with fresh isolated
+workers. Ordinary staged follow-ups still use fresh generations. Linux fixtures
+and pinned OpenCode with a local scripted provider are separate from live-account
+acceptance. See tests/README.md and docs/validation/2026-09-20-conversation-ui.md
+for the UI evidence, and the 2026-09-19 controller record for provider interop.
 
  vim:tw=80:ts=8:noet:ft=help:norl:
