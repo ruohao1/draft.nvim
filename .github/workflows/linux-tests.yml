@@ -52,8 +52,15 @@ jobs:
           tmux -V
           rg --version
           setfacl --version
-          bwrap --unshare-user --unshare-pid --unshare-net --die-with-parent \
-            --ro-bind / / --proc /proc --dev /dev -- /bin/true
+          if ! bwrap --unshare-user --unshare-pid --unshare-net --die-with-parent \
+            --ro-bind / / --proc /proc --dev /dev -- /bin/true; then
+            sysctl kernel.apparmor_restrict_unprivileged_userns || true
+            cat /proc/self/attr/current || true
+            sudo rg --line-number 'bwrap|userns' /etc/apparmor.d \
+              /sys/kernel/security/apparmor/profiles || true
+            sudo journalctl --dmesg --no-pager --grep='apparmor' --lines=20 || true
+            exit 1
+          fi
 
       - name: Run every provider-free suite
         run: /usr/bin/python3 -I -B tests/run.py
