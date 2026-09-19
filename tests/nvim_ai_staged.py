@@ -103,6 +103,21 @@ class StagedTest(unittest.TestCase):
         self.assertEqual(self.decide(proposal)["phase"], "already_decided")
         self.assertEqual(self.file.read_bytes(), b"later user edit\n")
 
+    def test_workspace_freezing_is_independent_of_agent_execution(self):
+        spec = importlib.util.spec_from_file_location("staged_workspace", CONTROLLER)
+        staging = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(staging)
+        request = self.request(opencode="/missing/agent")
+        selected, multi = staging.selected_files(request)
+        task = staging.prepare_workspace(request, selected)
+        self.addCleanup(lambda: staging.discard_workspace(task) if task.exists() else None)
+        (task / "staging/src/example.txt").write_bytes(AFTER)
+        frozen = staging.freeze_workspace(task, str(self.root), selected, multi=multi)
+        self.assertEqual(frozen["phase"], "review_ready")
+        self.assertEqual(frozen["newText"].encode(), AFTER)
+        self.assertEqual(self.file.read_bytes(), BEFORE)
+        self.assertFalse((task / "staging").exists())
+
     def test_reject_and_cancel_leave_original(self):
         for choice, phase in (("reject", "rejected"), ("cancel", "cancelled")):
             with self.subTest(choice=choice):

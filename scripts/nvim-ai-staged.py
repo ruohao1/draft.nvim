@@ -385,21 +385,17 @@ def sync_directory(path):
         os.close(fd)
 
 
-def prepare(request, editor, selected=None, force_review=False):
-    root = request["root"]
-    if not isinstance(request.get("prompt"), str) or not 0 < len(request["prompt"]) <= 32768:
-        raise Refused("Provide a nonempty prompt of at most 32768 characters")
-    if selected is None:
-        selected, multi = selected_files(request)
-    else:
-        # Internal refinement inputs only; JSON requests cannot supply seeds or
-        # expand the original immutable selection through the prepare operation.
-        multi = True
+def discard_workspace(task):
+    """Discard a task created by this invocation, only after its worker stops."""
+    shutil.rmtree(task)
+
+
+def prepare_workspace(request, selected):
+    """Copy trusted source snapshots; this boundary never launches an agent."""
     editable = [item for item in selected if not item.get("context_only")]
     if not editable or sum(len(item.get("seed", item["before"])) for item in selected) > MAX_BYTES:
         raise Refused("Follow-up requires pending files within the 1 MiB total limit")
     task = Path(tempfile.mkdtemp(prefix="nvim-ai-staged-", dir="/tmp"))
-    keep = False
     try:
         staging = task / "staging"
         for item in editable:
@@ -407,37 +403,63 @@ def prepare(request, editor, selected=None, force_review=False):
             destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             private_write(destination, item.get("seed", item["before"]))
             os.chmod(destination, item["mode"])
-        acp_turn(dict(request, files=[{"path": item["path"]} for item in editable]), task, editor)
-        changed = dict(zip([item["path"] for item in editable], staged_snapshot(task, editable)))
-        values = [changed.get(item["path"], item["before"]) for item in selected]
-        if sum(map(len, values)) > MAX_BYTES:
-            raise Refused("The selected-file proposal is limited to 1 MiB in total")
-        if not force_review and all(after == item["before"] for item, after in zip(selected, values)):
-            return {"phase": "unchanged", "reason": "Agent stopped; no staged change to review"}
-        records, files = [], []
-        for index, (item, after) in enumerate(zip(selected, values)):
-            records.append({"path": item["path"], "identity": item["identity"],
-                            "expected": item["expected"], "desired": fingerprint(after, item["mode"])})
-            private_write(task / ("before-" + str(index) if multi else "before"), item["before"])
-            private_write(task / ("after-" + str(index) if multi else "after"), after)
-            files.append({"path": item["path"], "oldText": text_bytes(item["before"]), "newText": text_bytes(after)})
-        proposal = {"schema": 2 if multi else 1, "id": os.urandom(16).hex(), "root": root}
-        proposal.update({"files": records} if multi else records[0])
-        json_write(task / "proposal.json", proposal)
-        # Credentials, mutable staging and agent state do not outlive the turn.
+        return task
+    except BaseException:
+        discard_workspace(task)
+        raise
+
+
+def freeze_workspace(task, root, selected, *, multi, force_review=False):
+    """Validate and freeze a stopped workspace; never publish to the project."""
+    editable = [item for item in selected if not item.get("context_only")]
+    changed = dict(zip([item["path"] for item in editable], staged_snapshot(task, editable)))
+    values = [changed.get(item["path"], item["before"]) for item in selected]
+    if sum(map(len, values)) > MAX_BYTES:
+        raise Refused("The selected-file proposal is limited to 1 MiB in total")
+    if not force_review and all(after == item["before"] for item, after in zip(selected, values)):
+        return {"phase": "unchanged", "reason": "Agent stopped; no staged change to review"}
+    records, files = [], []
+    for index, (item, after) in enumerate(zip(selected, values)):
+        records.append({"path": item["path"], "identity": item["identity"],
+                        "expected": item["expected"], "desired": fingerprint(after, item["mode"])})
+        private_write(task / ("before-" + str(index) if multi else "before"), item["before"])
+        private_write(task / ("after-" + str(index) if multi else "after"), after)
+        files.append({"path": item["path"], "oldText": text_bytes(item["before"]), "newText": text_bytes(after)})
+    proposal = {"schema": 2 if multi else 1, "id": os.urandom(16).hex(), "root": root}
+    proposal.update({"files": records} if multi else records[0])
+    json_write(task / "proposal.json", proposal)
+    # Credentials, mutable staging and agent state do not outlive the turn.
+    if (task / "agent").exists():
         shutil.rmtree(task / "agent")
-        shutil.rmtree(staging)
-        (task / "config.json").unlink()
-        sync_directory(task)
-        keep = True
-        result = {"phase": "review_ready", "proposal": str(task / "proposal.json"), "id": proposal["id"],
-                  "files": files, "reason": "Agent stopped. Real project unchanged. Review the frozen proposal."}
-        if len(files) == 1:
-            result.update(files[0])
+    shutil.rmtree(task / "staging")
+    (task / "config.json").unlink(missing_ok=True)
+    sync_directory(task)
+    result = {"phase": "review_ready", "proposal": str(task / "proposal.json"), "id": proposal["id"],
+              "files": files, "reason": "Agent stopped. Real project unchanged. Review the frozen proposal."}
+    if len(files) == 1:
+        result.update(files[0])
+    return result
+
+
+def prepare(request, editor, selected=None, force_review=False):
+    if not isinstance(request.get("prompt"), str) or not 0 < len(request["prompt"]) <= 32768:
+        raise Refused("Provide a nonempty prompt of at most 32768 characters")
+    if selected is None:
+        selected, multi = selected_files(request)
+    else:
+        # Internal refinement inputs only; callers cannot add seeds through JSON.
+        multi = True
+    task = prepare_workspace(request, selected)
+    keep = False
+    try:
+        editable = [item for item in selected if not item.get("context_only")]
+        acp_turn(dict(request, files=[{"path": item["path"]} for item in editable]), task, editor)
+        result = freeze_workspace(task, request["root"], selected, multi=multi, force_review=force_review)
+        keep = result["phase"] == "review_ready"
         return result
     finally:
         if not keep:
-            shutil.rmtree(task)
+            discard_workspace(task)
 
 
 def decide(manifest, token, choice, path=None, remaining=False):
