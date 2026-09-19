@@ -20,6 +20,9 @@ def helper(name):
 
 protocol = helper("nvim-ai-conversation-protocol")
 review = helper("nvim-ai-review")
+storage = helper("nvim-ai-conversation-store")
+turns = helper("nvim-ai-conversation-turn")
+FAILURES = (OSError, ValueError, RuntimeError, turns.staging.Refused)
 
 
 def configuration(path):
@@ -39,30 +42,69 @@ class Controller:
     def __init__(self, config, pipe):
         self.config, self.pipe = config, pipe
         self.binding = protocol.Binding()
+        self.store = self.turn = self.active = None
+        self.sequence = 0
+        self.closing = False
+
+    def emit(self, event):
+        self.sequence += 1
+        event.update({key: self.active["command"][key] for key in protocol.IDENTITIES})
+        event["sequence"] = self.sequence
+        self.pipe.enqueue(self.active["serial"], event)
+
+    def cleanup(self):
+        if self.turn is not None and not self.turn.done:
+            self.turn.fail()
+        if self.store is not None:
+            self.store.close()
+
+    def dispatch(self, frame):
+        if self.closing:
+            raise protocol.Refused("Command follows controller close")
+        if not self.binding.accept(frame):
+            return
+        command = frame["command"]
+        if command["kind"] == "close":
+            self.cleanup()
+            self.active = frame
+            self.emit(dict(kind="closed", stopped=True, cleaned=True, tokens_retired=True))
+            self.closing = True
+        elif command["kind"] == "start":
+            if self.turn is not None and (not self.turn.done or not self.turn.store_valid):
+                raise protocol.Refused("Prior turn does not authorize another worker")
+            self.active = frame
+            if self.store is None:
+                self.store = storage.Store()
+            self.turn = turns.Turn(self.config, self.store, self.pipe)
+            try:
+                self.turn.start(command)
+            except FAILURES:
+                for event in self.turn.fail():
+                    self.emit(event)
+        else:
+            raise protocol.Refused("Conversation command is not available")
 
     def run(self):
-        closing = False
-        while True:
-            frames = self.pipe.read_ready()
-            for frame in frames:
-                if closing:
-                    raise protocol.Refused("Command follows controller close")
-                if not self.binding.accept(frame):
-                    continue
-                command = frame["command"]
-                if command["kind"] != "close":
-                    raise protocol.Refused("Conversation execution is not available")
-                event = {key: command[key] for key in protocol.IDENTITIES}
-                event.update(kind="closed", sequence=1, stopped=True, cleaned=True, tokens_retired=True)
-                self.pipe.enqueue(frame["serial"], event)
-                closing = True
-            self.pipe.flush_ready()
-            if closing and not self.pipe.writing:
-                return 0
-            if self.pipe.eof and not closing:
-                return 0
-            select.select([] if self.pipe.eof else [self.pipe.input],
-                          [self.pipe.output] if self.pipe.writing else [], [], .05)
+        try:
+            while True:
+                for frame in self.pipe.read_ready():
+                    self.dispatch(frame)
+                if self.pipe.eof and not self.closing:
+                    return 0
+                if self.turn is not None and not self.turn.done:
+                    try:
+                        events = self.turn.advance()
+                    except FAILURES:
+                        events = self.turn.fail()
+                    for event in events:
+                        self.emit(event)
+                self.pipe.flush_ready()
+                if self.closing and not self.pipe.writing:
+                    return 0
+                select.select([] if self.pipe.eof else [self.pipe.input],
+                              [self.pipe.output] if self.pipe.writing else [], [], .05)
+        finally:
+            self.cleanup()
 
 
 def main():
@@ -73,7 +115,7 @@ def main():
     try:
         config = configuration(args.config)
         return Controller(config, protocol.EditorPipe(sys.stdin.fileno(), sys.stdout.fileno())).run()
-    except (OSError, ValueError, protocol.Refused):
+    except FAILURES:
         print("Draft conversation failed; explicit recovery required.", file=sys.stderr)
         return 1
 

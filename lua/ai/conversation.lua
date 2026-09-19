@@ -94,6 +94,7 @@ local ACTIONS = {
 local EVENTS = {
   submitted = { model = true, models = true },
   text = { text = true },
+  progress = { tool_id = true, title = true, status = true },
   stopping = {},
   settled = {
     outcome = true,
@@ -616,6 +617,29 @@ function M.new(options)
       end
       transcript_bytes = transcript_bytes + #text
       text_chunks[#text_chunks + 1] = text
+    elseif event.kind == "progress" and state.phase == "generating" then
+      if
+        type(event.tool_id) ~= "string"
+        or #event.tool_id == 0
+        or #event.tool_id > 256
+        or type(event.title) ~= "string"
+        or #event.title == 0
+        or #event.title > 256
+        or not ({
+          pending = true,
+          in_progress = true,
+          completed = true,
+          failed = true,
+          cancelled = true,
+        })[event.status]
+      then
+        return fail("Invalid tool progress; explicit recovery required")
+      end
+      turn.progress = {
+        tool_id = event.tool_id,
+        title = event.title:gsub("[%z\1-\31\127]", ""),
+        status = event.status,
+      }
     elseif
       event.kind == "stopping" and (state.phase == "generating" or state.phase == "starting")
     then

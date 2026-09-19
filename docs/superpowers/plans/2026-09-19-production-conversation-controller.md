@@ -167,8 +167,8 @@ def test_close_before_first_turn_starts_no_worker(self):
 **Files:** modify `scripts/nvim-ai-staged.py`; create turn helper; extend controller, fixture peer and tests; retain staged/refine regressions.
 **Interfaces:** `prepare_workspace(request, selected) -> Path`, `freeze_workspace(task, root, selected, *, multi, force_review=False) -> Frozen`, `discard_workspace(task)`; turn adapter `Turn(config, store, editor_pipe).start(command)` and `advance() -> list[Event]`.
 
-- [ ] Extract the existing pre-ACP setup and post-ACP validation/freeze sections of `prepare()` without changing its public result. `freeze_workspace` never starts a worker or writes the project. The controller calls it only after verified stop; standalone `prepare` retains its existing execution path. Cleanup is permitted only for the task created by that invocation and after its worker has stopped.
-- [ ] Add a real peer scenario that advertises 1.18.30/ACP 1, creates a session, confirms model/mode, streams text and `end_turn`, creates allowed synthetic store artifacts, and exits gracefully on EOF. No edit is made.
+- [x] Extract the existing pre-ACP setup and post-ACP validation/freeze sections of `prepare()` without changing its public result. `freeze_workspace` never starts a worker or writes the project. The controller calls it only after verified stop; standalone `prepare` retains its existing execution path. Cleanup is permitted only for the task created by that invocation and after its worker has stopped.
+- [x] Add a real peer scenario that advertises 1.18.30/ACP 1, creates a session, confirms model/mode, streams text and `end_turn`, creates allowed synthetic store artifacts, and exits gracefully on EOF. No edit is made.
 
 ```python
 def test_answer_finishes_without_proposal(self):
@@ -181,10 +181,10 @@ def test_answer_finishes_without_proposal(self):
     self.assertEqual(observed["project_after"], observed["project_before"])
 ```
 
-- [ ] Run the new case and observe failure before adding session behavior. Implement only pinned initialize/new/config/prompt schemas, exact session binding, authorized options, denied filesystem/terminal RPCs and selected-path edit permission handling. Unknown/non-success stop reasons are failures; they cannot freeze output.
-- [ ] Reuse `staging.configuration()`/`sandbox()` with fresh filtered profile. Add the conversation-specific compaction/prune-disable config/env from the existing `acp_session_probe.py`; preserve its loopback authenticated ACP listener configuration. Store mounts only its backend child.
-- [ ] Use Worker `begin`/`poll`, with at most 50 ms polls and 64-message batches, total startup/generation deadlines and bounded normalized text/progress. Add closed `progress` schema to the owner: `{kind="progress", tool_id, title, status}` plus identities/sequence; allowed statuses are pending/in_progress/completed/failed/cancelled, strings at most 256 bytes, all data charged to existing budgets. Progress is display-only.
-- [ ] Add cases for wrong version, missing resume capability, unadvertised model/mode, wrong config confirmation, mismatched session updates and denied host operations. Assert zero prompt requests after handshake/config refusal. Run `nvim_ai_conversation_controller nvim_ai_staged nvim_ai_staged_multi nvim_ai_staged_refine ai_conversation`; commit the extraction separately from `feat: execute a validated conversation turn`.
+- [x] Run the new case and observe failure before adding session behavior. Implement only pinned initialize/new/config/prompt schemas, exact session binding, authorized options, denied filesystem/terminal RPCs and selected-path edit permission handling. Unknown/non-success stop reasons are failures; they cannot freeze output.
+- [x] Reuse `staging.configuration()`/`sandbox()` with fresh filtered profile. Add the conversation-specific compaction/prune-disable config/env from the existing `acp_session_probe.py`; preserve its loopback authenticated ACP listener configuration. Store mounts only its backend child.
+- [x] Use Worker `begin`/`poll`, with at most 50 ms polls and 64-message batches, total startup/generation deadlines and bounded normalized text/progress. Add closed `progress` schema to the owner: `{kind="progress", tool_id, title, status}` plus identities/sequence; allowed statuses are pending/in_progress/completed/failed/cancelled, strings at most 256 bytes, all data charged to existing budgets. Progress is display-only.
+- [x] Add cases for wrong version, missing resume capability, unadvertised model/mode, wrong config confirmation, mismatched session updates and denied host operations. Assert zero prompt requests after handshake/config refusal. Run `nvim_ai_conversation_controller nvim_ai_staged nvim_ai_staged_multi nvim_ai_staged_refine ai_conversation`; commit the extraction separately from `feat: execute a validated conversation turn`.
 
 ## Task 4: Make cancellation responsive through blocked ACP I/O
 
