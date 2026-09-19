@@ -59,6 +59,11 @@ explicit opt-ins. Test logs are uploaded as `linux-test-logs` for seven days,
 including after a test failure. The job has a 25-minute deadline, with the
 runner's existing per-suite deadlines inside it.
 
+Hosted validation on 2026-09-19: [46/46 suites passed](https://github.com/ruohao1/draft.nvim/actions/runs/35463990214)
+with the expected installed-agent opt-in skips. The Ubuntu 24.04 runner image
+`20260907.300.1` provided Python 3.12.3, Git 2.55.0, Bubblewrap 0.9.0,
+ripgrep 14.1.0 and ACL tools 2.3.2, alongside the pinned Neovim 0.12.4 and tmux 3.6.
+
 ## Installed OpenCode audit (optional)
 
 The deterministic managed-OpenCode suite explicitly skips its installed-binary
