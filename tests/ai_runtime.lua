@@ -251,6 +251,29 @@ end
 
 local ok, err = xpcall(function()
   do
+    local f = staging_fixture()
+    assert(f.runtime:chat_open({ f.root .. "/demo.lua" }))
+    assert(f.runtime:chat_hide())
+    assert(not f.runtime:open(), "hidden idle chat excludes native activity")
+    assert(not f.runtime:shutdown(), "hidden chat still owns its runtime lease")
+    vim.cmd("NvimAIStage TEST:approve")
+    assert(not require("ai.staged").busy(), "hidden chat excludes standalone staging")
+    assert(f.runtime:chat_close())
+    assert(
+      vim.wait(3000, function()
+        return f.runtime:shutdown() == true
+      end, 10),
+      "only confirmed close permits runtime shutdown"
+    )
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+      assert(
+        not vim.bo[buf].filetype:match("^draft%-chat"),
+        "shutdown disposes closed chat buffers"
+      )
+    end
+    eq(#f.invocations, 0, "passive chat and cleanup never launch a native provider")
+  end
+  do
     local f = fixture()
     local config = {
       root = f.root,

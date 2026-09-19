@@ -10,6 +10,14 @@ local bindings = {
   { "NvimAIGrants", "ag", "grants", "AI: inspect or revoke temporary grants" },
   { "NvimAIStatus", "as", "show_status", "AI: show companion status" },
   { "NvimAIClose", "ax", "close", "AI: close companion" },
+  { "NvimAIChat", "at", "chat_open", "Draft: open or focus conversation" },
+  { "NvimAIChatNew", false, "chat_new", "Draft: start a new conversation after close" },
+  { "NvimAIChatSend", false, "chat_send", "Draft: explicitly send composer" },
+  { "NvimAIChatHide", false, "chat_hide", "Draft: hide conversation without stopping it" },
+  { "NvimAIChatCancel", false, "chat_cancel", "Draft: cancel turn or pending review" },
+  { "NvimAIChatRetry", false, "chat_retry", "Draft: explicitly retry a safe failed turn" },
+  { "NvimAIChatClose", false, "chat_close", "Draft: close conversation and release scope" },
+  { "NvimAIChatReview", false, "chat_review", "Draft: open a frozen proposal preview" },
 }
 
 local function backend_hint(health, enabled)
@@ -108,6 +116,26 @@ function M.setup(options)
     end
     lease.owner = owner
     return owner
+  end
+  for _, method in ipairs({ "open", "new", "send", "hide", "cancel", "retry", "close", "review" }) do
+    runtime["chat_" .. method] = function(_, files)
+      if state.stopped then
+        return nil, "AI runtime is stopped"
+      end
+      if not state.chat then
+        state.chat = require("ai.chat").new({
+          create = function(config)
+            return runtime:conversation(config)
+          end,
+          configuration = staged.conversation_options,
+          notify = options.notify,
+        })
+      end
+      if method == "new" then
+        return state.chat:open(files, true)
+      end
+      return state.chat[method](state.chat, files)
+    end
   end
   local function native_transaction(callback, ...)
     if state.stopped or native_running then
@@ -767,6 +795,9 @@ function M.setup(options)
     if state.conversation then
       return nil, "Close the conversation before stopping the runtime"
     end
+    if state.chat then
+      state.chat:dispose()
+    end
     state.stopped = true
     display:stop()
     state.shutdown_result = not companion or companion:shutdown()
@@ -785,7 +816,7 @@ function M.setup(options)
 
   local function dispatch(method, argument)
     local ok, result, err = pcall(runtime[method], runtime, argument)
-    if not ok or not result then
+    if not ok or (not result and not method:match("^chat_")) then
       (options.notify or vim.notify)(
         ok and (err or "AI command was cancelled") or "AI command failed",
         vim.log.levels.WARN
@@ -805,6 +836,9 @@ function M.setup(options)
     if method == "backend" or method == "grants" then
       command_options.nargs = "?"
     end
+    if method == "chat_open" or method == "chat_new" then
+      command_options.nargs, command_options.complete = "*", "file"
+    end
     if method == "backend" then
       command_options.complete = function()
         return { "codex", "claude", "opencode" }
@@ -816,6 +850,8 @@ function M.setup(options)
         argument = { bang = args.bang }
       elseif method == "prompt" or method == "native_prompt" then
         argument = args.range > 0 and "x" or "n"
+      elseif method == "chat_open" or method == "chat_new" then
+        argument = #args.fargs > 0 and args.fargs or nil
       elseif args.args ~= "" then
         argument = args.args
       end

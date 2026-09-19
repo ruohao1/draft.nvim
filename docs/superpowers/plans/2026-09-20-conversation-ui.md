@@ -83,7 +83,7 @@ assert(vim.api.nvim_get_current_buf() == source)
 **Files:** create `lua/ai/chat.lua`, `tests/ai_chat.lua`; modify `lua/ai/init.lua`, `tests/draft_setup.lua`, `tests/ai_runtime.lua`.
 **Interfaces:** `chat.new({create,configuration,width?})`; coordinator methods from the spec. Runtime supplies `create = function(config) return runtime:conversation(config) end` and `configuration = staged.conversation_options`. All production construction uses the runtime lease and real factory.
 
-- [ ] Add a failing real-owner/driver fixture test for two explicit submissions, preserved draft on preflight refusal, passive reopen, hidden output and explicit close. Test double only the ACP/controller transport below owner semantics; Task 5 proves the real production path.
+- [x] Add a failing real-owner/driver fixture test for two explicit submissions, preserved draft on preflight refusal, passive reopen, hidden output and explicit close. Test double only the ACP/controller transport below owner semantics; Task 5 proves the real production path.
 
 ```lua
 assert(chat:open({ source_path }))
@@ -99,11 +99,11 @@ assert(chat:send())
 
 `set_composer` edits the real composer buffer; the fixture records actual owner commands and emits complete matching semantic events.
 
-- [ ] Run `ai_chat`; expect missing coordinator. Implement copied fixed scope, one owner/view, show-only subscriptions, action dispatch using current view revisions, and closed-state retention with explicit New.
-- [ ] Add failing callback-race cases: delayed Close/Cancel review confirmation after an edited draft or owner/view change; repeated submission during generation; unavailable retry; new-owner failure must retain closed transcript/draft. Implement identity/revision/tick fences and state-derived action menus.
-- [ ] Register the nine explicit `NvimAIChat*` commands and optional `<leader>at`. Extend public setup tests: commands register passively, default mappings unchanged, no helper process or preference file at setup.
-- [ ] Verify runtime exclusions while chat is hidden/idle and release only after confirmed close. Shutdown refuses an unclosed conversation and disposes closed view state on success.
-- [ ] Run `ai_chat ai_chat_view ai_runtime draft_setup ai_conversation ai_conversation_review`; expect all pass. Commit `feat: wire explicit conversation commands and lifecycle controls`.
+- [x] Run `ai_chat`; expect missing coordinator. Implement copied fixed scope, one owner/view, show-only subscriptions, action dispatch using current view revisions, and closed-state retention with explicit New.
+- [x] Add failing callback-race cases: delayed Close/Cancel review confirmation after an edited draft or owner/view change; repeated submission during generation; unavailable retry; new-owner failure must retain closed transcript/draft. Implement identity/revision/tick fences and state-derived action menus.
+- [x] Register the eight explicit `NvimAIChat*` commands and optional `<leader>at`. Extend public setup tests: commands register passively, default mappings unchanged, no helper process or preference file at setup.
+- [x] Verify runtime exclusions while chat is hidden/idle and release only after confirmed close. Shutdown refuses an unclosed conversation and disposes closed view state on success.
+- [x] Run `ai_chat ai_chat_view ai_runtime draft_setup ai_conversation ai_conversation_review`; expect all pass. Commit `feat: wire explicit conversation commands and lifecycle controls`.
 
 ## Task 4: Defer frozen review display until explicit navigation
 
@@ -134,7 +134,7 @@ assert(frozen_view:show("example.txt"))
 - [ ] Build a disposable fixture that configures the actual public runtime and uses real `NvimAIChat`/Send/Hide/Cancel/Close commands. Assert two provider prompts only after two explicit submissions, same eligible session, unchanged source bytes, passive hide/reopen, and controller cleanup after close. Observe actual buffers and private process audit, not command-text presence.
 - [ ] Exercise streamed text/progress and question-only settlement, cancelled generation, deferred edit preview and return, failed source capture with draft retained, hidden lease exclusion and editor exit. Extend relocation to run this flow from a plugin path with spaces and an unrelated cwd.
 - [ ] Capture actual wide and narrow Neovim TUI screens using a private tmux server and synthetic owner/fixture data; no live editor or default tmux server. Inspect rendered artifacts and include them in the PR.
-- [ ] Document setup, the nine commands, buffer-local controls, hide versus close, fixed selection, deferred preview scope, narrow fallback, display omission and a concise keyboard walkthrough. Resolve the previously deferred obsolete owner integration comment while documenting this real consumer.
+- [ ] Document setup, the eight commands, buffer-local controls, hide versus close, fixed selection, deferred preview scope, narrow fallback, display omission and a concise keyboard walkthrough. Resolve the previously deferred obsolete owner integration comment while documenting this real consumer.
 - [ ] Run `python3 -I -B tests/run.py`; expect every discovered default suite to pass with installed-provider skips. Run touched-Lua `stylua --check` and `git diff --check`. Record counts and limitations. Existing same-tree baseline is main CI `35472738528` (52/52), not a need to replay unchanged tests before work.
 - [ ] Commit `docs: record conversation UI validation`. Obtain one fresh-context whole-branch review under the established native execution workflow. Fix material findings with regression tests, push, verify exact-head CI, merge and wait for main CI.
 - [ ] Update ISQ-234 with concrete PR/screenshots/validation and mark Done only after integration. Keep the Usable conversational editing milestone open for ISQ-235/236/237.

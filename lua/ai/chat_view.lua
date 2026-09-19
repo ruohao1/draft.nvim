@@ -136,6 +136,9 @@ function M.new(options)
     local saved = win and vim.api.nvim_win_call(win, vim.fn.winsaveview)
     local follow = not saved or saved.lnum >= count
     local text = projection(latest, message)
+    if owned("input") then
+      vim.bo[buffers.input].modifiable = latest.phase ~= "closed"
+    end
     vim.bo[buf].modifiable = true
     local ok, reason = pcall(vim.api.nvim_buf_set_lines, buf, 0, -1, false, text)
     vim.bo[buf].modifiable = false
@@ -390,13 +393,14 @@ function M.new(options)
 
   function view:draft()
     if not owned("input") then
-      return ""
+      return "", nil, "absent"
     end
     local buf = buffers.input
+    local stamp = buf .. ":" .. vim.api.nvim_buf_get_changedtick(buf)
     if vim.api.nvim_buf_get_offset(buf, vim.api.nvim_buf_line_count(buf)) - 1 > MAX_DRAFT then
-      return nil, "Draft exceeds 32 KiB; shorten it before sending"
+      return nil, "Draft exceeds 32 KiB; shorten it before sending", stamp
     end
-    return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+    return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"), nil, stamp
   end
 
   function view:set_draft(value)
