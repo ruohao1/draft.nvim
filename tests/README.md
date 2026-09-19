@@ -49,6 +49,8 @@ to commits. Git, Bubblewrap, tmux, ripgrep and ACL tools come from Ubuntu's
 configured package repositories; their versions are printed in each run.
 
 CI uses `/usr/bin/python3` consistently with the nested confinement fixtures.
+The job loads an AppArmor user-namespace profile attached to `/usr/bin/bwrap`
+on the disposable runner; Ubuntu's global namespace restriction remains enabled.
 It checks user, PID and network namespace creation before running the suite.
 All confinement tests remain enabled, and installed-OpenCode probes remain
 explicit opt-ins. Test logs are uploaded as `linux-test-logs` for seven days,

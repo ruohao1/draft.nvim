@@ -29,7 +29,20 @@ jobs:
       - name: Install Linux test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends acl bubblewrap git python3 ripgrep tmux
+          sudo apt-get install --yes --no-install-recommends acl apparmor bubblewrap git python3 ripgrep tmux
+
+      - name: Allow Bubblewrap namespaces on the disposable runner
+        run: |
+          # Ubuntu restricts unprivileged user namespaces unless an executable
+          # has an AppArmor profile allowing them. Keep the global restriction.
+          sudo tee /etc/apparmor.d/draft-ci-bwrap > /dev/null <<'PROFILE'
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile draft-ci-bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          PROFILE
+          sudo apparmor_parser --replace /etc/apparmor.d/draft-ci-bwrap
 
       - name: Install Neovim 0.12.4
         run: |
