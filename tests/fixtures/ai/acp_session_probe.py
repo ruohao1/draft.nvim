@@ -48,6 +48,14 @@ class Provider:
                     self.send_error(400, "Unexpected fixture request")
                     return
                 reply = owner.replies.pop(0)
+                if 'error' in reply:
+                    payload = json.dumps({'error': reply['error']}).encode()
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Content-Length', str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()

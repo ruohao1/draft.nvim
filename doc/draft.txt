@@ -167,8 +167,12 @@ Crash recovery and retention management remain incomplete. Only inspect/remove
 an exact artifact path identified by status when no owned worker can still use
 it. Do not sweep temporary-directory families.
 
-Persistent conversations, their production controller, and chat UI are unfinished.
-There is no NvimAIChat command. Linux fixtures are not cross-provider live-account
-acceptance. See tests/README.md in the repository for verification commands.
+An internal conversation controller retains OpenCode context across explicit
+turns, using fresh isolated workers and the existing guarded review publisher.
+The chat UI remains unfinished; there is no NvimAIChat command. Ordinary staged
+follow-ups still use fresh generations. Linux fixtures and pinned OpenCode with
+a local scripted provider are separate from cross-provider live-account
+acceptance. See tests/README.md for verification commands and the repository's
+docs/validation/2026-09-19-conversation-controller.md for controller evidence.
 
  vim:tw=80:ts=8:noet:ft=help:norl:

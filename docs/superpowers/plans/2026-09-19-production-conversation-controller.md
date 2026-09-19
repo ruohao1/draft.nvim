@@ -59,7 +59,7 @@ date is implied by this technical sequence.
 
 | File | Responsibility |
 | --- | --- |
-| Existing `lua/ai/conversation.lua` | Actions, phases, identities, transcript and receipt-facing state; add bounded progress only |
+| Existing `lua/ai/conversation.lua` | Actions, phases, identities, transcript and receipt-facing state; bounded progress and trusted source-refresh evidence |
 | Existing `lua/ai/conversation_driver.lua` | Framing, process lifetime and command serials; use explicit production watchdogs |
 | New `lua/ai/conversation_controller.lua` | Trusted passive factory and adapter around owner/pipe/source/review guards |
 | New `lua/ai/staged_sources.lua` | Shared saved-buffer capture, aliases and changed-tick guards extracted from staged.lua |
@@ -288,8 +288,8 @@ publication must not use `vim.wait` to process input between its final guard and
 **Files:** create opt-in interop suite; reuse `acp_session_probe.py` Provider only; update `tests/README.md`, `README.md`, `doc/draft.txt` and validation record from Task 1.
 **Produces:** evidence for the actual controller path, reviewed changes, passing post-merge CI; no broader chat-release claim.
 
-- [ ] Run the production controller with actual OpenCode 1.18.30 and the scripted loopback provider. Use synthetic credentials and fresh disposable HOME/XDG. Capture the second provider request and assert it includes the prior distinctive assistant/native-tool context even though the submitted second prompt contains no replay. Record fresh worker PIDs, exact session ID reuse, profile replacement and absence of project writes.
-- [ ] Add pinned-runtime cases for clean cancellation/resume, configuration reapplication, session restoration error, context-overflow response, disabled implicit compaction/pruning, listener exit and retained-artifact boundaries. Default execution skips these explicitly. Keep fake-peer safety tests in ordinary CI; a fake session ID alone never counts as interoperability proof.
+- [x] Run the production controller with actual OpenCode 1.18.30 and the scripted loopback provider. Use synthetic credentials and fresh disposable HOME/XDG. Capture the second provider request and assert it includes the prior distinctive assistant/native-tool context even though the submitted second prompt contains no replay. Record fresh worker PIDs, exact session ID reuse, profile replacement and absence of project writes.
+- [x] Add pinned-runtime cases for clean cancellation/resume, configuration reapplication, session restoration error, context-overflow response, disabled implicit compaction/pruning, listener exit and retained-artifact boundaries. Default execution skips these explicitly. Keep fake-peer safety tests in ordinary CI; a fake session ID alone never counts as interoperability proof.
 
 ```python
 def test_real_backend_preserves_context_without_prompt_replay(self):
@@ -300,8 +300,8 @@ def test_real_backend_preserves_context_without_prompt_replay(self):
     self.assertTrue(observed["all_owned_listeners_stopped"])
 ```
 
-- [ ] Document an exact isolated opt-in invocation for `tests/nvim_ai_conversation_interop.py` using `NVIM_AI_ACP_REAL_OPENCODE`. Preserve tests/run.py's default environment allowlist; do not forward user credentials or installed-runtime opt-ins by default. Test fixtures only record synthetic request bodies; application diagnostics remain content-free.
-- [ ] Run `python3 -I -B tests/run.py`; expect all discovered old and new suites to pass. Run `stylua --check` on touched Lua files and `git diff --check`. Record actual counts, expected skips, executable hash/versions and the limitation that user-facing chat is still a sibling issue.
+- [x] Document an exact isolated opt-in invocation for `tests/nvim_ai_conversation_interop.py` using `NVIM_AI_ACP_REAL_OPENCODE`. Preserve tests/run.py's default environment allowlist; do not forward user credentials or installed-runtime opt-ins by default. Test fixtures only record synthetic request bodies; application diagnostics remain content-free.
+- [x] Run `python3 -I -B tests/run.py`; expect all discovered old and new suites to pass. Run `stylua --check` on touched Lua files and `git diff --check`. Record actual counts, expected skips, executable hash/versions and the limitation that user-facing chat is still a sibling issue.
 - [ ] Obtain whole-branch review of process lifetime, identity/schema checks, selection/approval authority and compatibility. Fix material findings, then push and check CI on the exact reviewed head. Merge only that head and wait for the new main run to pass before completing ISQ-233 or the milestone.
 - [ ] Update Linear with PRs, main run and pinned-runtime evidence. ISQ-232 closes only its reviewed contract; ISQ-233 closes the integrated engine. Leave ISQ-234–237/252 open for their own acceptance. Commit validation/docs as `docs: record production controller validation`.
 

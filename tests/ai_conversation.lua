@@ -57,16 +57,13 @@ scenario("bounded progress is display-only and unknown fields fail closed", func
     owner:snapshot().turns[1].progress,
     { tool_id = "read-1", title = "Read file", status = "completed" }
   )
-  driver:emit(
-    1,
-    {
-      kind = "progress",
-      tool_id = "read-1",
-      title = "Read file",
-      status = "completed",
-      path = "secret",
-    }
-  )
+  driver:emit(1, {
+    kind = "progress",
+    tool_id = "read-1",
+    title = "Read file",
+    status = "completed",
+    path = "secret",
+  })
   eq(owner:snapshot().recovery_required, true)
 end)
 
