@@ -2,6 +2,7 @@
 """Scripted ACP process running inside the production Bubblewrap boundary."""
 import json
 import hashlib
+import fcntl
 import os
 from pathlib import Path
 import socket
@@ -117,10 +118,13 @@ for raw in sys.stdin:
             assert not sys.stdin.read()
             break
         if case == 'both-blocked':
+            # A second denial reply blocks within the same poll as the text
+            # notification, before its 64-message/time slice can return.
+            fcntl.fcntl(sys.stdin, fcntl.F_SETPIPE_SZ, 4096)
             audit({'ready': case})
             send({'method': 'session/update', 'params': {'sessionId': session, 'update': {
-                'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'x' * (1024 * 1024)}}}})
-            for index in range(10000):
+                'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'x' * 8192}}}})
+            for index in range(2):
                 send({'id': 'no-read-' + str(index), 'method': 'fs/read_text_file', 'params': {'sessionId': session}})
             while True:
                 time.sleep(1)

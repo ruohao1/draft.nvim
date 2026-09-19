@@ -66,8 +66,14 @@ class Controller:
 
     def write_wait(self):
         self.collect()
-        self.pipe.check_deadline()
-        return self.pipe.eof or any(frame["command"]["kind"] in ("cancel", "close") for frame in self.inbox)
+        if self.pipe.eof or any(frame["command"]["kind"] in ("cancel", "close") for frame in self.inbox):
+            return True
+        # A notification can precede a blocked client reply in the same poll.
+        # Start its delivery deadline and service output before waiting again.
+        for event in self.turn.drain_events():
+            self.emit(event)
+        self.pipe.flush_ready()
+        return False
 
     def failed(self):
         events = self.turn.fail()

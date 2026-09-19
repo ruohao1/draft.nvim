@@ -37,6 +37,10 @@ class Turn:
     def emit(self, kind, **fields):
         self.events.append(dict(kind=kind, **fields))
 
+    def drain_events(self):
+        events, self.events = self.events, []
+        return events
+
     def start(self, command, *, selected=None, context=None):
         self.command = command
         if command['model'].split('/', 1)[0] != self.config['model'].split('/', 1)[0]:
@@ -204,8 +208,7 @@ class Turn:
                     self.emit('cancelled', stopped=True, graceful=True, store_valid=True,
                               tokens_retired=True, cancel_confirmed=True)
                     self.done = True
-                    events, self.events = self.events, []
-                    return events
+                    return self.drain_events()
                 self.emit('stopping')
                 if result.get('stopReason') != 'end_turn':
                     raise protocol.Refused('ACP turn did not finish normally')
@@ -228,8 +231,7 @@ class Turn:
                     self.task = None
                     self.emit('settled', outcome='answer', stopped=True, graceful=True, store_valid=True, tokens_retired=True)
                 self.done = True
-        events, self.events = self.events, []
-        return events
+        return self.drain_events()
 
     def cancel(self):
         self.cancelling = True
@@ -284,5 +286,4 @@ class Turn:
                       store_valid=self.store_valid, tokens_retired=retired,
                       submission='submitted' if self.submitted else 'not_submitted')
         self.done = True
-        events, self.events = self.events, []
-        return events
+        return self.drain_events()
