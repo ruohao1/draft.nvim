@@ -87,6 +87,35 @@ class DecisionTest(unittest.TestCase):
         self.assertTrue((self.task / "decision-0-applied-0.json").is_file())
         self.assertEqual(self.decide("cancel", index=None)["phase"], "applied")
 
+    def test_read_receipt_derives_cumulative_outcomes_without_replaying_a_write(self):
+        self.decide()
+        expected = self.decide("reject", index=1)
+        names = set(self.task.iterdir())
+        receipt = decisions.read_receipt(str(self.task / "proposal.json"), self.proposal["id"])
+        self.assertEqual(receipt["sequence"], 2)
+        self.assertEqual(receipt["phase"], "applied")
+        self.assertEqual(receipt["decisions"], expected["decisions"])
+        self.assertEqual(receipt["cleanup_pending"], [])
+        self.assertEqual(set(self.task.iterdir()), names)
+        self.assertEqual(self.files[0].read_bytes(), self.after[0])
+        self.assertEqual(self.files[1].read_bytes(), self.before[1])
+
+    def test_read_review_checks_frozen_material_and_token_under_the_same_lock(self):
+        frozen = decisions.read_review(str(self.task / "proposal.json"), self.proposal["id"])
+        self.assertEqual(frozen["files"][0]["newText"], self.after[0].decode())
+        self.assertEqual(frozen["root"], str(self.root))
+        with self.assertRaises(ValueError):
+            decisions.read_review(str(self.task / "proposal.json"), "wrong")
+        self.private("after-1", b"tampered proposal\n")
+        with self.assertRaises(ValueError):
+            decisions.read_review(str(self.task / "proposal.json"), self.proposal["id"])
+
+    def test_receipt_reader_refuses_torn_or_contradictory_journals(self):
+        self.decide()
+        self.private("decision-1.json", b'{"schema":')
+        with self.assertRaises(ValueError):
+            decisions.read_receipt(str(self.task / "proposal.json"), self.proposal["id"])
+
     def test_cancel_pending_keeps_accepted_and_evidence(self):
         self.decide()
         result = controller.decide(str(self.task / "proposal.json"), self.proposal["id"], "cancel")
@@ -198,6 +227,21 @@ class DecisionTest(unittest.TestCase):
         self.assert_states(result, ["accepted", "uncertain", "unchanged"])
         self.assertEqual(self.decide(index=1)["applied"], self.paths[:1])
         self.assertEqual(self.files[1].read_bytes(), self.before[1])
+
+    def test_reader_preserves_uncertainty_confirmed_prefix_and_cleanup_candidates(self):
+        rename = os.rename
+        def fail(source, destination, **kwargs):
+            if destination == b"second.txt":
+                raise OSError("injected rename failure")
+            return rename(source, destination, **kwargs)
+        with patch.object(decisions.publisher.os, "rename", side_effect=fail), patch.object(
+                decisions.publisher, "_cleanup", return_value=self.paths[1:2]):
+            expected = self.decide(index=None, remaining=True)
+        receipt = decisions.read_receipt(str(self.task / "proposal.json"), self.proposal["id"])
+        self.assertEqual(receipt["phase"], "uncertain")
+        self.assertEqual(receipt["decisions"], expected["decisions"])
+        self.assertEqual(receipt["cleanup_pending"], self.paths[1:2])
+        self.assertEqual(receipt["decisions"][0]["state"], "accepted")
 
     def test_final_receipt_failure_halts_remaining_preserving_acceptance(self):
         receipt = decisions.publisher._receipt

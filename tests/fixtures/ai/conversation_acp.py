@@ -91,6 +91,22 @@ for raw in sys.stdin:
                 time.sleep(1)
     elif method == 'session/prompt':
         assert message['params']['sessionId'] == session
+        if case in ('edit', 'held-edit'):
+            text = message['params']['prompt'][-1]['text']
+            paths = sorted(path for path in Path('/tmp/project').rglob('*') if path.is_file())
+            audit({'editable_paths': [str(path.relative_to('/tmp/project')) for path in paths]})
+            if 'Discuss' not in text:
+                for path in paths:
+                    after = ('original text\n' if 'Revert' in text else
+                             'revised edit\n' if 'proposed edit' in path.read_text() else 'proposed edit\n')
+                    send({'id': 'edit-' + path.name, 'method': 'session/request_permission', 'params': {
+                        'sessionId': session, 'toolCall': {'kind': 'edit', 'content': [
+                            {'type': 'diff', 'path': str(path), 'oldText': path.read_text(), 'newText': after}]},
+                        'options': [{'kind': 'allow_once', 'optionId': 'once'}]}})
+                    assert json.loads(next(sys.stdin))['result']['outcome']['optionId'] == 'once'
+                    path.write_text(after)
+            if 'extra-file' in text:
+                Path('/tmp/project/not-selected.txt').write_text('unreviewed\n')
         if case == 'held-answer':
             audit({'ready': case}, wait=True)
         if case == 'output-blocked':
@@ -100,6 +116,14 @@ for raw in sys.stdin:
                     'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'x' * (1024 * 1024)}}}})
             assert not sys.stdin.read()
             break
+        if case == 'both-blocked':
+            audit({'ready': case})
+            send({'method': 'session/update', 'params': {'sessionId': session, 'update': {
+                'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'x' * (1024 * 1024)}}}})
+            for index in range(10000):
+                send({'id': 'no-read-' + str(index), 'method': 'fs/read_text_file', 'params': {'sessionId': session}})
+            while True:
+                time.sleep(1)
         if case == 'descendant':
             if os.fork() == 0:
                 os.setsid()
@@ -132,6 +156,6 @@ for raw in sys.stdin:
             send({'method': 'session/update', 'params': {
                 'sessionId': 'wrong-session' if case == 'wrong-session' else session, 'update': update}})
         answer(identifier, {'stopReason': 'refusal' if case == 'bad-stop' else 'end_turn'})
-if case == 'slow-exit':
-    audit({'ready': 'slow-exit'}, wait=True)
+if case in ('slow-exit', 'held-edit'):
+    audit({'ready': case}, wait=True)
 audit({'exiting': True})

@@ -189,6 +189,67 @@ def _lock_proposal(manifest):
         raise
 
 
+def _read_snapshot(manifest, token, *, material, locked=None):
+    """One lock and the writer's parser are authoritative for every reader."""
+    task, lock = _lock_proposal(manifest) if locked is None else (Path(manifest).parent, locked)
+    try:
+        proposal = _read(task, "proposal.json")
+        files = publisher._validate(proposal)
+        if proposal["id"] != token:
+            raise ValueError("Proposal token mismatch")
+        states = ["unchanged" if entry["expected"] == entry["desired"] else "pending" for entry in files]
+        states, current, number, previous, cleanup = _load(task, proposal, states, copy.deepcopy(files), [])
+        marker = _read(task, "consumed.json")
+        if ((number == 0 and marker is not None)
+                or (number > 0 and marker != {"choice": "incremental", "id": token})
+                or os.path.lexists(task / "publication.json") or os.path.lexists(task / "halted.json")
+                or len(set(cleanup)) != len(cleanup)):
+            raise ValueError("Incomplete or incompatible decision evidence")
+        frozen = []
+        for index, entry in enumerate(files):
+            before, after = publisher._frozen(task, index, entry)
+            if material:
+                frozen.append({"path": entry["path"], "oldText": before.decode("utf-8"),
+                               "newText": after.decode("utf-8")})
+        lock.verify()
+        if material:
+            publisher.check_approval_active(lock)
+            return {"phase": "review_ready", "proposal": manifest, "id": token,
+                    "root": proposal["root"], "files": frozen,
+                    "decisions": _reply(files, states)["decisions"]}
+        last = _read(task, _name(number - 1)) if number else None
+        intent = {"choice": last["choice"], "paths": [files[index]["path"] for index in last["targets"]]} if last else None
+        return dict(_reply(files, states, previous, cleanup=cleanup), sequence=number,
+                    id=token, root=proposal["root"], intent=intent)
+    finally:
+        if locked is None:
+            lock.close()
+
+
+def read_receipt(manifest, token):
+    """Read complete cumulative writer evidence; never replay a decision."""
+    return _read_snapshot(manifest, token, material=False)
+
+
+def read_review(manifest, token):
+    """Inspect bounded immutable material under the proposal lock."""
+    return _read_snapshot(manifest, token, material=True)
+
+
+def retire_review(manifest, token):
+    """Retire pending authority through the existing journal; never publish."""
+    task, lock = _lock_proposal(manifest)
+    try:
+        proposal = _read(task, "proposal.json")
+        publisher._validate(proposal)
+        if proposal["id"] != token:
+            raise ValueError("Proposal token mismatch")
+        decide(task, proposal, "cancel", None, False, None, locked_parent=lock)
+        return _read_snapshot(manifest, token, material=False, locked=lock)
+    finally:
+        lock.close()
+
+
 class PendingReview:
     """Locked, read-only eligibility/data until explicit candidate retirement.
 
@@ -314,6 +375,15 @@ class PendingReview:
                 lock.close()
             except OSError:
                 pass  # Read-only lock teardown cannot replace a recorded verdict.
+
+    def cancel(self):
+        """Retire under this already-held proposal lock, without a second fd."""
+        if self._lock is None:
+            raise ValueError("Pending review ownership is closed")
+        self._lock.verify()
+        self._retiring = True
+        decide(self._task, self._proposal, "cancel", None, False, None, locked_parent=self._lock)
+        return _read_snapshot(self._manifest, self._proposal["id"], material=False, locked=self._lock)
 
 
 def _approve(task, task_parent, proposal, current, states, targets, number, snapshot):

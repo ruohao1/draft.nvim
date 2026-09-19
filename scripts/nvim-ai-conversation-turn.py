@@ -1,5 +1,6 @@
 """Pinned ACP turn in a fresh selected-file workspace; never publishes files."""
 import importlib.util
+import json
 from pathlib import Path
 import secrets
 import socket
@@ -36,13 +37,14 @@ class Turn:
     def emit(self, kind, **fields):
         self.events.append(dict(kind=kind, **fields))
 
-    def start(self, command):
+    def start(self, command, *, selected=None, context=None):
         self.command = command
         if command['model'].split('/', 1)[0] != self.config['model'].split('/', 1)[0]:
             raise protocol.Refused('Configured provider cannot change')
         request = dict(self.config, root=command['root'], files=command['sources'], model=command['model'])
-        self.selected, _ = staging.selected_files(request)
-        self.editable = [staging.PROJECT + '/' + item['path'] for item in self.selected]
+        self.selected = selected if selected is not None else staging.selected_files(request)[0]
+        self.context = context
+        self.editable = [staging.PROJECT + '/' + item['path'] for item in self.selected if not item.get('context_only')]
         self.task = staging.prepare_workspace(request, self.selected)
         agent = self.task / 'agent'
         for name in ('home', 'config', 'data', 'cache', 'state'):
@@ -183,9 +185,13 @@ class Turn:
                     self.begin('session/set_config_option', {'sessionId': self.session, 'configId': 'mode', 'value': 'build'})
                 else:
                     self.submitted = True  # Once prompt writing begins, failure cannot authorize replay.
-                    self.begin('session/prompt', {'sessionId': self.session, 'prompt': [{'type': 'text', 'text':
-                        'Only selected paths in /tmp/project are available. Do not create, delete, rename, or change modes. '
-                        'Shell tools are disabled.\n\n' + self.command['message']}]})
+                    prompt = [{'type': 'text', 'text': 'Only selected editable paths in /tmp/project are available. '
+                               'Do not create, delete, rename, or change modes. Shell tools are disabled.'}]
+                    if self.context:
+                        prompt.append({'type': 'text', 'text': 'Editor-confirmed file decisions (rejected proposals are not saved):\n'
+                                       + json.dumps(self.context, ensure_ascii=True)})
+                    prompt.append({'type': 'text', 'text': self.command['message']})
+                    self.begin('session/prompt', {'sessionId': self.session, 'prompt': prompt})
                     self.emit('submitted', model=self.command['model'], models=self.models)
             elif self.stage == 'session/prompt':
                 if self.cancelling:
@@ -207,13 +213,20 @@ class Turn:
                 self.stopped = self.graceful = self.store_valid = True
                 if self.on_write_wait is not None and self.on_write_wait():
                     raise protocol.Refused('Editor ownership changed before workspace freeze')
-                self.frozen = staging.freeze_workspace(self.task, self.command['root'], self.selected, multi=True)
+                for item in self.selected:
+                    data, mode, identity = staging.snapshot(self.command['root'], item['path'])
+                    if identity != item['identity'] or staging.fingerprint(data, mode) != item['expected']:
+                        raise protocol.Refused('Saved source changed during generation')
+                self.frozen = staging.freeze_workspace(self.task, self.command['root'], self.selected,
+                                                        multi=True, force_review=self.command['kind'] == 'revise')
+                if self.on_write_wait is not None and self.on_write_wait():
+                    raise protocol.Refused('Editor ownership changed before proposal exposure')
                 if self.frozen['phase'] != 'unchanged':
-                    # Review registration is added by the controller's review boundary.
-                    raise protocol.Refused('Frozen review registration is not available')
-                staging.discard_workspace(self.task)
-                self.task = None
-                self.emit('settled', outcome='answer', stopped=True, graceful=True, store_valid=True, tokens_retired=True)
+                    self.emit('settled', outcome='review', stopped=True, graceful=True, store_valid=True)
+                else:
+                    staging.discard_workspace(self.task)
+                    self.task = None
+                    self.emit('settled', outcome='answer', stopped=True, graceful=True, store_valid=True, tokens_retired=True)
                 self.done = True
         events, self.events = self.events, []
         return events
@@ -233,7 +246,7 @@ class Turn:
         self.events = []
         if not self.cancelling:
             self.emit('stopping')
-        if self.worker is not None:
+        if self.worker is not None and not self.stopped:
             try:
                 self.store.stop(outcome='failed')
             except Exception:
@@ -242,17 +255,23 @@ class Turn:
             self.stopped = result.reaped and result.output_closed
             self.graceful = result.settled
             self.store_valid = False
-        else:
+        elif self.worker is None:
             self.stopped = self.graceful = True
             try:
                 self.store.check()
                 self.store_valid = True
             except Exception:
                 self.store_valid = False
+        elif self.store_valid:
+            try:
+                self.store.check()
+            except Exception:
+                self.store_valid = False
         retired = self.task is None
         if self.stopped and self.task is not None:
             try:
-                staging.discard_workspace(self.task)
+                if self.task.exists():
+                    staging.discard_workspace(self.task)
                 self.task = None
                 retired = True
             except OSError:

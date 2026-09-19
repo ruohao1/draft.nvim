@@ -22,6 +22,13 @@ class Refused(RuntimeError):
     """Trusted, content-free protocol diagnostic."""
 
 
+class Frame(dict):
+    """Closed envelope plus trusted wire accounting, excluded from JSON keys."""
+    def __init__(self, value, wire_bytes):
+        super().__init__(value)
+        self.wire_bytes = wire_bytes
+
+
 def integer(value, minimum=0):
     return type(value) is int and minimum <= value <= MAX_INTEGER
 
@@ -180,7 +187,7 @@ def decode_command(raw):
             or not integer(value["serial"], 1)):
         raise Refused("Invalid editor envelope")
     validate_command(value["command"])
-    return value
+    return Frame(value, len(raw) + 1)
 
 
 class Binding:
@@ -269,13 +276,16 @@ class EditorPipe:
         self.queue.append([data, 0, time.monotonic() + 5])
         self.queued += len(data)
 
+    def check_deadline(self):
+        if self.queue and time.monotonic() >= self.queue[0][2]:
+            raise Refused("Editor output delivery deadline exceeded")
+
     def flush_ready(self):
         for _ in range(64):
             if not self.queue:
                 return
-            data, offset, deadline = self.queue[0]
-            if time.monotonic() >= deadline:
-                raise Refused("Editor output delivery deadline exceeded")
+            self.check_deadline()
+            data, offset, _deadline = self.queue[0]
             try:
                 size = os.write(self.output, memoryview(data)[offset:offset + 65536])
             except BlockingIOError:

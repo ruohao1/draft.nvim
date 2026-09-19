@@ -561,7 +561,7 @@ def legacy_decide(task, proposal, token, choice, locked_parent):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("prepare", "refine", "approve", "reject", "cancel"))
+    parser.add_argument("operation", choices=("prepare", "refine", "approve", "reject", "cancel", "inspect-review"))
     parser.add_argument("--proposal")
     parser.add_argument("--id")
     selector = parser.add_mutually_exclusive_group()
@@ -584,6 +584,10 @@ def main():
                 result = (prepare(request, editor) if args.operation == "prepare" else
                           helper("nvim-ai-staged-refine").refine(
                               sys.modules[__name__], request, editor, args.proposal, args.id))
+        elif args.operation == "inspect-review":
+            if args.path is not None or args.remaining:
+                raise Refused("Review inspection takes no decision selectors")
+            result = helper("nvim-ai-staged-decisions").read_review(args.proposal, args.id)
         else:
             result = decide(args.proposal, args.id, args.operation, args.path, args.remaining)
     except Refused as error:
