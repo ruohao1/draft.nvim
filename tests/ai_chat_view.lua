@@ -109,6 +109,19 @@ local ok, reason = xpcall(function()
   assert(vim.api.nvim_get_current_tabpage() == original_tab)
   print("ok - tail followers advance and background tabs retain focus")
 
+  for index = 1, 6 do
+    state.turns[1].text = string.rep("rendered text ", 4096) .. "render number " .. index
+    view:update(state)
+    wait_text("render number " .. index)
+  end
+  local history = vim.api.nvim_buf_call(output, vim.fn.undotree)
+  assert(#history.entries == 0, "transcript undo retained previous render projections")
+  assert(
+    #vim.api.nvim_buf_call(input, vim.fn.undotree).entries > 0,
+    "composer must retain normal undo"
+  )
+  print("ok - scheduled transcript renders retain no hidden undo history; composer undo survives")
+
   state.turns[1].text = "discarded render"
   view:update(state)
   assert(view:hide())

@@ -205,6 +205,10 @@ function M.new(options)
       return buffers[kind]
     end
     local buf = vim.api.nvim_create_buf(false, true)
+    if kind == "output" then
+      -- Render projections are disposable; undo would retain every old copy.
+      vim.bo[buf].undolevels = -1
+    end
     buffers[kind] = buf
     names[kind] = "draft://chat/" .. id .. "/" .. kind .. "/" .. buf
     vim.api.nvim_buf_set_name(buf, names[kind])
