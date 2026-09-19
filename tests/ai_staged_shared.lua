@@ -10,6 +10,29 @@ for _, path in ipairs(files) do
 end
 local handle
 local ok, reason = xpcall(function()
+  local staged = require("ai.staged")
+  staged.setup({
+    enabled = true,
+    review_mode = "pre_write",
+    model = "fixture/model",
+    opencode = "/usr/bin/true",
+    root = root,
+    provider = { fixture = {} },
+  })
+  local config = assert(staged.conversation_options())
+  config.provider.fixture.changed = true
+  assert(not staged.conversation_options().provider.fixture.changed)
+  config = assert(staged.conversation_options())
+  config.selection = { "first.txt" }
+  local owner = assert(require("ai.conversation_controller").new(config))
+  assert(owner:snapshot().phase == "idle")
+  assert(owner:dispatch({ kind = "close" }, owner:snapshot().view_revision))
+  assert(vim.wait(3000, function()
+    return owner:snapshot().phase == "closed"
+  end, 10))
+  staged.setup({ enabled = false, review_mode = "native" })
+  assert(not staged.conversation_options())
+
   local captured = assert(sources.capture(files, root))
   assert(sources.unchanged(captured))
   local frozen = {

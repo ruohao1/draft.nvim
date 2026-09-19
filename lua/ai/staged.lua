@@ -276,6 +276,22 @@ function M.review_mode()
   return mode, nil, policy_revision
 end
 
+-- Explicit chat opening reuses opt-in preferences without starting a staged turn.
+function M.conversation_options()
+  local config, why = configured()
+  if not config then
+    return nil, why
+  end
+  if config.enabled ~= true or type(config.model) ~= "string" or config.model == "" then
+    return nil, "Run :NvimAIStageSetup to enable OpenCode and choose a provider/model first"
+  end
+  local result = {}
+  for _, key in ipairs({ "root", "model", "auth_file", "provider", "python", "opencode", "bwrap" }) do
+    result[key] = vim.deepcopy(config[key])
+  end
+  return result
+end
+
 function M.busy()
   return dialog ~= nil or (current ~= nil and live[current.phase] == true)
 end

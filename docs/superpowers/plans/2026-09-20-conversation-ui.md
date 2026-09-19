@@ -37,7 +37,7 @@
 **Files:** modify `lua/ai/staged.lua`; extend `tests/ai_staged_shared.lua` and `tests/draft_setup.lua` as applicable.
 **Interfaces:** produce `staged.conversation_options() -> options|nil,reason`, containing only root/model/auth_file/provider/python/opencode/bwrap; consumes existing `configured()` preference merging. It does not call `ready()` or acquire a lease.
 
-- [ ] Add a failing consumer test that explicit staging configuration reaches conversation creation unchanged, and disabled/invalid configuration refuses with no controller/provider launch. Mutating the returned provider table must not mutate saved runtime options.
+- [x] Add a failing consumer test that explicit staging configuration reaches conversation creation unchanged, and disabled/invalid configuration refuses with no controller/provider launch. Mutating the returned provider table must not mutate saved runtime options.
 
 ```lua
 staged.setup({ enabled = true, model = "fixture/model", provider = { fixture = {} } })
@@ -48,9 +48,9 @@ staged.setup({ enabled = false })
 assert(not staged.conversation_options())
 ```
 
-- [ ] Run `python3 -I -B tests/run.py ai_staged_shared`; expect missing-reader failure.
-- [ ] Implement the narrow copied read boundary with existing `configured()` behavior and setup guidance. Never return enable/review-mode/settings-directory fields to the closed factory schema.
-- [ ] Run `ai_staged_shared ai_staged draft_setup`; expect all pass. Commit `feat: share effective configuration with conversation UI`.
+- [x] Run `python3 -I -B tests/run.py ai_staged_shared`; expect missing-reader failure.
+- [x] Implement the narrow copied read boundary with existing `configured()` behavior and setup guidance. Never return enable/review-mode/settings-directory fields to the closed factory schema.
+- [x] Run `ai_staged_shared ai_staged draft_setup`; expect all pass. Commit `feat: share effective configuration with conversation UI`.
 
 ## Task 2: Render and manage a bounded passive split view
 
