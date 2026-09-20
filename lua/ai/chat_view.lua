@@ -436,6 +436,7 @@ function M.new(options)
   function view:notice(reason)
     message = reason and prefix(tostring(reason), 1000) or nil
     schedule()
+    return visible and window("output") ~= nil and tab == vim.api.nvim_get_current_tabpage()
   end
 
   function view:dispose()

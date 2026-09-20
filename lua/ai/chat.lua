@@ -15,9 +15,7 @@ function M.new(options)
   end
 
   local function refusal(reason)
-    if view then
-      view:notice(reason)
-    else
+    if not view or not view:notice(reason) then
       (options.notify or vim.notify)(reason, vim.log.levels.WARN)
     end
     return nil, reason

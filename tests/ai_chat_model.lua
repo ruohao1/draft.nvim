@@ -5,7 +5,7 @@ vim.fn.writefile({ "original source" }, path)
 vim.o.columns, vim.o.lines, vim.o.swapfile = 140, 42, false
 vim.cmd.edit(vim.fn.fnameescape(path))
 local saved = { root = root, model = "fixture/model" }
-local instances, pending = {}, {}
+local instances, pending, notices = {}, {}, {}
 local select = vim.ui.select
 vim.ui.select = function(items, options, callback)
   pending[#pending + 1] = { items = items, options = options, callback = callback }
@@ -14,7 +14,9 @@ local chat = require("ai.chat").new({
   configuration = function()
     return saved
   end,
-  notify = function() end,
+  notify = function(message)
+    notices[#notices + 1] = message
+  end,
   create = function(config)
     local driver = { requests = {}, sequence = 0 }
     function driver:send(command, receive)
@@ -106,9 +108,25 @@ local ok, reason = xpcall(function()
   assert(not chat:model(), "initial configured model is not an advertised catalog")
   assert(#pending == 0 and #current().driver.requests == 0)
   visible("after")
+  assert(chat:hide())
+  local notifications = #notices
+  assert(not chat:model())
+  assert(
+    #notices == notifications + 1 and notices[#notices]:find("after", 1, true),
+    "hidden model refusal must visibly explain negotiation eligibility"
+  )
+  assert(#vim.api.nvim_list_wins() == 1 and #current().driver.requests == 0)
+  assert(chat:open())
   compose("first explicit question")
   assert(chat:send())
   assert(not chat:model(), "starting is ineligible")
+  vim.cmd("tabnew")
+  local other_tab = vim.api.nvim_get_current_tabpage()
+  notifications = #notices
+  assert(not chat:model())
+  assert(#notices == notifications + 1 and notices[#notices]:find("idle", 1, true))
+  assert(vim.api.nvim_get_current_tabpage() == other_tab, "off-tab refusal cannot take focus")
+  vim.cmd("tabclose")
   submitted({ "fixture/model", "fixture/second-model" })
   assert(not chat:model(), "generating is ineligible")
   settled()
@@ -131,6 +149,19 @@ local ok, reason = xpcall(function()
   assert(state().desired_model == "fixture/second-model" and draft() == "keep this draft")
   assert(saved.model == "fixture/model", "local selection must leave the saved default intact")
   print("ok - advertised selection is passive and preserves draft, history and saved default")
+
+  assert(chat:model())
+  local hidden_choice = pending[#pending].callback
+  assert(chat:hide())
+  notifications = #notices
+  hidden_choice("fixture/model")
+  assert(
+    #notices == notifications + 1 and notices[#notices]:find("expired", 1, true),
+    "an expired choice after hiding must notify without reopening"
+  )
+  assert(#vim.api.nvim_list_wins() == 1 and state().desired_model == "fixture/second-model")
+  assert(#current().driver.requests == 1 and draft() == "keep this draft")
+  assert(chat:open())
 
   for _, invalidate in ipairs({
     function()

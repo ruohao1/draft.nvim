@@ -11,6 +11,7 @@ remains ISQ-237.
 | --- | --- |
 | Passive choices | `ai_chat_model` and `ai_chat_controller`: no worker before negotiation; selection/cancellation preserve composer and history without a controller command; only an explicit later Send starts the next turn |
 | Lifecycle and stale dialogs | Real owners refuse before discovery, starting, generation, stopping, review, publication, failure and close; changed drafts, newer dialogs, hide/reopen, tab departure/return, later turns and replacement owners invalidate old choices |
+| Visible refusals | Hidden or off-tab chat reports refusal through a notification without reopening, taking focus or submitting; stale callbacks after hiding also report their expiry |
 | Catalog and labels | A newly negotiated catalog replaces prior options; forged/removed models refuse; earlier turn labels stay fixed and the next turn requests the selected model |
 | Preference boundaries | Hide/reopen retains the local selection; New reads the original unchanged default; no settings/account mutation or provider discovery occurs in the picker |
 | Same-session switch | Public commands and the production controller confirm `fixture/model` then `fixture/second-model`, with one `session/new`, one `session/resume`, two explicit prompts and fresh confined workers |
@@ -45,6 +46,23 @@ existing guarded negotiation; no protocol fix was needed.
 The complete default run passed **58/58** suites, including all three terminal
 UI cases and the relocated-install flow, with expected installed-provider opt-in
 skips. `stylua --check lua tests` and `git diff --check` passed.
+
+Independent review found one visibility gap: a refusal routed only to a hidden
+transcript. A failing headless regression reproduced it; current-tab notice
+availability now controls notification fallback. Hidden/off-tab refusal and a
+stale callback after hiding are covered without changing model or worker state.
+
+A post-fix full run exposed an existing intermittent assertion in
+`test_multi_unchanged_context_is_not_written_but_is_revalidated`: complete stat
+equality treated a revalidation read's access-time update as a write. Delaying
+the real decision across a second boundary reproduced the same failure, with
+only `st_atime_ns` changing. The corrected test retains content, identity,
+permissions, ownership, size and nanosecond modification/change checks. The
+delayed reproduction and all ten multi-file cases passed; publisher code is
+unchanged.
+
+The final complete run after both corrections passed **58/58**, including the
+formerly intermittent staging assertion. Formatting and whitespace remained clean.
 
 All fixtures use synthetic credentials, disposable HOME/XDG directories,
 loopback audit endpoints and isolated editors. No paid provider request, real
