@@ -136,6 +136,7 @@ function M.new(options)
     stop_timeout_ms = true,
     on_close = true,
     on_review = true,
+    on_review_action = true,
     defer_review = true,
   }
   if not plain(options) then
@@ -153,6 +154,7 @@ function M.new(options)
     or vim.uv.fs_realpath(options.root) ~= options.root
     or (options.on_close ~= nil and type(options.on_close) ~= "function")
     or (options.on_review ~= nil and type(options.on_review) ~= "function")
+    or (options.on_review_action ~= nil and type(options.on_review_action) ~= "function")
     or (options.defer_review ~= nil and type(options.defer_review) ~= "boolean")
   then
     return nil, "Invalid conversation root, helper or callback"
@@ -213,7 +215,7 @@ function M.new(options)
           { path = item.path, snapshot_sha256 = vim.fn.sha256(item.oldText) }
       end
     end
-    local refresh_failed = false
+    local refresh_failed, presentation = false, nil
     if command.kind == "decide" then
       if
         not handle
@@ -225,16 +227,28 @@ function M.new(options)
         fenced = true
         return false
       end
-      local verdict, reason = handle:decide(command.choice, command.path)
+      local verdict, reason, focused =
+        handle:decide(command.choice, command.path, command.remaining)
       if not verdict then
         fenced = true
         return false
       end
       refresh_failed = reason ~= nil
+      presentation = focused
     end
     local turn_capture = captured
     return pipe:send(command, function(event)
-      local replacement
+      local replacement, replacement_binding
+      local function current_replacement()
+        local current = owner:snapshot().review
+        return not fenced
+          and replacement_binding ~= nil
+          and handle == replacement
+          and current ~= nil
+          and current.id == replacement_binding.id
+          and current.revision == replacement_binding.revision
+          and current.token == replacement_binding.token
+      end
       local guarded = true
       if event.kind == "settled" and (event.outcome == "review" or event.prior_review ~= nil) then
         guarded = turn_capture ~= nil and sources.unchanged(turn_capture)
@@ -250,11 +264,32 @@ function M.new(options)
           local frozen = type(event.proposal) == "table"
             and inspect_review(python, event.review_ref, event.proposal.token)
           if frozen and sources.unchanged(turn_capture) then
+            local actions
+            if options.on_review_action then
+              actions = {}
+              for _, name in ipairs({
+                "approve",
+                "reject",
+                "approve_all",
+                "reject_all",
+                "cancel",
+                "followup",
+                "review",
+              }) do
+                actions[name] = function(argument)
+                  if current_replacement() then
+                    options.on_review_action(name, argument)
+                  end
+                end
+              end
+            end
             replacement = review.open(frozen, turn_capture, {
               python = python,
               decisions = event.prior_review and event.prior_review.files,
               defer = options.defer_review,
+              actions = actions,
               controls = options.defer_review
+                  and not actions
                   and "Frozen preview | :NvimAIChat to return | :NvimAIChatCancel to discard"
                 or nil,
             })
@@ -297,11 +332,40 @@ function M.new(options)
           handle:close()
         end
         handle, binding = replacement, view.review
+        replacement_binding = binding
         if options.on_review and binding then
           local current_handle = handle
+          local function available()
+            return current_replacement() and owner:snapshot().phase == "review"
+          end
           pcall(options.on_review, {
             show = function(_, path)
+              if not available() then
+                return nil, "This frozen review is no longer available"
+              end
               return current_handle:show(path)
+            end,
+            current = function()
+              return current_replacement() and current_handle:current() or nil
+            end,
+            move = function(_, delta)
+              if not available() then
+                return nil, "This frozen review is no longer available"
+              end
+              return current_handle:move(delta)
+            end,
+            prepare = function(_, choice, remaining)
+              if not available() then
+                return nil, "This frozen review is no longer available"
+              end
+              local intent, reason = current_handle:prepare(choice, remaining)
+              if intent then
+                local valid = intent.valid
+                intent.valid = function()
+                  return available() and valid()
+                end
+              end
+              return intent, reason
             end,
           })
         end
@@ -310,7 +374,9 @@ function M.new(options)
       end
       if accepted and event.kind == "decided" and view.review and handle then
         binding = view.review
-        if not options.defer_review then
+        if
+          not options.defer_review or (options.on_review_action and presentation and presentation())
+        then
           handle:show(view.review.files[view.review.current_index].path)
         end
       end

@@ -94,6 +94,69 @@ local ok, reason = xpcall(function()
   end
   print("ok - deferred frozen reviews preserve guards before first display and across reopening")
 
+  handle = assert(review.open(frozen, captured, { defer = true }))
+  assert(handle:current() == nil)
+  assert(not handle:prepare("approve", false), "unopened diffs cannot authorize a decision")
+  assert(handle:show("first.txt"))
+  assert(handle:current() == "first.txt")
+  local single = assert(handle:prepare("approve", false))
+  assert(single.path == "first.txt" and single.remaining == nil and single.count == 1)
+  assert(single.valid())
+  assert(not handle:prepare("approve", true), "all pending diffs must be visited before a batch")
+  assert(handle:move(1))
+  assert(handle:current() == "second.txt")
+  local batch = assert(handle:prepare("approve", true))
+  assert(batch.remaining and batch.path == nil and batch.count == 2 and batch.valid())
+  assert(handle:move(-1) and handle:move(1))
+  assert(not batch.valid(), "navigation away and back cannot revive an old confirmation")
+  batch = assert(handle:prepare("approve", true))
+  local review_tab = vim.api.nvim_get_current_tabpage()
+  vim.cmd("tabnew")
+  assert(not batch.valid() and handle:current() == nil)
+  vim.cmd("tabclose")
+  assert(vim.api.nvim_get_current_tabpage() == review_tab)
+  batch = assert(handle:prepare("approve", true))
+  local frozen_panel = vim.api.nvim_get_current_buf()
+  -- An actual text edit, restored to the same bytes, still changes its tick.
+  vim.bo[frozen_panel].modifiable = true
+  vim.api.nvim_buf_set_lines(frozen_panel, 0, -1, false, { "temporary edit" })
+  vim.api.nvim_buf_set_lines(frozen_panel, 0, -1, false, { "proposed edit" })
+  vim.bo[frozen_panel].modified, vim.bo[frozen_panel].modifiable = false, false
+  assert(not batch.valid(), "restored frozen bytes do not revive a pending confirmation")
+  batch = assert(handle:prepare("approve", true))
+  vim.bo[frozen_panel].readonly = false
+  assert(not batch.valid(), "frozen panel option changes invalidate a confirmation")
+  vim.bo[frozen_panel].readonly = true
+  assert(vim.uv.fs_symlink(files[1], alias_path))
+  alias = vim.fn.bufadd(alias_path)
+  vim.fn.bufload(alias)
+  batch = assert(handle:prepare("approve", true))
+  local alias_readonly = vim.bo[alias].readonly
+  vim.bo[alias].readonly = not alias_readonly
+  assert(not batch.valid(), "hidden source alias metadata invalidates a confirmation")
+  vim.bo[alias].readonly = alias_readonly
+  if alias ~= captured.files[1].source then
+    vim.api.nvim_buf_delete(alias, { force = true })
+  end
+  vim.uv.fs_unlink(alias_path)
+  batch = assert(handle:prepare("approve", true))
+  local guarded_source = captured.files[1].source
+  vim.api.nvim_buf_set_lines(guarded_source, 0, -1, false, { "unsaved during confirmation" })
+  assert(not batch.valid())
+  assert(not handle:prepare("approve", true))
+  local reject = assert(handle:prepare("reject", true))
+  assert(reject.valid(), "discarding an already dirty proposal must remain possible")
+  vim.api.nvim_buf_set_lines(guarded_source, 0, -1, false, { "newer unsaved edit" })
+  assert(not reject.valid(), "new source changes still invalidate a rejection confirmation")
+  reject = assert(handle:prepare("reject", true))
+  handle:retire()
+  assert(not reject.valid() and not handle:prepare("reject", true))
+  vim.api.nvim_buf_set_lines(guarded_source, 0, -1, false, { "original text" })
+  vim.bo[guarded_source].modified = false
+  captured = assert(sources.capture(files, root))
+  assert(vim.fn.readfile(files[1])[1] == "original text", "eligibility never publishes")
+  print("ok - review preparation binds real visits, navigation and buffer confirmation state")
+
   handle = assert(
     review.open(frozen, captured, { python = assert(require("ai.tools").resolve("python3")) })
   )

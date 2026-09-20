@@ -65,7 +65,7 @@ self.assertEqual([item['state'] for item in receipt['decisions']], ['accepted', 
 **Files:** modify `lua/ai/staged_review.lua`, `lua/ai/staged.lua`, `lua/ai/conversation_controller.lua`; extend `tests/ai_staged_shared.lua`, `tests/ai_conversation_controller.lua`.
 **Interfaces:** produce `handle:current()`, `handle:move(delta)`, `handle:prepare(choice, remaining) -> intent|nil,reason`; intent carries path/remaining, count and `valid()`. Extend `handle:decide(choice,path,remaining)` with a third return: a presentation guard. Factory accepts `on_review_action(name,argument)` and exposes guarded presentation/eligibility methods through `on_review`.
 
-- [ ] Add failing real-panel cases: no preparation before display, all pending files must be visited before batch approval, navigation away/back invalidates confirmation, source/panel/alias edits invalidate it, rejection remains possible after an already dirty source, and retired handles refuse.
+- [x] Add failing real-panel cases: no preparation before display, all pending files must be visited before batch approval, navigation away/back invalidates confirmation, source/panel/alias edits invalidate it, rejection remains possible after an already dirty source, and retired handles refuse.
 
 ```lua
 assert(handle:show("first.txt"))
@@ -77,10 +77,10 @@ assert(handle:move(-1))
 assert(not intent.valid())
 ```
 
-- [ ] Run `ai_staged_shared`; expect the missing eligibility/navigation API to fail. Move the existing staged confirmation snapshot into the shared review module and keep staged consumers using it. Implement silent visibility/current lookup, bounded navigation and confirmation/navigation guards without exposing the writer.
-- [ ] Add failing production adapter tests for two-file batch publication, real diff key callback routing, stale old-handle actions after revision and a decision receipt after leaving the review tab. Observe project bytes, owner receipts and current tab/window.
-- [ ] Run `ai_conversation_controller`; expect the missing trusted callback/batch integration to fail. Validate the callback option, build per-handle action closures, forward the batch target to the existing writer and return its real receipt through the controller. Advance after confirmed single approval only while the returned presentation guard still holds.
-- [ ] Run `ai_staged_shared ai_conversation_controller ai_staged ai_staged_multi ai_staged_refine`; expect all pass. Commit `feat: bind conversation controls to frozen review guards`.
+- [x] Run `ai_staged_shared`; expect the missing eligibility/navigation API to fail. Move the existing staged confirmation snapshot into the shared review module and keep staged consumers using it. Implement silent visibility/current lookup, bounded navigation and confirmation/navigation guards without exposing the writer.
+- [x] Add failing production adapter tests for two-file batch publication, real diff key callback routing, stale old-handle actions after revision and a decision receipt after leaving the review tab. Observe project bytes, owner receipts and current tab/window.
+- [x] Run `ai_conversation_controller`; expect the missing trusted callback/batch integration to fail. Validate the callback option, build per-handle action closures, forward the batch target to the existing writer and return its real receipt through the controller. Advance after confirmed single approval only while the returned presentation guard still holds.
+- [x] Run `ai_staged_shared ai_conversation_controller ai_staged ai_staged_multi ai_staged_refine`; expect all pass. Commit `feat: bind conversation controls to frozen review guards`.
 
 ## Task 3: Wire chat decisions, follow-ups and confirmed outcomes
 
