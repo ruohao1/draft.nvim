@@ -305,8 +305,11 @@ Keep restart semantics explicit: normal editor EOF can let the surviving control
 - Create: `docs/validation/2026-09-20-conversation-linux.md`
 - Modify: `tests/README.md`, `README.md`, `doc/draft.txt`
 - Reuse: `tests/fixtures/ai/chat_approval_ui.lua` and actual terminal capture support
+- Discovered repair: `scripts/nvim-ai-conversation-review.py`, `tests/nvim_ai_conversation_review.py`, `tests/ai_chat_approval.lua`
 
-**Interfaces:** Documentation only. The manual launcher uses the existing environment variables `DRAFT_TEST_ROOT`, `DRAFT_CHAT_UI_ROOT`, and `DRAFT_CHAT_UI_SCRIPT`. It loads the same production fixture used by Task 1; no new runtime command or fixture-only product setting is added.
+**Interfaces:** The existing registry releases current authority after a validated terminal receipt while preserving context; no new interface is added. The manual launcher uses the existing environment variables `DRAFT_TEST_ROOT`, `DRAFT_CHAT_UI_ROOT`, and `DRAFT_CHAT_UI_SCRIPT`. It loads the same production fixture used by Task 1; no new runtime command or fixture-only product setting is added.
+
+- [x] **Step 0: Repair the terminal-receipt Close failure exposed by the walkthrough.** Two real-journal tests and the public partial-approval/drift journey fail before the fix. The writer has already consumed a terminal failure's authority, but the registry keeps it current and requests a second cancel receipt on Close. Clear `current` after every validated receipt with no pending files, preserving its context and the owner's recovery/cleanup evidence. The existing receipt reader must still prove the consumption marker and terminal journal; a missing marker must retain the current review and refuse ingestion. Run `python3 -I -B tests/run.py nvim_ai_conversation_review ai_chat_approval ai_conversation_review`. Expected: blocked and uncertain receipts close without replay or journal changes; partial accepted bytes and external edits survive; unproven receipt evidence remains refused. No writer, protocol or recovery-reset change is needed.
 
 - [ ] **Step 1: Write the evidence record with four explicitly labeled evidence classes.** Record baseline SHA, final tested SHA, environment/version output, actual command/log paths, per-criterion test names, expected opt-in skips, and unresolved limitations. Use: automated fixtures; automated real terminal keys; hands-on fixture checklist; installed/live-provider evidence. An unperformed class says `not run`; it never inherits a passing status from another class.
 

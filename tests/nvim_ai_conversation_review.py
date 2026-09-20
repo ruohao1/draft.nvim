@@ -91,6 +91,58 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(self.registry.current['receipt_sequence'], 0)
         self.assertEqual((self.root / 'second.txt').read_bytes(), b'original text\n')
 
+    def test_terminal_writer_failure_closes_without_a_second_decision(self):
+        command = self.command(choice='approve', path='first.txt')
+        staging.decide(self.first['proposal'], self.first['id'], 'approve', 'first.txt')
+        self.registry.receipt(command)
+        (self.root / 'second.txt').write_bytes(b'external change\n')
+        command = self.command(choice='approve', path='second.txt')
+        staging.decide(self.first['proposal'], self.first['id'], 'approve', 'second.txt')
+        receipt = self.registry.receipt(command)
+        self.assertEqual([item['state'] for item in receipt['decisions']], ['accepted', 'blocked'])
+        before = module.decisions.read_receipt(self.first['proposal'], self.first['id'])
+        self.assertEqual(self.registry.retire_all(), {})
+        self.assertEqual(module.decisions.read_receipt(self.first['proposal'], self.first['id']), before)
+        self.assertEqual([item['state'] for item in self.registry.context], ['accepted', 'blocked'])
+        replay = staging.decide(self.first['proposal'], self.first['id'], 'approve', 'second.txt')
+        self.assertNotEqual(replay['phase'], 'applied')
+        self.assertEqual((self.root / 'first.txt').read_bytes(), b'proposed edit\n')
+        self.assertEqual((self.root / 'second.txt').read_bytes(), b'external change\n')
+
+    def test_uncertain_writer_receipt_survives_close_without_replay_or_cleanup(self):
+        command = self.command(choice='approve', path='first.txt')
+        staging.decide(self.first['proposal'], self.first['id'], 'approve', 'first.txt')
+        self.registry.receipt(command)
+        command = self.command(choice='approve', path='second.txt')
+        staging.decide(self.first['proposal'], self.first['id'], 'approve', 'second.txt')
+        task = Path(self.first['proposal']).parent
+        # A completed real write whose confirmation was lost stays uncertain.
+        (task / 'decision-1-applied-1.json').unlink()
+        (task / 'decision-1-result.json').unlink()
+        receipt = self.registry.receipt(command)
+        self.assertEqual(receipt['phase'], 'uncertain')
+        self.assertEqual([item['state'] for item in receipt['decisions']], ['accepted', 'uncertain'])
+        self.assertEqual(receipt['cleanup_pending'], ['second.txt'])
+        before = module.decisions.read_receipt(self.first['proposal'], self.first['id'])
+        self.assertEqual(self.registry.retire_all(), {})
+        self.assertEqual(module.decisions.read_receipt(self.first['proposal'], self.first['id']), before)
+        self.assertEqual([item['state'] for item in self.registry.context], ['accepted', 'uncertain'])
+        replay = staging.decide(self.first['proposal'], self.first['id'], 'approve', 'second.txt')
+        self.assertNotEqual(replay['phase'], 'applied')
+        self.assertEqual((self.root / 'first.txt').read_bytes(), b'proposed edit\n')
+        self.assertEqual((self.root / 'second.txt').read_bytes(), b'proposed edit\n')
+
+    def test_unproven_terminal_receipt_cannot_release_current_review(self):
+        command = self.command(choice='approve', path='first.txt')
+        (self.root / 'first.txt').write_bytes(b'external change\n')
+        staging.decide(self.first['proposal'], self.first['id'], 'approve', 'first.txt')
+        (Path(self.first['proposal']).parent / 'consumed.json').unlink()
+        current = copy.deepcopy(self.registry.current)
+        with self.assertRaises(ValueError):
+            self.registry.receipt(command)
+        self.assertEqual(self.registry.current, current)
+        self.assertEqual((self.root / 'first.txt').read_bytes(), b'external change\n')
+
     def test_reject_remaining_after_revision_preserves_inherited_acceptance(self):
         command = self.command(choice='approve', path='first.txt')
         staging.decide(self.first['proposal'], self.first['id'], 'approve', 'first.txt')
