@@ -41,6 +41,15 @@ local function projection(snapshot, notice)
   end
   for i = #(snapshot.turns or {}), 1, -1 do
     local turn = snapshot.turns[i]
+    local round = (snapshot.rounds or {})[turn.round_id]
+    if round and round.turn_id == turn.id then
+      for index = #round.files, 1, -1 do
+        local file = round.files[index]
+        prepend(file.path .. " · " .. file.state)
+      end
+      prepend("Review " .. round.id .. " · revision " .. round.revision .. " · " .. round.status)
+      prepend("")
+    end
     if turn.progress then
       prepend("Tool: " .. turn.progress.title .. " [" .. turn.progress.status .. "]")
     end
@@ -56,6 +65,10 @@ local function projection(snapshot, notice)
     "Scope: " .. table.concat(snapshot.selection or {}, ", "),
     "Ctrl-S send · q hide · gi compose · gd review · g? actions",
   }
+  if snapshot.review and snapshot.review.status == "pending" then
+    header[#header + 1] =
+      "Send follows up on the pending proposal. Open its diff to accept or reject."
+  end
   if snapshot.reason then
     header[#header + 1] = tostring(snapshot.reason)
   end

@@ -87,7 +87,7 @@ assert(not intent.valid())
 **Files:** modify `lua/ai/chat.lua`, `lua/ai/chat_view.lua`, `lua/ai/init.lua`; extend `tests/ai_chat.lua`, `tests/ai_chat_view.lua`, `tests/ai_runtime.lua`, `tests/draft_setup.lua`.
 **Interfaces:** add coordinator `approve()`, `reject()`, `approve_all()`, `reject_all()`, `followup()` and optional step to `review(delta)`. Runtime registers four matching approval commands. Send in pending review includes the current round/revision/token in `revise`.
 
-- [ ] Add failing real-owner/coordinator tests that Send in review dispatches a follow-up, preserves refused drafts, and delayed batch/menu callbacks cannot act after draft edits, view changes, newer dialogs or owner/review replacement. Use real review eligibility in production integration rather than inventing writer success.
+- [x] Add failing real-owner/coordinator tests that Send in review dispatches a follow-up, preserves refused drafts, and delayed batch/menu callbacks cannot act after draft edits, view changes, newer dialogs or owner/review replacement. Use real review eligibility in production integration rather than inventing writer success.
 
 ```lua
 compose("Revise the pending proposal")
@@ -97,10 +97,10 @@ assert(request.kind == "revise" and request.proposal_token == "proposal-1")
 assert(last().owner:snapshot().review.status == "revising")
 ```
 
-- [ ] Add view cases with literal receipt-derived rounds showing pending versus accepted/rejected/uncertain outcomes. Assert repeated updates remain within existing display/undo bounds.
-- [ ] Run `ai_chat ai_chat_view draft_setup`; expect missing follow-up/commands/outcome rendering. Implement current-binding lookup, owner dispatch from prepared intents, explicit batch dialogs and most-recent-dialog fencing. Preserve the original chat tab for return from review; if it was closed, create an explicit safe chat tab rather than reuse frozen windows.
-- [ ] Map shared review callbacks to these methods, retain confirmed cancel/close behavior, and expose state-appropriate action-menu entries. Render each round's confirmed file states with its corresponding current proposal turn, separately from assistant text.
-- [ ] Run `ai_chat ai_chat_view ai_runtime draft_setup ai_conversation_review ai_conversation_followup`; expect all pass. Commit `feat: connect chat approvals and proposal follow-ups`.
+- [x] Add view cases with literal receipt-derived rounds showing pending versus accepted/rejected/uncertain outcomes. Assert repeated updates remain within existing display/undo bounds.
+- [x] Run `ai_chat ai_chat_view draft_setup`; expect missing follow-up/commands/outcome rendering. Implement current-binding lookup, owner dispatch from prepared intents, explicit batch dialogs and most-recent-dialog fencing. Preserve the original chat tab for return from review; if it was closed, create an explicit safe chat tab rather than reuse frozen windows.
+- [x] Map shared review callbacks to these methods, retain confirmed cancel/close behavior, and expose state-appropriate action-menu entries. Render each round's confirmed file states with its corresponding current proposal turn, separately from assistant text.
+- [x] Run `ai_chat ai_chat_view ai_runtime draft_setup ai_conversation_review ai_conversation_followup`; expect all pass. Commit `feat: connect chat approvals and proposal follow-ups`.
 
 ## Task 4: Prove and document the public approval workflow
 

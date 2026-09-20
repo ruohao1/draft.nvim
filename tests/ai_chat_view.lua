@@ -74,6 +74,38 @@ local ok, reason = xpcall(function()
   assert(#actions == 0, "display operations must never dispatch")
   print("ok - passive view streams without taking focus or changing drafts")
 
+  local file_states = { "accepted", "rejected", "pending", "cancelled", "blocked", "uncertain" }
+  local round = { id = 1, revision = 1, turn_id = 1, status = "pending", files = {} }
+  for _, outcome in ipairs(file_states) do
+    round.files[#round.files + 1] = { path = outcome .. ".txt", state = outcome }
+  end
+  state.phase, state.review, state.rounds, state.turns[1].round_id = "review", round, { round }, 1
+  view:update(state)
+  wait_text("pending.txt · pending")
+  for _, outcome in ipairs(file_states) do
+    assert(transcript():find(outcome .. ".txt · " .. outcome, 1, true))
+  end
+  assert(transcript():find("Send follows up", 1, true))
+  state.turns[2] = {
+    id = 2,
+    round_id = 1,
+    prompt = "revise it",
+    text = "I wrote everything",
+    model = "fixture/model",
+    status = "completed",
+  }
+  round.revision, round.turn_id = 2, 2
+  for _ = 1, 4 do
+    view:update(state)
+    wait_text("Review 1 · revision 2")
+  end
+  local _, occurrences = transcript():gsub("pending.txt · pending", "")
+  assert(occurrences == 1, "current outcomes must appear once at their proposal turn")
+  assert(#vim.api.nvim_buf_call(output, vim.fn.undotree).entries == 0)
+  state.phase, state.review, state.rounds, state.turns[1].round_id = "generating", nil, {}, nil
+  state.turns[2] = nil
+  print("ok - receipt-derived outcomes remain distinct from assistant claims and render once")
+
   state.turns[1].text = table.concat(vim.fn["repeat"]({ "history line" }, 100), "\n")
   view:update(state)
   wait_text("history line")
