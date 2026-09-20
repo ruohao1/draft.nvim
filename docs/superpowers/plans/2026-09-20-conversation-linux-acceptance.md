@@ -10,7 +10,7 @@
 
 **Spec:** [ISQ-237](https://linear.app/isqrd/issue/ISQ-237/validate-conversational-pre-write-workflow-end-to-end-on-linux), together with the existing [UI](../specs/2026-09-20-conversation-ui-design.md), [approval](../specs/2026-09-20-conversation-approval-design.md), and [model](../specs/2026-09-20-conversation-model-design.md) contracts. This is an acceptance plan for those interfaces, not a new architectural design.
 
-**Execution state:** Task 1 is verified; Tasks 2–4 remain. Coverage audited at `f4ec449d2c11532c7ad2a185d26d70b17e4a6cd7`; checked steps below have execution evidence in the task ledger. The existing [main CI](https://github.com/ruohao1/draft.nvim/actions/runs/35513883573) passed 58/58. That is baseline evidence, not a result for these proposed additions. Worktree: `.worktrees/conversation-acceptance`; branch: `test/conversation-linux-acceptance`.
+**Execution state:** Tasks 1–2 are verified; Tasks 3–4 remain. Coverage audited at `f4ec449d2c11532c7ad2a185d26d70b17e4a6cd7`; checked steps below have execution evidence in the task ledger. The existing [main CI](https://github.com/ruohao1/draft.nvim/actions/runs/35513883573) passed 58/58. That is baseline evidence, not a result for these proposed additions. Worktree: `.worktrees/conversation-acceptance`; branch: `test/conversation-linux-acceptance`.
 
 ## Global Constraints
 
@@ -46,13 +46,13 @@ Use the existing suites as the acceptance backbone and add the three gaps above.
 
 For interrupted cache writes, retain a private orphan rather than automatically adopting or deleting it. Readers recognize only the complete `compatibility.json` name. The cache helper bounds each receipt at 65,536 bytes, but repeated interrupted writes have no aggregate retention bound. Document exact-path cleanup after all possible users have stopped; automatic scavenging remains a release/maintenance consideration. This decision avoids deleting a concurrent writer's in-progress file and does not claim leak-free cache cleanup.
 
-Keep restart semantics explicit: normal editor EOF can let the surviving controller stop its worker and remove owned state; killing the controller can retain private evidence. A new editor/owner does not restore history, adopt an old backend store, replay a prompt, or revive an approval token. Existing accepted writes remain on disk; uncertain publication requires inspection, not an assumed rollback.
+Keep restart semantics explicit: normal editor EOF can let the surviving controller stop its worker and remove owned state; killing the controller can retain private evidence. An editor killed by SIGKILL can leave its Lua-owned private launch configuration even when the controller cleans worker/store state. A new editor/owner does not restore history, adopt an old backend store, replay a prompt, or revive an approval token. Existing accepted writes remain on disk; uncertain publication requires inspection, not an assumed rollback.
 
 ## Review Focus
 
 1. Switching models after partial decisions must preserve accepted bytes, rejected bytes, receipt context and earlier model labels — Task 1.
 2. An old idle frame must not satisfy a later turn's completion assertion — Task 1 uses turn identity plus phase and explicit prompt counts.
-3. Killing Neovim while hidden must still let the controller reap the confined worker and remove its owned state — Task 2; controller death has different retention expectations.
+3. Killing Neovim while hidden must still let the controller reap the confined worker and remove worker/store state — Task 2; Lua-owned launch configuration survives SIGKILL, and controller death has different retention expectations.
 4. A fully written but unrenamed cache receipt from a killed helper must never count as a hit or cause deletion of unrelated state — Task 3.
 5. The manual recipe must use the exact worktree and disposable state, report real file contents, and distinguish fixtures from live-provider proof — Task 4.
 
@@ -194,16 +194,16 @@ Keep restart semantics explicit: normal editor EOF can let the surviving control
 
 **Interfaces:** Extend test-only `EngineTest.check_editor_eof(self, fixture, *, abrupt=False)`. Its existing process handles identify the controller and confined worker; `worker_paths(controller)` returns `(pid, task, store)`. The fixture waits at `DRAFT_EDITOR_GATE` while hidden and generating.
 
-- [ ] **Step 1: Add the new test before extending the helper.** The initial run should fail on the missing `abrupt` parameter, establishing that the new path is actually selected:
+- [x] **Step 1: Add the new test before extending the helper.** The initial run should fail on the missing `abrupt` parameter, establishing that the new path is actually selected:
 
   ```python
-  def test_public_chat_editor_sigkill_closes_controller_and_worker(self):
+  def test_public_chat_editor_sigkill_retains_only_private_launch_configuration(self):
       self.check_editor_eof("chat_production_editor.lua", abrupt=True)
   ```
 
   Run `python3 -I -B tests/run.py nvim_ai_conversation_controller`; retain the named failure.
 
-- [ ] **Step 2: Add the keyword parameter, then replace only the gate/return-code section in the existing helper:**
+- [x] **Step 2: Add the keyword parameter, then replace only the gate/return-code section in the existing helper:**
 
   ```python
   if abrupt:
@@ -214,9 +214,9 @@ Keep restart semantics explicit: normal editor EOF can let the surviving control
   self.assertEqual(editor.returncode, -signal.SIGKILL if abrupt else 0, out + error)
   ```
 
-  Keep all existing assertions: controller pidfd readable, worker pidfd readable, task/store/launch paths absent, and source bytes exactly `b"original text\n"`. Keep the existing `finally` cleanup through owned pidfds. Do not replace this with PID-existence polling, global process killing, or deletion before exit proof.
+  Keep controller pidfd readable, worker pidfd readable, task/store paths absent, and source bytes exactly `b"original text\n"`. For orderly EOF require the launch path absent. For SIGKILL require only the original unchanged launch.json in its 0700 directory, with mode 0600, same device/inode, current UID and one link; remove that test-owned artifact only after process and identity proof. Keep the existing `finally` cleanup through owned pidfds. Do not replace this with PID-existence polling, global process killing, or deletion before exit proof.
 
-- [ ] **Step 3: Verify the distinct restart/retention cases together.**
+- [x] **Step 3: Verify the distinct restart/retention cases together.**
 
   ```sh
   python3 -I -B tests/run.py nvim_ai_conversation_controller nvim_ai_conversation_lifetime nvim_ai_conversation_store ai_conversation_driver
