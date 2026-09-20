@@ -14,7 +14,9 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 
 
-class ChatUITest(unittest.TestCase):
+class ChatTerminal(unittest.TestCase):
+    fixture_script = "chat_ui.lua"
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="draft-chat-tui-", dir="/tmp")
         self.addCleanup(self.temp.cleanup)
@@ -26,7 +28,7 @@ class ChatUITest(unittest.TestCase):
         self.env = {"PATH": str(Path(self.nvim).parent) + os.pathsep + os.defpath,
                     "LANG": "C.UTF-8", "TERM": "xterm-256color", "NVIM_LOG_FILE": "/dev/null",
                     "DRAFT_TEST_ROOT": str(ROOT), "DRAFT_CHAT_UI_ROOT": str(self.root),
-                    "DRAFT_CHAT_UI_SCRIPT": str(ROOT / "tests/fixtures/ai/chat_ui.lua")}
+                    "DRAFT_CHAT_UI_SCRIPT": str(ROOT / "tests/fixtures/ai" / self.fixture_script)}
         for key in ("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR"):
             path = self.root / key.lower()
             path.mkdir(mode=0o700)
@@ -58,9 +60,12 @@ return parse
                               timeout=5, check=check).stdout
 
     def evaluate(self, lua):
-        return subprocess.run([self.nvim, "--server", str(self.editor), "--remote-expr",
-                               "luaeval(" + json.dumps(lua) + ")"], env=self.env, cwd=self.root,
-                              capture_output=True, text=True, timeout=5, check=True).stdout.strip()
+        try:
+            return subprocess.run([self.nvim, "--server", str(self.editor), "--remote-expr",
+                                   "luaeval(" + json.dumps(lua) + ")"], env=self.env, cwd=self.root,
+                                  capture_output=True, text=True, timeout=5, check=True).stdout.strip()
+        except subprocess.TimeoutExpired:
+            self.fail("Editor did not answer: " + lua + "\n" + self.tm("capture-pane", "-p", "-t", "draft"))
 
     def wait(self, predicate, label):
         deadline = time.monotonic() + 5
@@ -91,6 +96,7 @@ return parse
             (output / (name + ".txt")).write_text(plain)
         return plain
 
+class ChatUITest(ChatTerminal):
     def test_real_input_passive_reopen_and_resize(self):
         self.keys("i")
         self.literal("What does this parser do?")
@@ -127,6 +133,97 @@ return parse
         self.wait(lambda: self.evaluate("vim.bo.modifiable") == "false", "closed history is read-only")
         self.assertEqual(self.evaluate("vim.g.chat_fixture_prompts"), "2")
         self.assertIn("local function parse", (self.root / "parser.lua").read_text())
+
+
+class ChatApprovalUITest(ChatTerminal):
+    fixture_script = "chat_approval_ui.lua"
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(self.close_fixture)
+
+    def close_fixture(self):
+        self.keys("Escape")
+        self.evaluate("pcall(chat_approval_fixture.cleanup)")
+
+    def phase(self, value):
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().phase") == value, value)
+
+    def send(self, text):
+        self.keys("i")
+        self.literal(text)
+        self.keys("C-s", "Escape")
+        self.phase("review")
+
+    def review(self, index=1):
+        self.keys("g", "d")
+        self.wait(lambda: "Open frozen proposal preview" in self.tm("capture-pane", "-p", "-t", "draft"), "review picker")
+        self.keys(str(index), "Enter")
+        self.wait(lambda: "FROZEN STAGED PROPOSAL" in self.evaluate("vim.wo.winbar"), "frozen panels")
+
+    def confirm(self, prompt):
+        self.wait(lambda: prompt in self.tm("capture-pane", "-p", "-t", "draft"), prompt)
+        self.keys("2", "Enter")
+        # The default inputlist can leave a normal hit-enter prompt when the
+        # synchronous publisher reports its result. Acknowledge it as a user;
+        # remote-expr cannot run while Neovim is waiting in that prompt.
+        def finished():
+            screen = self.tm("capture-pane", "-p", "-t", "draft")
+            if "Press ENTER or type command" in screen:
+                self.keys("Enter")
+                return False
+            return "Type number and <Enter>" not in screen
+        self.wait(finished, "confirmation returned to editor")
+
+    def test_real_review_keys_receipts_followup_and_batches(self):
+        self.send("Propose edits to the selected files.")
+        self.review()
+        self.assertEqual(self.evaluate("chat_approval_fixture.disk(1)"), "original text")
+        self.wait(lambda: "first.txt" in self.capture("conversation-review"), "review capture")
+        screen = self.capture("conversation-review")
+        self.assertIn("a accept", screen, "accept help must fit the real split")
+        self.assertIn("r reject", screen, "reject help must fit the real split")
+        self.keys("a")
+        self.wait(lambda: "second.txt" in self.evaluate("vim.wo.winbar"), "accept and advance")
+        self.assertEqual(self.evaluate("chat_approval_fixture.disk(1)"), "proposed edit")
+        self.keys("r")
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().review.files[2].state") == "rejected", "reject current file")
+        self.assertIn("second.txt", self.evaluate("vim.wo.winbar"))
+        self.keys("f")
+        self.wait(lambda: self.evaluate("vim.bo.filetype") == "draft-chat-input", "follow-up composer")
+        self.wait(lambda: "first.txt · accepted" in self.capture("conversation-decisions"), "receipt transcript")
+        self.assertIn("second.txt · rejected", self.capture("conversation-decisions"))
+        self.send("Revise the pending edit.")
+        self.assertEqual(self.evaluate("chat_approval_fixture.snapshot().review.revision"), "2")
+        self.review(3)
+        self.keys("]", "f")
+        self.wait(lambda: "first.txt" in self.evaluate("vim.wo.winbar"), "next file")
+        self.keys("[", "f")
+        self.wait(lambda: "third.txt" in self.evaluate("vim.wo.winbar"), "previous file")
+        self.keys("A")
+        self.confirm("Accept remaining 1 file(s)?")
+        self.phase("idle")
+        self.assertEqual(self.evaluate("chat_approval_fixture.disk(3)"), "revised edit")
+        self.command("NvimAIChat")
+        self.send("Propose another set of edits.")
+        self.review()
+        self.keys("R")
+        self.confirm("Reject remaining 3 file(s)?")
+        self.phase("idle")
+        self.assertEqual(self.evaluate("chat_approval_fixture.disk(2)"), "original text")
+        self.command("NvimAIChat")
+        self.send("Propose edits once more.")
+        self.review()
+        self.keys("a")
+        self.wait(lambda: "second.txt" in self.evaluate("vim.wo.winbar"), "partial acceptance before cancel")
+        accepted = self.evaluate("chat_approval_fixture.disk(1)")
+        self.keys("q")
+        self.confirm("Discard the pending frozen review?")
+        self.phase("idle")
+        self.assertEqual(self.evaluate("chat_approval_fixture.disk(1)"), accepted)
+        self.assertEqual(self.evaluate("chat_approval_fixture.disk(2)"), "original text")
+        self.command("NvimAIChatClose")
+        self.phase("closed")
 
 
 if __name__ == "__main__":

@@ -353,6 +353,126 @@ local ok, reason = xpcall(function()
   pcall(vim.api.nvim_del_autocmd, changed)
   reset()
   print("ok - source refresh failure preserves real acceptance and blocks remaining writes")
+
+  local function reset_pair()
+    reset()
+    vim.fn.writefile({ "original text" }, project .. "/second.txt")
+    local second = vim.fn.bufadd(project .. "/second.txt")
+    vim.fn.bufload(second)
+    vim.api.nvim_buf_call(second, function()
+      vim.cmd("edit!")
+    end)
+  end
+  local active_view, actions = nil, {}
+  local function interactive()
+    return editing(nil, {
+      selection = { "example.txt", "second.txt" },
+      defer_review = true,
+      on_review = function(value)
+        active_view = value
+      end,
+      on_review_action = function(name, argument)
+        actions[#actions + 1] = { name, argument }
+      end,
+    })
+  end
+  reset_pair()
+  local batching = interactive()
+  assert(act(batching, { kind = "submit", text = "Propose both edits." }))
+  wait_phase(batching, "review")
+  assert(active_view:current() == nil and not active_view:prepare("approve", true))
+  assert(active_view:show("example.txt"))
+  assert(not active_view:prepare("approve", true))
+  local approve_key = vim.fn.maparg("a", "n", false, true).callback
+  approve_key()
+  assert(actions[#actions][1] == "approve")
+  assert(vim.fn.readfile(project .. "/example.txt")[1] == "original text")
+  assert(active_view:move(1))
+  assert(active_view:current() == "second.txt")
+  local batch = assert(active_view:prepare("approve", true))
+  assert(batch.remaining and batch.count == 2 and batch.valid())
+  local batch_round = batching:snapshot().review
+  assert(act(batching, {
+    kind = "decide",
+    choice = "approve",
+    remaining = true,
+    round_id = batch_round.id,
+    proposal_revision = batch_round.revision,
+    proposal_token = batch_round.token,
+  }))
+  wait_phase(batching, "idle")
+  assert(vim.fn.readfile(project .. "/example.txt")[1] == "proposed edit")
+  assert(vim.fn.readfile(project .. "/second.txt")[1] == "proposed edit")
+  assert(batching:snapshot().rounds[1].receipt_sequence == 1)
+  assert(batching:snapshot().rounds[1].files[2].state == "accepted")
+  local action_count = #actions
+  approve_key()
+  assert(#actions == action_count, "settled review mappings cannot dispatch")
+  finish(batching)
+  print("ok - one confirmed batch uses the real writer and one authoritative receipt")
+
+  for _, leave_review in ipairs({ false, true }) do
+    reset_pair()
+    local advancing = interactive()
+    assert(act(advancing, { kind = "submit", text = "Propose both edits." }))
+    wait_phase(advancing, "review")
+    assert(active_view:show("example.txt"))
+    local review_tab = vim.api.nvim_get_current_tabpage()
+    assert(decide(advancing))
+    local other_tab
+    if leave_review then
+      vim.cmd("tabnew")
+      other_tab = vim.api.nvim_get_current_tabpage()
+    end
+    wait_phase(advancing, "review")
+    if leave_review then
+      assert(vim.api.nvim_get_current_tabpage() == other_tab, "receipt stole review focus")
+      assert(active_view:current() == nil)
+      vim.cmd("tabclose")
+      vim.api.nvim_set_current_tabpage(review_tab)
+      assert(active_view:current() == "example.txt", "background receipt changed the visible file")
+    else
+      assert(
+        active_view:current() == "second.txt",
+        "acceptance must advance to the next pending file"
+      )
+    end
+    assert(vim.fn.readfile(project .. "/example.txt")[1] == "proposed edit")
+    assert(vim.fn.readfile(project .. "/second.txt")[1] == "original text")
+    finish(advancing)
+  end
+  print("ok - accepted receipts advance only while the original review remains active")
+
+  reset_pair()
+  local replacing = interactive()
+  assert(act(replacing, { kind = "submit", text = "Propose both edits." }))
+  wait_phase(replacing, "review")
+  assert(active_view:show("example.txt"))
+  local old_view, old_key = active_view, vim.fn.maparg("a", "n", false, true).callback
+  local original_round = replacing:snapshot().review
+  local notes = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(notes, 0, -1, false, { "user-owned notes" })
+  vim.api.nvim_set_current_buf(notes)
+  assert(act(replacing, {
+    kind = "revise",
+    text = "Revise the pending proposals.",
+    round_id = original_round.id,
+    proposal_revision = original_round.revision,
+    proposal_token = original_round.token,
+  }))
+  wait_phase(replacing, "review")
+  assert(replacing:snapshot().review.token ~= original_round.token)
+  assert(vim.api.nvim_get_current_buf() == notes, "replacement must preserve a repurposed tab")
+  action_count = #actions
+  old_key()
+  assert(#actions == action_count, "a superseded mapping must not target the replacement")
+  assert(not old_view:show("example.txt") and not old_view:prepare("approve", true))
+  assert(not active_view:prepare("approve", true), "replacement must require fresh visits")
+  finish(replacing)
+  assert(vim.api.nvim_buf_is_valid(notes) and vim.api.nvim_get_current_buf() == notes)
+  vim.api.nvim_buf_delete(notes, { force = true })
+  reset_pair()
+  print("ok - superseded diff callbacks and facades cannot act on replacement authority")
 end, debug.traceback)
 release()
 for _, owner in ipairs(owners) do

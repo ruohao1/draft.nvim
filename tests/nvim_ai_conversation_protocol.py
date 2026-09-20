@@ -120,6 +120,24 @@ class ProtocolTest(unittest.TestCase):
             with self.assertRaisesRegex(self.protocol.Refused, "budget"):
                 self.protocol.decode_command(raw)
 
+    def test_batch_decisions_have_one_explicit_target_form(self):
+        value = frame()
+        command = value['command']
+        command.update(kind='decide', choice='approve', remaining=True,
+                       round_id=1, proposal_revision=1, proposal_token='token_1', receipt_sequence=0)
+        self.assertEqual(self.decode(value), value)
+        for fields in ({'remaining': False}, {'remaining': 1}, {'remaining': 'true'},
+                       {'path': 'example.txt'}, {'paths': ['example.txt']}, {'reviewed': True}):
+            invalid = copy.deepcopy(value)
+            invalid['command'].update(fields)
+            with self.subTest(fields=fields), self.assertRaises(self.protocol.Refused):
+                self.decode(invalid)
+        del command['remaining']
+        with self.assertRaises(self.protocol.Refused):
+            self.decode(value)
+        command['path'] = 'example.txt'
+        self.assertEqual(self.decode(value), value)
+
     def test_fragmented_unicode_and_eof_have_real_pipe_semantics(self):
         pipe, writer, _ = self.pipe()
         value = frame("start")

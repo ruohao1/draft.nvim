@@ -4,7 +4,7 @@ local sources = require("ai.staged_sources")
 
 function M.new(options)
   local chat = {}
-  local owner, view, unsubscribe, frozen
+  local owner, view, unsubscribe, frozen, return_tab, navigation
   local epoch, opening = 0, false
 
   local function detach()
@@ -31,11 +31,18 @@ function M.new(options)
   end
 
   local function fence()
+    epoch = epoch + 1
     local current, revision, token = owner, owner and owner:snapshot().view_revision, epoch
     local current_view = view
+    local tab = vim.api.nvim_get_current_tabpage()
     local _, _, stamp = view:draft()
     return function()
-      if view ~= current_view or owner ~= current or epoch ~= token then
+      if
+        view ~= current_view
+        or owner ~= current
+        or epoch ~= token
+        or vim.api.nvim_get_current_tabpage() ~= tab
+      then
         return false
       end
       local _, _, now = view:draft()
@@ -67,13 +74,32 @@ function M.new(options)
   end
 
   local function show()
+    if not navigation then
+      navigation = vim.api.nvim_create_autocmd("TabLeave", {
+        callback = function()
+          epoch = epoch + 1
+        end,
+      })
+    end
     epoch = epoch + 1
     detach()
     local state = owner:snapshot()
+    if frozen and frozen.handle:current() then
+      if
+        return_tab
+        and vim.api.nvim_tabpage_is_valid(return_tab)
+        and return_tab ~= vim.api.nvim_get_current_tabpage()
+      then
+        vim.api.nvim_set_current_tabpage(return_tab)
+      else
+        vim.cmd("tabnew")
+      end
+    end
     local ok, reason = view:show(state)
     if not ok then
       return refusal(reason)
     end
+    return_tab = vim.api.nvim_get_current_tabpage()
     if state.phase ~= "closed" then
       local current = owner
       unsubscribe = owner:subscribe(function(updated)
@@ -121,6 +147,11 @@ function M.new(options)
           frozen = { owner = created, handle = handle, review = created:snapshot().review }
         end
       end
+      config.on_review_action = function(name, argument)
+        if owner == created then
+          return chat[name](chat, argument)
+        end
+      end
       created, reason = options.create(config)
       if not created then
         return nil, reason
@@ -129,7 +160,7 @@ function M.new(options)
       if view then
         view:dispose()
       end
-      owner, frozen = created, nil
+      owner, frozen, return_tab = created, nil, nil
       view = require("ai.chat_view").new({
         width = options.width,
         on_action = function(name)
@@ -199,7 +230,13 @@ function M.new(options)
     if kind == "retry" and text == "" then
       text = state.turns[#state.turns].prompt
     end
-    local ok, err = dispatch({ kind = kind, text = text })
+    local action = { kind = kind, text = text }
+    if kind == "submit" and state.phase == "review" and state.review.status == "pending" then
+      action.kind = "revise"
+      action.round_id, action.proposal_revision, action.proposal_token =
+        state.review.id, state.review.revision, state.review.token
+    end
+    local ok, err = dispatch(action)
     if ok then
       view:set_draft("")
     end
@@ -241,7 +278,7 @@ function M.new(options)
     return stop("close")
   end
 
-  function chat:review()
+  local function current_review()
     local state = owner and owner:snapshot()
     local binding = frozen
     if
@@ -255,7 +292,80 @@ function M.new(options)
       or binding.review.revision ~= state.review.revision
       or binding.review.token ~= state.review.token
     then
-      return refusal("No current frozen preview is available")
+      return nil, "No current frozen review is available"
+    end
+    return binding, state
+  end
+
+  function chat:followup()
+    if not owner then
+      return refusal("Open a conversation with :NvimAIChat first")
+    end
+    return show()
+  end
+
+  local function decide(choice, remaining)
+    local binding, state = current_review()
+    if not binding then
+      return refusal(state)
+    end
+    local intent, reason = binding.handle:prepare(choice, remaining)
+    if not intent then
+      return refusal(reason)
+    end
+    local valid = fence()
+    local function apply()
+      if valid() and frozen == binding and intent.valid() then
+        return dispatch({
+          kind = "decide",
+          choice = choice,
+          path = intent.path,
+          remaining = intent.remaining,
+          round_id = state.review.id,
+          proposal_revision = state.review.revision,
+          proposal_token = state.review.token,
+        })
+      end
+    end
+    if not remaining then
+      return apply()
+    end
+    local label = (choice == "approve" and "Accept" or "Reject")
+      .. " remaining "
+      .. intent.count
+      .. " file(s)"
+    vim.ui.select({ "Cancel", label }, { prompt = label .. "?" }, function(selected)
+      if selected == label then
+        apply()
+      end
+    end)
+    return true
+  end
+
+  function chat:approve()
+    return decide("approve")
+  end
+
+  function chat:reject()
+    return decide("reject")
+  end
+
+  function chat:approve_all()
+    return decide("approve", true)
+  end
+
+  function chat:reject_all()
+    return decide("reject", true)
+  end
+
+  function chat:review(delta)
+    local binding, state = current_review()
+    if not binding then
+      return refusal(state)
+    end
+    if delta ~= nil then
+      local ok, reason = binding.handle:move(delta)
+      return ok or refusal(reason)
     end
     local paths = {}
     for _, file in ipairs(state.review.files) do
@@ -264,9 +374,12 @@ function M.new(options)
     local valid = fence()
     vim.ui.select(paths, { prompt = "Open frozen proposal preview" }, function(path)
       if path and vim.list_contains(paths, path) and valid() and frozen == binding then
+        local origin = not binding.handle:current() and vim.api.nvim_get_current_tabpage()
         local ran, result, reason = pcall(binding.handle.show, binding.handle, path)
         if not ran or not result then
           refusal(ran and (reason or "Cannot show frozen preview") or "Cannot show frozen preview")
+        elseif origin then
+          return_tab = origin
         end
       end
     end)
@@ -292,7 +405,14 @@ function M.new(options)
       add("Cancel turn / discard review", "cancel")
     end
     if state.phase == "review" then
+      add("Send follow-up", "send")
       add("Open frozen preview", "review")
+      if frozen and frozen.handle:current() then
+        add("Accept current file", "approve")
+        add("Reject current file", "reject")
+        add("Accept remaining files", "approve_all")
+        add("Reject remaining files", "reject_all")
+      end
     end
     if state.phase == "closed" then
       add("New conversation", "new")
@@ -321,7 +441,11 @@ function M.new(options)
     if view then
       view:dispose()
     end
-    owner, view, frozen = nil, nil, nil
+    if navigation then
+      pcall(vim.api.nvim_del_autocmd, navigation)
+      navigation = nil
+    end
+    owner, view, frozen, return_tab = nil, nil, nil, nil
     return true
   end
 

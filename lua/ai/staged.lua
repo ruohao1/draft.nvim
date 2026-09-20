@@ -113,49 +113,7 @@ function M.reject()
   decide("reject", false)
 end
 
-local function confirmation_snapshot(state)
-  local selected, buffers, snapshot = {}, {}, {}
-  for _, item in ipairs(state.files) do
-    selected[item.file], buffers[item.source] = true, true
-  end
-  for buf in pairs(state.panels) do
-    buffers[buf] = true
-  end
-  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-    if
-      vim.api.nvim_buf_is_loaded(buf)
-      and selected[vim.uv.fs_realpath(vim.api.nvim_buf_get_name(buf))]
-    then
-      buffers[buf] = true
-    end
-  end
-  for buf in pairs(buffers) do
-    if vim.api.nvim_buf_is_valid(buf) then
-      local item = {
-        name = vim.api.nvim_buf_get_name(buf),
-        loaded = vim.api.nvim_buf_is_loaded(buf),
-        tick = vim.api.nvim_buf_get_changedtick(buf),
-      }
-      for _, option in ipairs({
-        "modified",
-        "buftype",
-        "binary",
-        "bomb",
-        "fileformat",
-        "fileencoding",
-        "endofline",
-        "readonly",
-        "modifiable",
-      }) do
-        item[option] = vim.bo[buf][option]
-      end
-      snapshot[buf] = item
-    else
-      snapshot[buf] = false
-    end
-  end
-  return snapshot
-end
+local confirmation_snapshot = shared_review.confirmation_snapshot
 
 local function confirm_remaining(choice)
   local state = current

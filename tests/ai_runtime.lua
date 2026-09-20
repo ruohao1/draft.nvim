@@ -254,6 +254,9 @@ local ok, err = xpcall(function()
     local f = staging_fixture()
     assert(f.runtime:chat_open({ f.root .. "/demo.lua" }))
     assert(f.runtime:chat_hide())
+    for _, method in ipairs({ "approve", "reject", "approve_all", "reject_all" }) do
+      assert(not f.runtime["chat_" .. method](f.runtime), "idle hidden chat cannot decide files")
+    end
     assert(not f.runtime:open(), "hidden idle chat excludes native activity")
     assert(not f.runtime:shutdown(), "hidden chat still owns its runtime lease")
     vim.cmd("NvimAIStage TEST:approve")
@@ -290,7 +293,14 @@ local ok, err = xpcall(function()
     assert(vim.wait(3000, function()
       return owner:snapshot().phase == "closed"
     end, 10))
-    assert(f.runtime:open(), "Confirmed close releases the conversation lease")
+    local opened, opening_error = f.runtime:open()
+    assert(
+      opened,
+      "Confirmed close releases the conversation lease: "
+        .. tostring(opening_error)
+        .. " "
+        .. vim.inspect(f.notices)
+    )
     assert(not f.runtime:conversation(config), "An active native pane excludes a conversation")
     f.runtime:shutdown()
   end

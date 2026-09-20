@@ -18,6 +18,10 @@ local bindings = {
   { "NvimAIChatRetry", false, "chat_retry", "Draft: explicitly retry a safe failed turn" },
   { "NvimAIChatClose", false, "chat_close", "Draft: close conversation and release scope" },
   { "NvimAIChatReview", false, "chat_review", "Draft: open a frozen proposal preview" },
+  { "NvimAIChatApprove", false, "chat_approve", "Draft: accept the visible frozen file" },
+  { "NvimAIChatReject", false, "chat_reject", "Draft: reject the visible frozen file" },
+  { "NvimAIChatApproveAll", false, "chat_approve_all", "Draft: confirm accepting remaining files" },
+  { "NvimAIChatRejectAll", false, "chat_reject_all", "Draft: confirm rejecting remaining files" },
 }
 
 local function backend_hint(health, enabled)
@@ -117,7 +121,20 @@ function M.setup(options)
     lease.owner = owner
     return owner
   end
-  for _, method in ipairs({ "open", "new", "send", "hide", "cancel", "retry", "close", "review" }) do
+  for _, method in ipairs({
+    "open",
+    "new",
+    "send",
+    "hide",
+    "cancel",
+    "retry",
+    "close",
+    "review",
+    "approve",
+    "reject",
+    "approve_all",
+    "reject_all",
+  }) do
     runtime["chat_" .. method] = function(_, files)
       if state.stopped then
         return nil, "AI runtime is stopped"

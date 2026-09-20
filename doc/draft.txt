@@ -106,6 +106,10 @@ COMMANDS                                                        *draft-commands*
 :NvimAIChatRetry       Explicitly retry a failure proven safe to retry.
 :NvimAIChatClose       Close the owner and release its scope after cleanup.
 :NvimAIChatReview      Select a frozen proposal file for read-only preview.
+:NvimAIChatApprove     Accept the visible pending file and advance after receipt.
+:NvimAIChatReject      Reject the visible pending file and stay on it.
+:NvimAIChatApproveAll  Confirm acceptance after visiting every pending diff.
+:NvimAIChatRejectAll   Confirm rejection of all remaining pending files.
 
 CONVERSATIONS                                                      *draft-chat*
 
@@ -122,9 +126,30 @@ older transcript text preserves its viewport; only tail followers auto-scroll.
 
 Chat-buffer keys: Ctrl-S send (normal/insert); q hide (normal); gi compose;
 gd review; gc cancel; gr retry; gx close; g? available actions. All are local to
-owned buffers. Opening a review is explicit and read-only. Return to chat with
-:NvimAIChat. Closing its diff tab does not decide or cancel the proposal.
-Chat approval/revision controls and model selection are planned separately.
+owned buffers. Opening a review is explicit and read-only. In its frozen panels:
+  a       Accept the displayed pending file; advance after the writer receipt.
+  r       Reject the displayed pending file; stay on it while others are pending.
+  ]f/[f   Next/previous file.
+  A/R     Confirm accepting/rejecting all remaining pending files.
+  f       Return to the composer for a follow-up.
+  q       Confirm discarding pending review; accepted files stay saved.
+Approval requires the actual frozen diff to be visible. Batch approval requires
+a visit to every pending diff in this proposal revision. Commands never open a
+diff and approve it in one gesture. A receipt arriving after you leave a review
+updates outcomes without taking focus back.
+
+While review is pending, explicit Send discusses or revises that proposal; it
+does not approve. A discussion can retain the same validated proposal. A
+replacement retires the previous proposal and requires fresh visits. Accepted
+and rejected files remain confirmed context for later turns. Chat shows file
+outcomes from writer receipts, separately from the assistant's text, including
+pending, accepted, rejected, cancelled, blocked and uncertain states.
+
+Return to chat with f or :NvimAIChat. Closing only the diff tab makes no decision.
+Changed source/alias buffers or frozen panels prevent approval. Close the
+conversation, inspect/save your edits and start a new one. Inspect disk before
+further work if publication is uncertain. The model picker is planned separately;
+use :NvimAIStageSetup before opening the conversation.
 
 Hide/window closure preserves the owner and draft. Reopen with :NvimAIChat;
 there is no implicit send. An idle/hidden owner excludes native and standalone
@@ -214,7 +239,7 @@ it. Do not sweep temporary-directory families.
 Conversations retain OpenCode context across explicit turns with fresh isolated
 workers. Ordinary staged follow-ups still use fresh generations. Linux fixtures
 and pinned OpenCode with a local scripted provider are separate from live-account
-acceptance. See tests/README.md and docs/validation/2026-09-20-conversation-ui.md
+acceptance. See tests/README.md and docs/validation/2026-09-20-conversation-approval.md
 for the UI evidence, and the 2026-09-19 controller record for provider interop.
 
  vim:tw=80:ts=8:noet:ft=help:norl:

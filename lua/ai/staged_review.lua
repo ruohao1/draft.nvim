@@ -253,13 +253,59 @@ local function finish(state, verdict)
   )
 end
 
-local function visible_review(state)
+local function confirmation_snapshot(state)
+  local selected, buffers, snapshot = {}, {}, {}
+  for _, item in ipairs(state.files) do
+    selected[item.file], buffers[item.source] = true, true
+  end
+  for buf in pairs(state.panels) do
+    buffers[buf] = true
+  end
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if
+      vim.api.nvim_buf_is_loaded(buf)
+      and selected[vim.uv.fs_realpath(vim.api.nvim_buf_get_name(buf))]
+    then
+      buffers[buf] = true
+    end
+  end
+  for buf in pairs(buffers) do
+    if vim.api.nvim_buf_is_valid(buf) then
+      local item = {
+        name = vim.api.nvim_buf_get_name(buf),
+        loaded = vim.api.nvim_buf_is_loaded(buf),
+        tick = vim.api.nvim_buf_get_changedtick(buf),
+      }
+      for _, option in ipairs({
+        "modified",
+        "buftype",
+        "binary",
+        "bomb",
+        "fileformat",
+        "fileencoding",
+        "endofline",
+        "readonly",
+        "modifiable",
+      }) do
+        item[option] = vim.bo[buf][option]
+      end
+      snapshot[buf] = item
+    else
+      snapshot[buf] = false
+    end
+  end
+  return snapshot
+end
+
+local function visible_review(state, quiet)
   if
     not state.tab
     or not vim.api.nvim_tabpage_is_valid(state.tab)
     or vim.api.nvim_get_current_tabpage() ~= state.tab
   then
-    notify("Open the staged diff tab before deciding", vim.log.levels.WARN)
+    if not quiet then
+      notify("Open the staged diff tab before deciding", vim.log.levels.WARN)
+    end
     return false
   end
   local visible = {}
@@ -269,10 +315,40 @@ local function visible_review(state)
     end
   end
   if not visible[state.left] or not visible[state.right] then
-    notify("Both frozen diff panels must be visible before deciding", vim.log.levels.WARN)
+    if not quiet then
+      notify("Both frozen diff panels must be visible before deciding", vim.log.levels.WARN)
+    end
     return false
   end
   return true
+end
+
+local function navigation_guard(state)
+  local tab, index, revision = state.tab, state.index, state.revision
+  local windows = vim.deepcopy(state.windows)
+  local panels = { state.left, state.right }
+  return function()
+    if
+      state.phase ~= "review_ready"
+      or state.tab ~= tab
+      or state.index ~= index
+      or state.revision ~= revision
+      or vim.api.nvim_get_current_tabpage() ~= tab
+    then
+      return false
+    end
+    for position, win in ipairs(windows) do
+      if
+        not vim.api.nvim_win_is_valid(win)
+        or vim.api.nvim_win_get_tabpage(win) ~= tab
+        or vim.api.nvim_win_get_buf(win) ~= panels[position]
+        or not vim.wo[win].diff
+      then
+        return false
+      end
+    end
+    return true
+  end
 end
 
 local function frozen_unchanged(state)
@@ -440,6 +516,7 @@ end
 M.close, M.writer, M.finish = close_review, writer, finish
 M.visible, M.frozen_unchanged = visible_review, frozen_unchanged
 M.show_file, M.preview = show_file, preview
+M.confirmation_snapshot = confirmation_snapshot
 
 function M.can_decide(state, choice, remaining)
   if not visible_review(state) then
@@ -483,8 +560,9 @@ function M.open(frozen, captured, options)
   local state = vim.deepcopy(captured)
   state.proposal, state.id, state.python, state.multi =
     frozen.proposal, frozen.id, options.python, true
-  state.actions, state.controls =
-    options.actions, options.controls or "Frozen proposal — review before deciding"
+  state.actions = options.actions
+  state.controls = options.controls
+    or (not options.actions and "Frozen proposal — review before deciding" or nil)
   state.deferred = options.defer == true
   local first, total = nil, 0
   for index, item in ipairs(state.files) do
@@ -514,6 +592,16 @@ function M.open(frozen, captured, options)
       first = index
     end
   end
+  local navigation = vim.api.nvim_create_autocmd({ "TabLeave", "BufWinLeave" }, {
+    callback = function(event)
+      if
+        (event.event == "TabLeave" and state.tab == vim.api.nvim_get_current_tabpage())
+        or (event.event == "BufWinLeave" and state.panels and state.panels[event.buf])
+      then
+        state.revision = (state.revision or 0) + 1
+      end
+    end,
+  })
   local handle = {}
   function handle:show(path)
     if state.phase ~= "review_ready" then
@@ -538,26 +626,71 @@ function M.open(frozen, captured, options)
   function handle:intact()
     return state.phase == "review_ready" and sources_unchanged(state) and frozen_unchanged(state)
   end
-  function handle:decide(choice, path)
+  function handle:current()
+    if state.phase == "review_ready" and state.index and visible_review(state, true) then
+      return state.files[state.index].path
+    end
+  end
+  function handle:move(delta)
+    if not self:current() or (delta ~= 1 and delta ~= -1) then
+      return nil, "Open the frozen review before navigating its files"
+    end
+    return self:show(state.files[(state.index - 1 + delta) % #state.files + 1].path)
+  end
+  function handle:prepare(choice, remaining)
+    if
+      state.phase ~= "review_ready"
+      or not state.index
+      or (choice ~= "approve" and choice ~= "reject")
+      or (remaining ~= nil and type(remaining) ~= "boolean")
+    then
+      return nil, "Open a pending frozen review before deciding"
+    end
+    local allowed, reason = M.can_decide(state, choice, remaining)
+    if not allowed then
+      return nil, reason or "The frozen review is not visible"
+    end
+    local count = 0
+    for _, item in ipairs(state.files) do
+      if item.decision == "pending" then
+        count = count + 1
+      end
+    end
+    if count == 0 then
+      return nil, "No pending files remain"
+    end
+    local focused, snapshot = navigation_guard(state), confirmation_snapshot(state)
+    return {
+      path = not remaining and state.files[state.index].path or nil,
+      remaining = remaining and true or nil,
+      count = remaining and count or 1,
+      valid = function()
+        return focused() and vim.deep_equal(snapshot, confirmation_snapshot(state))
+      end,
+    }
+  end
+  function handle:decide(choice, path, remaining)
     if
       state.phase ~= "review_ready"
       or (choice ~= "approve" and choice ~= "reject")
       or not state.index
-      or state.files[state.index].path ~= path
+      or (remaining ~= nil and type(remaining) ~= "boolean")
+      or (remaining and path ~= nil)
+      or (not remaining and state.files[state.index].path ~= path)
     then
       return nil, "Open this pending file in its frozen review before deciding"
     end
-    local allowed, reason = M.can_decide(state, choice, false)
+    local allowed, reason = M.can_decide(state, choice, remaining)
     if not allowed then
       return nil, reason or "The frozen review is not visible"
     end
-    local prior = {}
+    local focused, prior = navigation_guard(state), {}
     for _, item in ipairs(state.files) do
       prior[item.path] = item.decision
     end
     state.phase = "applying"
     -- Preserve the existing synchronous guard-to-publication boundary.
-    local verdict = writer(state, choice, false)
+    local verdict = writer(state, choice, remaining)
     finish(state, verdict)
     local refreshed = choice ~= "approve" or refresh_accepted(state, prior)
     local reason
@@ -567,11 +700,12 @@ function M.open(frozen, captured, options)
     then
       reason = "Accepted source buffers or writer evidence require recovery"
     end
-    return verdict, reason
+    return verdict, reason, focused
   end
   function handle:retire()
     -- This handle owns only editor eligibility; Python retires writer authority.
     state.phase = "retired"
+    pcall(vim.api.nvim_del_autocmd, navigation)
     close_review(state)
   end
   handle.close = handle.retire

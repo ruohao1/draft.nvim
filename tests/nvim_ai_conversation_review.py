@@ -70,6 +70,41 @@ class RegistryTest(unittest.TestCase):
             self.registry.receipt(command)
         self.assertEqual((self.root / 'first.txt').read_bytes(), b'original text\n')
 
+    def test_batch_receipt_requires_the_actual_full_writer_intent(self):
+        command = self.command(choice='approve', remaining=True)
+        with self.assertRaises(ValueError):
+            self.registry.receipt(command)
+        staging.decide(self.first['proposal'], self.first['id'], 'approve', remaining=True)
+        receipt = self.registry.receipt(command)
+        self.assertEqual(receipt['phase'], 'applied')
+        self.assertEqual([item['state'] for item in receipt['decisions']], ['accepted', 'accepted'])
+        self.assertEqual(receipt['sequence'], 1)
+        self.assertIsNone(self.registry.current)
+        self.assertEqual([path.read_bytes() for path in (self.root / name for name in self.paths)],
+                         [b'proposed edit\n', b'proposed edit\n'])
+
+    def test_single_file_journal_cannot_be_presented_as_batch_authority(self):
+        command = self.command(choice='approve', remaining=True)
+        staging.decide(self.first['proposal'], self.first['id'], 'approve', 'first.txt')
+        with self.assertRaisesRegex(ValueError, 'intent'):
+            self.registry.receipt(command)
+        self.assertEqual(self.registry.current['receipt_sequence'], 0)
+        self.assertEqual((self.root / 'second.txt').read_bytes(), b'original text\n')
+
+    def test_reject_remaining_after_revision_preserves_inherited_acceptance(self):
+        command = self.command(choice='approve', path='first.txt')
+        staging.decide(self.first['proposal'], self.first['id'], 'approve', 'first.txt')
+        self.registry.receipt(command)
+        candidate = self.freeze([b'proposed edit\n', b'revised edit\n'], self.revision())
+        self.registry.finish_revision(candidate, 2)
+        command = self.command(choice='reject', remaining=True)
+        staging.decide(candidate['proposal'], candidate['id'], 'reject', remaining=True)
+        receipt = self.registry.receipt(command)
+        self.assertEqual([item['state'] for item in receipt['decisions']], ['accepted', 'rejected'])
+        self.assertEqual(receipt['phase'], 'applied')
+        self.assertEqual((self.root / 'first.txt').read_bytes(), b'proposed edit\n')
+        self.assertEqual((self.root / 'second.txt').read_bytes(), b'original text\n')
+
     def test_failure_before_fence_can_restore_only_after_candidate_retirement(self):
         candidate = self.freeze([b'revised edit\n'] * 2, self.revision())
         with patch.object(self.registry.pending, 'retire', side_effect=OSError('before fence')):

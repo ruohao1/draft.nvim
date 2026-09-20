@@ -103,10 +103,14 @@ class ReviewRegistry:
 
     def receipt(self, command):
         entry = self.match(command)
-        if not any(item['path'] == command['path'] and item['state'] == 'pending' for item in entry['files']):
-            raise ValueError('Only a pending selected file can receive a decision')
+        if 'remaining' in command and (command['remaining'] is not True or 'path' in command):
+            raise ValueError('Invalid remaining-file decision')
+        paths = [item['path'] for item in entry['files'] if item['state'] == 'pending'
+                 and (command.get('remaining') is True or item['path'] == command.get('path'))]
+        if not paths:
+            raise ValueError('Only pending selected files can receive a decision')
         value = decisions.read_receipt(entry['manifest'], entry['token'])
-        return self.normalize(entry, value, command['choice'], [command['path']])
+        return self.normalize(entry, value, command['choice'], paths)
 
     def begin_revision(self, command):
         entry = self.match(command)

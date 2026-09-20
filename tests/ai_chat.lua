@@ -80,19 +80,19 @@ local chat = chat_module.new({
     return owner
   end,
 })
-local function answer(text, proposal)
+local function answer(text, proposal, evidence)
   local driver = last().driver
   assert(driver:emit({ kind = "submitted", model = "fixture/model" }))
   assert(driver:emit({ kind = "text", text = text }))
   assert(driver:emit({ kind = "stopping" }))
-  assert(driver:emit({
+  assert(driver:emit(vim.tbl_extend("force", {
     kind = "settled",
     outcome = proposal and "review" or "answer",
     stopped = true,
     graceful = true,
     store_valid = true,
     proposal = proposal,
-  }))
+  }, evidence or {})))
 end
 local function closed()
   assert(
@@ -163,12 +163,25 @@ local ok, reason = xpcall(function()
     source_generation = 1,
     files = { { path = "example.txt", state = "pending" } },
   })
-  local previews = 0
+  local previews, eligible = 0, true
   last().config.on_review({
     show = function(_, selected)
       assert(selected == "example.txt")
       previews = previews + 1
       return true
+    end,
+    current = function()
+      return nil
+    end,
+    prepare = function(_, _, remaining)
+      return {
+        path = not remaining and "example.txt" or nil,
+        remaining = remaining and true or nil,
+        count = 1,
+        valid = function()
+          return eligible
+        end,
+      }
     end,
   })
   assert(last().config.defer_review == true)
@@ -180,6 +193,63 @@ local ok, reason = xpcall(function()
   assert(chat:review())
   choose(nil, 1)
   assert(previews == 1 and #last().driver.requests == 1, "preview must never dispatch a decision")
+  assert(type(last().config.on_review_action) == "function")
+  for _, method in ipairs({ "approve_all", "reject_all" }) do
+    assert(chat[method](chat))
+    local stale_batch = #pending
+    compose("changed while " .. method .. " was open")
+    choose(stale_batch)
+    assert(last().owner:snapshot().phase == "review" and #last().driver.requests == 1)
+    assert(chat[method](chat))
+    stale_batch = #pending
+    assert(chat:hide() and chat:open())
+    choose(stale_batch)
+    assert(last().owner:snapshot().phase == "review")
+  end
+  assert(chat:approve_all())
+  local stale_batch = #pending
+  eligible = false
+  choose(stale_batch)
+  eligible = true
+  assert(last().owner:snapshot().phase == "review", "review eligibility must survive the dialog")
+  assert(chat:close())
+  local departed_dialog = #pending
+  vim.cmd("tabnew")
+  vim.cmd("tabclose")
+  choose(departed_dialog)
+  assert(last().owner:snapshot().phase == "review", "returning to a tab cannot revive its dialog")
+  assert(chat:close())
+  local older_dialog = #pending
+  assert(chat:cancel())
+  choose(older_dialog)
+  assert(last().owner:snapshot().phase == "review", "a newer dialog invalidates older dialogs")
+  assert(chat:approve_all())
+  stale_batch = #pending
+  local prior = last().owner:snapshot().review
+  compose("Discuss the pending proposal")
+  assert(chat:send())
+  local request = last().driver.requests[#last().driver.requests].command
+  assert(request.kind == "revise" and request.proposal_token == "proposal-1")
+  assert(request.round_id == prior.id and request.proposal_revision == prior.revision)
+  assert(last().owner:snapshot().review.status == "revising" and draft() == "")
+  compose("keep this newer follow-up")
+  assert(not chat:send() and draft() == "keep this newer follow-up")
+  answer("Discussion only", nil, {
+    candidates_retired = true,
+    prior_review = {
+      round_id = prior.id,
+      proposal_revision = prior.revision,
+      proposal_token = prior.token,
+      receipt_sequence = prior.receipt_sequence,
+      files = prior.files,
+      status = "active",
+      context_valid = true,
+    },
+  })
+  choose(stale_batch)
+  assert(last().owner:snapshot().phase == "review" and #last().driver.requests == 2)
+  assert(draft() == "keep this newer follow-up")
+  print("ok - explicit Send follows up; draft, view, eligibility and newer dialogs fence batches")
   assert(chat:close())
   local stale_close = #pending
   compose("edited while confirmation open")
@@ -205,6 +275,7 @@ local ok, reason = xpcall(function()
     store_valid = true,
     tokens_retired = true,
     cancel_confirmed = true,
+    candidates_retired = true,
     receipt = {
       round_id = 1,
       proposal_revision = 1,

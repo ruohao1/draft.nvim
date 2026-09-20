@@ -172,8 +172,10 @@ def validate_command(command):
                     ("pending", "accepted", "rejected", "unchanged", "cancelled")):
                 raise Refused("Invalid review file context")
     if kind == "decide":
-        allowed |= {"choice", "path"}
-        if command.get("choice") not in ("approve", "reject") or command.get("path") not in selected:
+        allowed |= {"choice", "path", "remaining"}
+        single = command.get("path") in selected and "remaining" not in command
+        batch = command.get("remaining") is True and "path" not in command
+        if command.get("choice") not in ("approve", "reject") or not (single or batch):
             raise Refused("Invalid file decision")
     if set(command) - allowed:
         raise Refused("Unknown editor command fields")

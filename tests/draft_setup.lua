@@ -44,6 +44,10 @@ for _, name in ipairs({
   "NvimAIChatRetry",
   "NvimAIChatClose",
   "NvimAIChatReview",
+  "NvimAIChatApprove",
+  "NvimAIChatReject",
+  "NvimAIChatApproveAll",
+  "NvimAIChatRejectAll",
 }) do
   assert(vim.fn.exists(":" .. name) == 2, "setup must register " .. name)
 end
