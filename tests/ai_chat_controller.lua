@@ -126,6 +126,8 @@ end
 local ok, reason = xpcall(function()
   vim.cmd("NvimAIChat " .. vim.fn.fnameescape(source_path))
   assert(#audit == 0 and #processes == 0, "Opening must remain passive")
+  vim.cmd("NvimAIChatModel")
+  assert(#audit == 0 and #processes == 0, "Initial model refusal must remain passive")
   compose("First explicit question.")
   vim.cmd("NvimAIChatSend")
   vim.api.nvim_set_current_win(source_win)
@@ -156,6 +158,12 @@ local ok, reason = xpcall(function()
     count("method", "session/prompt") == 1
       and text("draft-chat-input") == "Second explicit question."
   )
+  local activity = #audit
+  vim.cmd("NvimAIChatModel")
+  wait_for(function()
+    return text("draft-chat"):find("next: fixture/second-model", 1, true) ~= nil
+  end, "Selected next-turn model did not render")
+  assert(#audit == activity and text("draft-chat-input") == "Second explicit question.")
   vim.cmd("NvimAIChatSend")
   wait_for(function()
     return #waiting == 1
@@ -164,6 +172,15 @@ local ok, reason = xpcall(function()
   phase("idle")
   assert(count("method", "session/new") == 1 and count("method", "session/resume") == 1)
   assert(count("method", "session/prompt") == 2)
+  local models = {}
+  for _, event in ipairs(audit) do
+    if event.method == "session/set_config_option" and event.params.configId == "model" then
+      models[#models + 1] = event.params.value
+    end
+  end
+  assert(vim.deep_equal(models, { "fixture/model", "fixture/second-model" }))
+  assert(text("draft-chat"):find("Assistant · fixture/model", 1, true))
+  assert(text("draft-chat"):find("Assistant · fixture/second-model", 1, true))
   compose("Keep this refused draft")
   vim.api.nvim_buf_set_lines(source, 0, -1, false, { "unsaved local edit" })
   vim.cmd("NvimAIChatSend")

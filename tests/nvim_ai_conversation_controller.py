@@ -170,10 +170,13 @@ class EngineTest(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=3)
 
-    def spawn(self, case="answer", fault=None):
-        self.config.write_text(json.dumps({"opencode": str(self.peer),
+    def spawn(self, case="answer", fault=None, auth_file=None):
+        configuration = {"opencode": str(self.peer),
             "bwrap": os.path.realpath(shutil.which("bwrap")), "model": "fixture/model",
-            "provider": {"fixture": {"options": {"testCase": case, "auditPort": self.server.server_address[1]}}}}))
+            "provider": {"fixture": {"options": {"testCase": case, "auditPort": self.server.server_address[1]}}}}
+        if auth_file:
+            configuration["auth_file"] = str(auth_file)
+        self.config.write_text(json.dumps(configuration))
         self.config.chmod(0o600)
         controller = [str(ROOT / "tests/fixtures/ai/conversation_fault_controller.py"), fault] if fault else [str(SCRIPT)]
         self.child = subprocess.Popen([sys.executable, "-I", "-B", *controller, "--config", str(self.config)],
@@ -193,7 +196,7 @@ class EngineTest(unittest.TestCase):
         for stream in (self.child.stdin, self.child.stdout, self.child.stderr):
             stream.close()
 
-    def send(self, kind, **extra):
+    def send(self, kind, *, model="fixture/model", **extra):
         self.serial += 1
         if kind in ("start", "revise"):
             self.turn += 1
@@ -202,7 +205,7 @@ class EngineTest(unittest.TestCase):
                 "snapshot_sha256": hashlib.sha256((self.root / path).read_bytes()).hexdigest()} for path in self.selection])
         command = dict(kind=kind, conversation_id="a" * 32, owner_generation=1,
             turn_id=self.turn, worker_generation=self.turn, root=str(self.root),
-            selection=self.selection, model="fixture/model", **extra)
+            selection=self.selection, model=model, **extra)
         self.child.stdin.write(json.dumps({"version": 1, "serial": self.serial, "command": command}).encode() + b'\n')
         self.child.stdin.flush()
 
@@ -314,14 +317,16 @@ class EngineTest(unittest.TestCase):
                 self.assertFalse(any(item.get("method") == "session/prompt" for item in self.audit))
                 self.stop()
 
-    def test_two_explicit_turns_resume_one_session_with_fresh_workers(self):
+    def test_different_models_resume_one_session_with_fresh_workers(self):
         self.spawn("held-answer")
         workers, tasks = [], []
-        for _ in range(2):
+        for model in ("fixture/model", "fixture/second-model"):
             self.audit[:] = [item for item in self.audit if "ready" not in item]
             self.gate.clear()
-            self.send("start")
-            self.receive("submitted")
+            self.send("start", model=model)
+            submitted = self.receive("submitted")
+            self.assertEqual(submitted["model"], model)
+            self.assertEqual(submitted["models"], ["fixture/model", "fixture/second-model"])
             self.wait_ready("held-answer")
             pid = int(Path(f"/proc/{self.child.pid}/task/{self.child.pid}/children").read_text().strip())
             workers.append(pid)
@@ -339,8 +344,52 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(methods.count("session/prompt"), 2)
         resumes = [item["params"]["sessionId"] for item in self.audit if item.get("method") == "session/resume"]
         self.assertEqual(resumes, ["fixture-session"])
+        choices = [item["params"]["value"] for item in self.audit
+                   if item.get("method") == "session/set_config_option" and item["params"]["configId"] == "model"]
+        self.assertEqual(choices, ["fixture/model", "fixture/second-model"])
         profiles = [item for item in self.audit if "profile_inode" in item]
         self.assertNotEqual(profiles[0]["listener_key_hash"], profiles[1]["listener_key_hash"])
+
+    def test_changed_catalog_and_unconfirmed_switch_never_submit_or_replace_session(self):
+        for case in ("switch-model-removed", "switch-unconfirmed"):
+            with self.subTest(case=case):
+                self.serial = self.turn = 0
+                self.audit.clear()
+                self.spawn(case)
+                self.send("start")
+                self.assertEqual(self.receive("settled")["outcome"], "answer")
+                self.send("start", model="fixture/second-model")
+                event = self.receive("settled")
+                self.assertEqual(event["outcome"], "failed")
+                self.assertEqual(event["submission"], "not_submitted")
+                self.assertFalse(event["store_valid"], "failed negotiation cannot claim resumable context")
+                self.assertFalse(any(item["kind"] == "submitted" and item["turn_id"] == 2 for item in self.events))
+                methods = [item.get("method") for item in self.audit]
+                self.assertEqual(methods.count("session/prompt"), 1)
+                self.assertEqual(methods.count("session/new"), 1)
+                self.assertEqual(methods.count("session/resume"), 1)
+                attempted = [item["params"]["value"] for item in self.audit
+                             if item.get("method") == "session/set_config_option" and item["params"]["configId"] == "model"]
+                self.assertEqual(attempted, ["fixture/model"] if case == "switch-model-removed"
+                                 else ["fixture/model", "fixture/second-model"])
+                self.assertEqual(self.source.read_bytes(), b"original text\n")
+                self.stop()
+
+    def test_missing_auth_on_next_turn_never_starts_a_worker_or_sends(self):
+        auth = self.scratch / "fixture-auth.json"
+        auth.write_text(json.dumps({"fixture": {"type": "api", "key": "synthetic-fixture-only"}}))
+        auth.chmod(0o600)
+        self.spawn(auth_file=auth)
+        self.send("start")
+        self.assertEqual(self.receive("settled")["outcome"], "answer")
+        before = list(self.audit)
+        auth.unlink()
+        self.send("start", model="fixture/second-model")
+        event = self.receive("settled")
+        self.assertEqual(event["outcome"], "failed")
+        self.assertEqual(event["submission"], "not_submitted")
+        self.assertEqual(self.audit, before, "missing copied auth must refuse before worker launch")
+        self.assertEqual(self.source.read_bytes(), b"original text\n")
 
     def test_clean_cancellation_can_resume_but_resume_failure_never_falls_back(self):
         for case in ("cancel", "resume-fails"):
