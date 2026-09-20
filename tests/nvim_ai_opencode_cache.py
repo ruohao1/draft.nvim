@@ -4,6 +4,7 @@ import importlib.util
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import stat
 import sys
@@ -182,6 +183,61 @@ class CompatibilityCacheTest(unittest.TestCase):
         result = self.seed()
         self.assertLess(result["duration_ms"], 1500, result)
         self.assertFalse(self.cache.exists())
+
+    def test_killed_cache_writer_leaves_private_untrusted_receipt(self):
+        self.seed()
+        receipt = json.loads(self.record().read_bytes())
+        self.record().unlink()
+        helper = self.runtime / "scripts/nvim-ai-opencode-cache.py"
+        original = helper.read_text()
+        marker = self.root / "writer-ready"
+        needle = "                os.fsync(fd)\n"
+        self.assertEqual(original.count(needle), 1)
+        hook = (f"                Path({str(marker)!r}).write_text('ready')\n"
+                "                time.sleep(30)\n" + needle)
+        helper.write_text(original.replace(needle, hook, 1))
+        request = {"directory": str(self.cache), "key": receipt["key"],
+                   "report": receipt["report"]}
+        child = subprocess.Popen([sys.executable, "-I", "-B", str(helper), "store"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env={"LANG": "C.UTF-8"}, umask=0o077)
+        try:
+            child.stdin.write(json.dumps(request).encode())
+            child.stdin.close()
+            child.stdin = None
+            deadline = time.monotonic() + 5
+            while not marker.exists() and child.poll() is None and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertTrue(marker.exists(), "copied helper did not reach the write boundary")
+            child.kill()
+            out, error = child.communicate(timeout=5)
+            self.assertEqual(child.returncode, -signal.SIGKILL, out + error)
+        finally:
+            if child.poll() is None:
+                child.kill()
+            child.communicate(timeout=5)
+            helper.write_text(original)
+        leftovers = list(self.cache.glob(".receipt-*"))
+        self.assertEqual(len(leftovers), 1)
+        orphan = leftovers[0]
+        before = orphan.read_bytes()
+        node = orphan.lstat()
+        self.assertTrue(stat.S_ISREG(node.st_mode))
+        self.assertEqual((stat.S_IMODE(node.st_mode), node.st_uid, node.st_nlink),
+                         (0o600, os.getuid(), 1))
+        self.assertLessEqual(len(before), 65536)
+        orphan_record = json.loads(before)
+        for field in ("schema", "key", "report"):
+            self.assertEqual(orphan_record[field], receipt[field])
+        self.assertEqual(orphan_record["expires_at"] - orphan_record["created_at"], 86400)
+        lookup = subprocess.run([sys.executable, "-I", "-B", str(helper), "lookup"],
+            input=json.dumps({"directory": str(self.cache), "key": receipt["key"]}).encode(),
+            capture_output=True, check=True, timeout=5, env={"LANG": "C.UTF-8"})
+        self.assertEqual(json.loads(lookup.stdout), {"hit": False})
+        self.seed()
+        self.assertEqual(self.run_editor()["starts"], 0)
+        self.assertEqual(orphan.read_bytes(), before)
+        self.assertEqual(orphan.lstat().st_ino, node.st_ino)
 
     def test_corrupt_duplicate_oversize_and_nonfinite_json_are_misses(self):
         self.seed()

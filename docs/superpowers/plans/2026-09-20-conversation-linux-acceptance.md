@@ -10,7 +10,7 @@
 
 **Spec:** [ISQ-237](https://linear.app/isqrd/issue/ISQ-237/validate-conversational-pre-write-workflow-end-to-end-on-linux), together with the existing [UI](../specs/2026-09-20-conversation-ui-design.md), [approval](../specs/2026-09-20-conversation-approval-design.md), and [model](../specs/2026-09-20-conversation-model-design.md) contracts. This is an acceptance plan for those interfaces, not a new architectural design.
 
-**Execution state:** Tasks 1–2 are verified; Tasks 3–4 remain. Coverage audited at `f4ec449d2c11532c7ad2a185d26d70b17e4a6cd7`; checked steps below have execution evidence in the task ledger. The existing [main CI](https://github.com/ruohao1/draft.nvim/actions/runs/35513883573) passed 58/58. That is baseline evidence, not a result for these proposed additions. Worktree: `.worktrees/conversation-acceptance`; branch: `test/conversation-linux-acceptance`.
+**Execution state:** Tasks 1–3 are verified; Task 4 remains. Coverage audited at `f4ec449d2c11532c7ad2a185d26d70b17e4a6cd7`; checked steps below have execution evidence in the task ledger. The existing [main CI](https://github.com/ruohao1/draft.nvim/actions/runs/35513883573) passed 58/58. That is baseline evidence, not a result for these proposed additions. Worktree: `.worktrees/conversation-acceptance`; branch: `test/conversation-linux-acceptance`.
 
 ## Global Constraints
 
@@ -230,7 +230,7 @@ Keep restart semantics explicit: normal editor EOF can let the surviving control
 
 **Interfaces:** Existing `CompatibilityCacheTest.seed()`, `record()`, `run_editor()` and per-test relocated helper copies. Helper CLI accepts `store` or `lookup` and JSON on stdin; returns `stored` or `hit`. Add the standard-library `signal` import.
 
-- [ ] **Step 1: Add a deterministic killed-writer test.** Block only the disposable copied helper after bytes are written but before rename. The marker, not elapsed startup time, proves the kill point:
+- [x] **Step 1: Add a deterministic killed-writer test.** Block only the disposable copied helper after bytes are written but before rename. The marker, not elapsed startup time, proves the kill point:
 
   ```python
   def test_killed_cache_writer_leaves_private_untrusted_receipt(self):
@@ -291,7 +291,7 @@ Keep restart semantics explicit: normal editor EOF can let the surviving control
 
   The stable-field comparison permits the second store to cross a clock second. The complete orphan must be valid for the explicit lookup key: failure must establish that the filename is untrusted, not merely that its cache fingerprint is stale.
 
-- [ ] **Step 2: Run existing cache regression coverage with the new test.**
+- [x] **Step 2: Run existing cache regression coverage with the new test.**
 
   ```sh
   python3 -I -B tests/run.py nvim_ai_opencode_cache
