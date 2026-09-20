@@ -107,7 +107,7 @@ assert(last().owner:snapshot().review.status == "revising")
 **Files:** create `tests/ai_chat_approval.lua`; extend production fixtures, `tests/nvim_ai_install.py` and private TUI coverage as needed; update `README.md`, `doc/draft.txt`, `tests/README.md`; add `docs/validation/2026-09-20-conversation-approval.md` and actual review UI captures.
 **Interfaces:** public commands and buffer-local keys through the real runtime, owner, controller, confined fake ACP and guarded publisher. No production test switches.
 
-- [ ] Build a disposable two/three-file public flow: request edits, prove disk unchanged, open real diffs, approve one and verify auto-advance, reject one, send a revision for pending files, inspect fresh token/visit requirements, and prove old callbacks cannot publish. Verify discussion-only follow-up and subsequent independent-turn context reflect confirmed decisions.
+- [x] Build a disposable two/three-file public flow: request edits, prove disk unchanged, open real diffs, approve one and verify auto-advance, reject one, send a revision for pending files, inspect fresh token/visit requirements, and prove old callbacks cannot publish. Verify discussion-only follow-up and subsequent independent-turn context reflect confirmed decisions.
 
 ```lua
 vim.cmd.NvimAIChatApprove()
@@ -117,10 +117,10 @@ assert(vim.fn.readfile(second)[1] == "original text")
 -- Later cancellation retires pending files and preserves first on disk.
 ```
 
-- [ ] Exercise public confirmed batches, source/alias/frozen-buffer drift, cancellation/close after partial acceptance, hidden runtime exclusion and preserved drafts. Extend relocated-install coverage to run the approval flow from a path with spaces.
-- [ ] Run the new integration suite before completing any uncovered behavior; each observed missing behavior gets a RED→GREEN fix. Run public flow/relocation/controller suites; expect all pass.
-- [ ] Capture actual review keys and partial-decision chat state in a private Neovim TUI. Visually inspect screenshots. Document twelve commands, a/r/A/R/f/q/navigation, all-diff visit requirement, Send-as-follow-up, truthful partial outcomes and recovery guidance.
-- [ ] Run `python3 -I -B tests/run.py`, `stylua --check lua tests` and `git diff --check`; expect every default suite passes with expected provider opt-in skips. Record exact counts and limitations; commit `docs: validate conversational approval and revision`.
+- [x] Exercise public confirmed batches, source/alias/frozen-buffer drift, cancellation/close after partial acceptance, hidden runtime exclusion and preserved drafts. Extend relocated-install coverage to run the approval flow from a path with spaces.
+- [x] Run the new integration suite before completing any uncovered behavior; each observed missing behavior gets a RED→GREEN fix. Run public flow/relocation/controller suites; expect all pass.
+- [x] Capture actual review keys and partial-decision chat state in a private Neovim TUI. Visually inspect screenshots. Document twelve commands, a/r/A/R/f/q/navigation, all-diff visit requirement, Send-as-follow-up, truthful partial outcomes and recovery guidance.
+- [x] Run `python3 -I -B tests/run.py`, `stylua --check lua tests` and `git diff --check`; expect every default suite passes with expected provider opt-in skips. Record exact counts and limitations; commit `docs: validate conversational approval and revision`.
 
 After Task 4: obtain one fresh-context whole-branch review, fix material findings
 with regressions and a green complete suite, then push and verify exact-head CI.

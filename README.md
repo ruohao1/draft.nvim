@@ -10,13 +10,13 @@ Draft has two editing workflows:
   copies, and approve each frozen proposal **before it reaches your project**.
 
 This is an early Linux extraction. `:NvimAIChat` offers multi-turn OpenCode
-questions beside your code, with streamed replies and explicit frozen previews.
-Chat approval/revision controls and a model picker are still planned; use the
-staged workflow below for pre-write approval today.
+questions and edits beside your code, with streamed replies and explicit per-file
+approval of frozen proposals. The chat model picker is planned separately;
+configure the model with `:NvimAIStageSetup` before opening a conversation.
 
 Chat retains context across explicit turns with fresh isolated workers and the
 same saved-source and frozen-review guards as staging. The
-[UI validation record](docs/validation/2026-09-20-conversation-ui.md) covers
+[approval validation record](docs/validation/2026-09-20-conversation-approval.md) covers
 synthetic providers; the [controller record](docs/validation/2026-09-19-conversation-controller.md)
 separately covers pinned OpenCode with a local scripted provider.
 
@@ -92,12 +92,36 @@ use one installation per Neovim process.
 | `:NvimAIChatRetry` | Retry only a failure proven safe to retry |
 | `:NvimAIChatClose` | Close the owner; confirm discarding a pending review |
 | `:NvimAIChatReview` | Choose a frozen proposal file for a read-only preview |
+| `:NvimAIChatApprove` | Accept the visible pending file and advance after confirmation from the writer |
+| `:NvimAIChatReject` | Reject the visible pending file, leaving it on screen |
+| `:NvimAIChatApproveAll` | Confirm accepting all remaining files, after visiting every pending diff |
+| `:NvimAIChatRejectAll` | Confirm rejecting all remaining pending files |
 
 Inside either chat buffer, normal-mode `gi` focuses the composer, `gd` opens
 review, `gc` cancels, `gr` retries, `gx` closes, and `g?` shows available actions.
-Ctrl-S works in normal and insert modes; `q` hides only in normal mode. Return
-from a frozen preview with `:NvimAIChat`. Closing a preview tab does not accept
-or discard its proposal; use ChatCancel or ChatClose explicitly.
+Ctrl-S works in normal and insert modes; `q` hides only in normal mode.
+
+When a turn proposes edits, open its frozen diff with `gd` or
+`:NvimAIChatReview`. In the diff, `a` accepts the displayed file and advances to
+the next pending file; `r` rejects it and stays on that file. Navigate with `]f`
+and `[f`. `A` / `R` confirm accepting/rejecting all remaining files. Batch
+approval requires visiting every pending diff in the current proposal revision.
+The approval commands require visible frozen panels and do not open them for you.
+
+Press `f` in a diff to return to the composer. **Send while review is pending is
+a follow-up**: discuss the proposal or request a revision without accepting it.
+A replacement requires fresh review; previously accepted/rejected files remain
+confirmed context. Chat reports file outcomes from the writer's receipts, including
+pending, accepted, rejected, cancelled, blocked and uncertain states.
+
+![Frozen conversational review](docs/images/conversation-review.png)
+![Confirmed file outcomes in chat](docs/images/conversation-decisions.png)
+
+Return to chat with `f` or `:NvimAIChat`. In a diff, `q` confirms discarding pending
+files. ChatCancel and ChatClose also confirm this; earlier accepted files stay
+saved. Closing only the diff tab makes no decision. If sources or frozen panels
+change, approval refuses. Close the conversation, inspect/save your changes, and
+start a new one. An uncertain outcome requires inspecting disk before further work.
 
 The selection stays fixed for the conversation: 1–16 saved existing files,
 at most 1 MiB combined, with the same file requirements as staging. New without

@@ -31,7 +31,7 @@ Choose individual suites by filename stem:
 ```sh
 python3 -I -B tests/run.py draft_setup draft_state ai_runtime
 python3 -I -B tests/run.py nvim_ai_acp_worker ai_conversation_driver
-python3 -I -B tests/run.py ai_chat ai_chat_view ai_chat_controller nvim_ai_chat_ui
+python3 -I -B tests/run.py ai_chat ai_chat_view ai_chat_controller ai_chat_approval nvim_ai_chat_ui
 ```
 
 The review suite needs private root/platform variables; the runner supplies
@@ -46,14 +46,21 @@ environment; do not relax production ownership or sandbox checks.
 runtime, controller, confinement and copied fake ACP peer: two explicit turns,
 streamed text/progress, eligible context resume, hidden cancellation, deferred
 frozen previews, source refusal and cleanup. `nvim_ai_install` repeats that flow
-from a plugin path with spaces and an unrelated cwd. The controller suite also
+from a plugin path with spaces and an unrelated cwd. `ai_chat_approval` extends
+that production path with partial acceptance/rejection, pending revision,
+discussion, exact subsequent decision context, confirmed batches and real
+source/alias/frozen-buffer drift. It checks stale dialogs and retired mappings,
+runtime exclusion, accepted-file preservation, and return to hidden chat even
+after the original tab closes. Relocated-install coverage repeats this flow.
+The controller suite also
 observes public-chat Neovim EOF through process handles and checks private-state
 removal. These tests send no live-account requests.
 
-`nvim_ai_chat_ui` uses actual Enter/Ctrl-S/q keys in a private tmux server and
-Neovim TUI. Its semantic owner receives deterministic in-process provider events;
-it verifies input and layout, not ACP compatibility. It can capture the real
-wide/narrow terminal grids for review:
+`nvim_ai_chat_ui` uses actual keys in a private tmux server and Neovim TUI. Its
+basic input/layout case uses deterministic in-process provider events. Its
+approval case uses the production controller, confined fake ACP peer and real
+writer to exercise a/r/A/R/f/q, file navigation, revisions and partial receipts.
+It can capture the real terminal grids for review:
 
 ```sh
 DRAFT_CHAT_CAPTURE_DIR=/tmp/draft-chat-captures \
@@ -64,12 +71,19 @@ python3 -I -B tests/fixtures/ai/render_chat_capture.py \
 python3 -I -B tests/fixtures/ai/render_chat_capture.py \
   /tmp/draft-chat-captures/conversation-narrow.ansi \
   /tmp/draft-chat-captures/conversation-narrow.png --columns 70
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-chat-captures/conversation-review.ansi \
+  /tmp/draft-chat-captures/conversation-review.png --columns 140
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-chat-captures/conversation-decisions.ansi \
+  /tmp/draft-chat-captures/conversation-decisions.png --columns 140
 ```
 
 Only this optional PNG renderer needs Pillow and DejaVu Sans Mono. It translates
 captured cells/SGR colors; the plugin and default tests keep standard-library
 Python dependencies. The committed captures and acceptance record are in
-[`docs/validation/2026-09-20-conversation-ui.md`](../docs/validation/2026-09-20-conversation-ui.md).
+[`docs/validation/2026-09-20-conversation-approval.md`](../docs/validation/2026-09-20-conversation-approval.md)
+and the earlier UI record.
 
 ## Linux CI
 
