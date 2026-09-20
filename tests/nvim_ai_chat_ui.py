@@ -257,6 +257,44 @@ class ChatApprovalUITest(ChatTerminal):
         self.command("NvimAIChatClose")
         self.phase("closed")
 
+    def test_model_switch_after_review_keeps_saved_files_and_session(self):
+        self.send("Propose edits to the selected files.")
+        self.review()
+        self.keys("R")
+        self.confirm("Reject remaining 3 file(s)?")
+        self.phase("idle")
+        self.command("NvimAIChat")
+        self.keys("i")
+        self.literal("Discuss the rejected edits.")
+        self.keys("Escape", "g", "m")
+        self.wait(lambda: "Model for next turn (conversation only)" in
+                  self.tm("capture-pane", "-p", "-t", "draft"), "model picker")
+        self.keys("2", "Enter")
+        self.wait(lambda: self.evaluate(
+            "chat_approval_fixture.snapshot().desired_model") ==
+            "fixture/second-model", "local model selection")
+        self.assertEqual(self.evaluate("chat_approval_fixture.snapshot().turn_id"), "1")
+        self.assertEqual(self.evaluate("vim.api.nvim_get_current_line()"),
+                         "Discuss the rejected edits.")
+        self.keys("C-s")
+        self.wait(lambda: self.evaluate(
+            "chat_approval_fixture.snapshot().turn_id == 2 and "
+            "chat_approval_fixture.snapshot().phase == 'idle'") == "true",
+            "second completed turn")
+        for index in (1, 2, 3):
+            self.assertEqual(self.evaluate(f"chat_approval_fixture.disk({index})"),
+                             "original text")
+        audit = json.loads(self.evaluate("vim.json.encode(chat_approval_fixture.audit)"))
+        methods = [event.get("method") for event in audit]
+        self.assertEqual(methods.count("session/new"), 1)
+        self.assertEqual(methods.count("session/resume"), 1)
+        self.assertEqual(methods.count("session/prompt"), 2)
+        self.wait(lambda: "Assistant · fixture/second-model" in
+                  self.capture("conversation-acceptance"), "second model label")
+        self.assertIn("Assistant · fixture/model", self.capture("conversation-acceptance"))
+        self.command("NvimAIChatClose")
+        self.phase("closed")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -67,8 +67,39 @@ local function states(expected)
     assert(f.snapshot().rounds[#f.snapshot().rounds].files[index].state == value)
   end
 end
+local function method_count(method)
+  local total = 0
+  for _, event in ipairs(f.audit) do
+    if event.method == method then
+      total = total + 1
+    end
+  end
+  return total
+end
+local function completed(turn_id, phase)
+  assert(
+    vim.wait(12000, function()
+      local state = f.snapshot()
+      return state.turn_id == turn_id and state.phase == phase
+    end, 10),
+    vim.inspect(f.snapshot())
+  )
+end
 local ok, reason = xpcall(function()
   assert(#f.audit == 0)
+  f.compose("Discuss the selected files without editing.")
+  vim.cmd("NvimAIChatSend")
+  completed(1, "idle")
+  assert(method_count("session/prompt") == 1)
+  for index = 1, 3 do
+    assert(f.disk(index) == "original text")
+  end
+  f.compose("Propose edits to all selected files.")
+  vim.cmd("NvimAIChatModel")
+  choose(nil, 2)
+  assert(f.snapshot().desired_model == "fixture/second-model")
+  assert(f.snapshot().turn_id == 1 and method_count("session/prompt") == 1)
+  assert(f.text("draft-chat-input") == "Propose edits to all selected files.")
   request()
   local original = f.snapshot().review
   for index = 1, 3 do
@@ -117,18 +148,39 @@ local ok, reason = xpcall(function()
     f.disk(1) == "proposed edit" and f.disk(2) == "original text" and f.disk(3) == "revised edit"
   )
   vim.cmd("NvimAIChat")
+  local reviewed = vim.deepcopy(f.snapshot().rounds[1])
+  vim.cmd("NvimAIChatModel")
+  choose(nil, 1)
+  assert(f.snapshot().desired_model == "fixture/model")
+  assert(method_count("session/prompt") == 4)
+  assert(vim.deep_equal(f.snapshot().rounds[1], reviewed))
   f.compose("Discuss the saved results.")
   vim.cmd("NvimAIChatSend")
-  f.phase("idle")
+  completed(5, "idle")
   assert(
     context()[1].state == "accepted"
       and context()[2].state == "rejected"
       and context()[3].state == "accepted"
   )
+  assert(method_count("session/new") == 1)
+  assert(method_count("session/resume") == 4)
+  assert(method_count("session/prompt") == 5)
+  local expected = {
+    "fixture/model",
+    "fixture/second-model",
+    "fixture/second-model",
+    "fixture/second-model",
+    "fixture/model",
+  }
+  for index, model in ipairs(expected) do
+    assert(f.snapshot().turns[index].model == model)
+  end
+  assert(f.snapshot().rounds[1].model == "fixture/second-model")
+  assert(f.disk(1) == "proposed edit")
+  assert(f.disk(2) == "original text")
+  assert(f.disk(3) == "revised edit")
   f.rendered("third.txt · accepted")
-  print(
-    "ok - public partial approval, rejection, revision and discussion retain exact decision context"
-  )
+  print("ok - public discussion, model changes and partial approval retain exact decision context")
 
   fresh()
   review()
