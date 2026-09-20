@@ -64,6 +64,20 @@ unchanged.
 The final complete run after both corrections passed **58/58**, including the
 formerly intermittent staging assertion. Formatting and whitespace remained clean.
 
+Initial PR CI then exposed two timing assumptions (push CI passed on that same
+commit). The relocated chat test could accept the previous turn's idle frame;
+an 800 ms render delay in a disposable copy reproduced the failure. It now waits
+for the second turn to render as generating before releasing the provider gate.
+The cache concurrency test now exercises four completed atomic helper writes
+directly, then verifies a fresh editor reuses the receipt. Individual editor
+integration and the bounded-cache-timeout test remain in place.
+
+Known follow-up: a cache helper hard-killed during a write can retain a private
+`.receipt-*` temporary file. A delayed write reproduced this. Readers only
+consider the complete `compatibility.json` receipt, so the residue grants no
+compatibility or writer authority; interrupted-cache cleanup remains to address
+in broader acceptance. This model-selection change does not alter cache code.
+
 All fixtures use synthetic credentials, disposable HOME/XDG directories,
 loopback audit endpoints and isolated editors. No paid provider request, real
 credentials, live editor, user tmux server or personal configuration was used.

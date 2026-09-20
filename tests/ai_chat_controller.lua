@@ -168,6 +168,8 @@ local ok, reason = xpcall(function()
   wait_for(function()
     return #waiting == 1
   end, "Second turn did not stream")
+  -- Do not accept the previous turn's idle frame before this turn renders.
+  phase("generating")
   release()
   phase("idle")
   assert(count("method", "session/new") == 1 and count("method", "session/resume") == 1)
