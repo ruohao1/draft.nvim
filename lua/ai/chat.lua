@@ -15,9 +15,7 @@ function M.new(options)
   end
 
   local function refusal(reason)
-    if view then
-      view:notice(reason)
-    else
+    if not view or not view:notice(reason) then
       (options.notify or vim.notify)(reason, vim.log.levels.WARN)
     end
     return nil, reason
@@ -304,6 +302,42 @@ function M.new(options)
     return show()
   end
 
+  function chat:model()
+    local state, reason = snapshot()
+    if not state then
+      return refusal(reason)
+    end
+    if state.phase ~= "idle" then
+      return refusal(
+        "Model selection requires an idle conversation; current state: " .. state.phase
+      )
+    end
+    if not state.confirmed_model then
+      return refusal(
+        "Model choices are available after an explicitly sent, successfully negotiated turn"
+      )
+    end
+    local choices, valid = vim.deepcopy(state.available_models), fence()
+    vim.ui.select(choices, {
+      prompt = "Model for next turn (conversation only)",
+      format_item = function(value)
+        return value .. (value == state.desired_model and " (selected)" or "")
+      end,
+    }, function(chosen)
+      if chosen == nil then
+        return
+      end
+      if not valid() then
+        return refusal("Model choice expired; reopen the picker")
+      end
+      if not vim.list_contains(choices, chosen) then
+        return refusal("Choose an advertised model")
+      end
+      return dispatch({ kind = "choose-model", model = chosen })
+    end)
+    return true
+  end
+
   local function decide(choice, remaining)
     local binding, state = current_review()
     if not binding then
@@ -397,6 +431,7 @@ function M.new(options)
     end
     if state.phase == "idle" then
       add("Send draft", "send")
+      add("Choose next-turn model", "model")
     end
     if state.retry_safe then
       add("Retry failed turn", "retry")

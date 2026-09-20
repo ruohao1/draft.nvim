@@ -11,8 +11,8 @@ Draft has two editing workflows:
 
 This is an early Linux extraction. `:NvimAIChat` offers multi-turn OpenCode
 questions and edits beside your code, with streamed replies and explicit per-file
-approval of frozen proposals. The chat model picker is planned separately;
-configure the model with `:NvimAIStageSetup` before opening a conversation.
+approval of frozen proposals. Configure the initial model with
+`:NvimAIStageSetup`; use `:NvimAIChatModel` to choose a later turn's model.
 
 Chat retains context across explicit turns with fresh isolated workers and the
 same saved-source and frozen-review guards as staging. The
@@ -92,14 +92,37 @@ use one installation per Neovim process.
 | `:NvimAIChatRetry` | Retry only a failure proven safe to retry |
 | `:NvimAIChatClose` | Close the owner; confirm discarding a pending review |
 | `:NvimAIChatReview` | Choose a frozen proposal file for a read-only preview |
+| `:NvimAIChatModel` | Choose an advertised model for the next turn while idle |
 | `:NvimAIChatApprove` | Accept the visible pending file and advance after confirmation from the writer |
 | `:NvimAIChatReject` | Reject the visible pending file, leaving it on screen |
 | `:NvimAIChatApproveAll` | Confirm accepting all remaining files, after visiting every pending diff |
 | `:NvimAIChatRejectAll` | Confirm rejecting all remaining pending files |
 
 Inside either chat buffer, normal-mode `gi` focuses the composer, `gd` opens
-review, `gc` cancels, `gr` retries, `gx` closes, and `g?` shows available actions.
+review, `gm` chooses a model, `gc` cancels, `gr` retries, `gx` closes, and `g?` shows available actions.
 Ctrl-S works in normal and insert modes; `q` hides only in normal mode.
+
+After an explicitly sent turn negotiates model choices, press `gm` while idle
+to choose from the latest advertised models for the configured provider. Before
+that first negotiation, the picker explains that an explicit Send is required.
+Selecting or cancelling never starts a worker, sends the draft or changes saved
+settings. The `next:` label shows the selection; earlier replies keep their own
+model labels. Generation, pending approval, failed sessions and closed history
+refuse selection. Finish or explicitly discard pending review before switching.
+
+The choice stays with this conversation, including hide/reopen, until changed.
+An explicit New uses the saved default again. `:NvimAIStageSetup` separately
+saves the default for future conversations. The next explicit Send resumes the
+same session and revalidates the selected model before submitting. If options
+change, authentication is missing, or model confirmation/resume fails, there is
+no fallback model or replacement session. Follow the displayed recovery reason:
+Retry is available only when proved safe; otherwise Close and explicitly start
+a new conversation, which starts fresh context.
+
+![Next-turn model with the previous reply and unsent draft intact](docs/images/conversation-model.png)
+
+The [model-selection validation record](docs/validation/2026-09-20-conversation-model.md)
+covers synthetic providers and real editor keys.
 
 When a turn proposes edits, open its frozen diff with `gd` or
 `:NvimAIChatReview`. In the diff, `a` accepts the displayed file and advances to

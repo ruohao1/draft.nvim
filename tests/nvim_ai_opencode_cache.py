@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import stat
+import sys
 import tempfile
 import time
 import unittest
@@ -246,10 +247,26 @@ class CompatibilityCacheTest(unittest.TestCase):
         self.assertEqual(self.cache.read_text(), "untouched")
 
     def test_concurrent_publication_leaves_one_complete_private_receipt(self):
+        self.seed()
+        record = self.record()
+        receipt = json.loads(record.read_bytes())
+        record.unlink()
+        request = json.dumps({"directory": str(self.cache), "key": receipt["key"],
+                              "report": receipt["report"]}).encode()
+
+        def publish(_):
+            # Exercise completed atomic writes independently of Neovim's 250 ms
+            # best-effort cache deadline; timeout behavior has its own test.
+            result = subprocess.run([sys.executable, "-I", "-B",
+                str(self.runtime / "scripts/nvim-ai-opencode-cache.py"), "store"],
+                input=request, capture_output=True, timeout=5, check=True, env={"LANG": "C.UTF-8"})
+            self.assertEqual(result.stderr, b"")
+            return json.loads(result.stdout)
+
         with ThreadPoolExecutor(max_workers=4) as pool:
-            results = list(pool.map(lambda _: self.run_editor(), range(4)))
+            results = list(pool.map(publish, range(4)))
         for result in results:
-            self.assertEqual(result["phase"], "ready")
+            self.assertEqual(result, {"stored": True})
         self.assertEqual(list(self.cache.iterdir()), [self.record()])
         self.assertEqual(self.run_editor()["starts"], 0)
 

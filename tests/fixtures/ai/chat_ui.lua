@@ -24,7 +24,11 @@ require("ai.conversation_controller").new = function(config)
     if command.kind == "start" then
       vim.g.chat_fixture_prompts = vim.g.chat_fixture_prompts + 1
       vim.g.chat_fixture_message = command.message
-      emit({ kind = "submitted", model = "fixture/model" })
+      emit({
+        kind = "submitted",
+        model = command.model,
+        models = { "fixture/model", "fixture/second-model" },
+      })
       emit({
         kind = "text",
         text = vim.g.chat_fixture_prompts == 1

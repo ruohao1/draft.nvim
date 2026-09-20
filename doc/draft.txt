@@ -106,6 +106,7 @@ COMMANDS                                                        *draft-commands*
 :NvimAIChatRetry       Explicitly retry a failure proven safe to retry.
 :NvimAIChatClose       Close the owner and release its scope after cleanup.
 :NvimAIChatReview      Select a frozen proposal file for read-only preview.
+:NvimAIChatModel       Choose an advertised next-turn model while idle.
 :NvimAIChatApprove     Accept the visible pending file and advance after receipt.
 :NvimAIChatReject      Reject the visible pending file and stay on it.
 :NvimAIChatApproveAll  Confirm acceptance after visiting every pending diff.
@@ -125,8 +126,9 @@ context. Streaming preserves source focus/cursor and your unsent draft. Reading
 older transcript text preserves its viewport; only tail followers auto-scroll.
 
 Chat-buffer keys: Ctrl-S send (normal/insert); q hide (normal); gi compose;
-gd review; gc cancel; gr retry; gx close; g? available actions. All are local to
-owned buffers. Opening a review is explicit and read-only. In its frozen panels:
+gd review; gm next-turn model; gc cancel; gr retry; gx close; g? available actions.
+All are local to owned buffers. Opening review is explicit and read-only.
+In its frozen panels:
   a       Accept the displayed pending file; advance after the writer receipt.
   r       Reject the displayed pending file; stay on it while others are pending.
   ]f/[f   Next/previous file.
@@ -148,8 +150,24 @@ pending, accepted, rejected, cancelled, blocked and uncertain states.
 Return to chat with f or :NvimAIChat. Closing only the diff tab makes no decision.
 Changed source/alias buffers or frozen panels prevent approval. Close the
 conversation, inspect/save your edits and start a new one. Inspect disk before
-further work if publication is uncertain. The model picker is planned separately;
-use :NvimAIStageSetup before opening the conversation.
+further work if publication is uncertain.
+
+After an explicitly sent turn negotiates choices, gm or :NvimAIChatModel lists
+the latest advertised models for the configured provider. Before the first
+negotiation, it explains that an explicit Send is required. Selection is allowed
+only while idle; generation, pending review, failed and closed states refuse it.
+Finish or explicitly discard review before switching. Cancelling, opening or
+choosing in the picker never starts a worker, sends a draft or saves settings.
+Stale choices after draft edits, state changes or leaving the view are refused.
+
+The next: label is this conversation's selection until changed; earlier turns
+keep their model labels. Hide/reopen retains it. New uses the saved default from
+:NvimAIStageSetup, which separately configures future conversations. The next
+explicit Send resumes the same session and confirms the model again. Removed
+options, missing auth, failed confirmation or failed resume cannot silently
+fall back, submit or create a replacement session. Follow the recovery reason:
+Retry is available only when proved safe; otherwise Close and explicitly start
+a new conversation with fresh context.
 
 Hide/window closure preserves the owner and draft. Reopen with :NvimAIChat;
 there is no implicit send. An idle/hidden owner excludes native and standalone

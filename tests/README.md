@@ -58,7 +58,13 @@ removal. These tests send no live-account requests.
 
 `nvim_ai_chat_ui` uses actual keys in a private tmux server and Neovim TUI. Its
 basic input/layout case uses deterministic in-process provider events. Its
-approval case uses the production controller, confined fake ACP peer and real
+model case uses `gm`, cancellation, hide/reopen and explicit Send to verify
+passive choice and fixed historical labels. `ai_chat_model` covers stale dialogs,
+catalog replacement and the boundary between local choice and saved defaults.
+The production controller cases prove two models resume one session; removed
+options, rejected confirmation and missing synthetic credentials never send a
+second prompt or replace the session. The approval case uses the production
+controller, confined fake ACP peer and real
 writer to exercise a/r/A/R/f/q, file navigation, revisions and partial receipts.
 It can capture the real terminal grids for review:
 
@@ -77,13 +83,17 @@ python3 -I -B tests/fixtures/ai/render_chat_capture.py \
 python3 -I -B tests/fixtures/ai/render_chat_capture.py \
   /tmp/draft-chat-captures/conversation-decisions.ansi \
   /tmp/draft-chat-captures/conversation-decisions.png --columns 140
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-chat-captures/conversation-model.ansi \
+  /tmp/draft-chat-captures/conversation-model.png --columns 140
 ```
 
 Only this optional PNG renderer needs Pillow and DejaVu Sans Mono. It translates
 captured cells/SGR colors; the plugin and default tests keep standard-library
 Python dependencies. The committed captures and acceptance record are in
 [`docs/validation/2026-09-20-conversation-approval.md`](../docs/validation/2026-09-20-conversation-approval.md)
-and the earlier UI record.
+and the earlier UI record. Model selection has its own
+[validation record](../docs/validation/2026-09-20-conversation-model.md).
 
 ## Linux CI
 

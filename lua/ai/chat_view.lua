@@ -61,9 +61,10 @@ local function projection(snapshot, notice)
     prepend("")
   end
   local header = {
-    "Draft · " .. (snapshot.phase or "idle") .. " · " .. (snapshot.desired_model or ""),
+    "Draft · " .. (snapshot.phase or "idle") .. " · next: " .. (snapshot.desired_model or ""),
     "Scope: " .. table.concat(snapshot.selection or {}, ", "),
-    "Ctrl-S send · q hide · gi compose · gd review · g? actions",
+    "Ctrl-S send · q hide · gi compose · g? actions",
+    "gd review · gm model for next turn",
   }
   if snapshot.review and snapshot.review.status == "pending" then
     header[#header + 1] =
@@ -172,7 +173,7 @@ function M.new(options)
       vim.wo[win].winbar = (
         " Draft · "
         .. (latest.phase or "idle")
-        .. " · "
+        .. " · next: "
         .. (latest.desired_model or "")
       ):gsub("%%", "%%%%")
     end
@@ -241,6 +242,7 @@ function M.new(options)
       q = "hide",
       gi = "compose",
       gd = "review",
+      gm = "model",
       gc = "cancel",
       gr = "retry",
       gx = "close",
@@ -434,6 +436,7 @@ function M.new(options)
   function view:notice(reason)
     message = reason and prefix(tostring(reason), 1000) or nil
     schedule()
+    return visible and window("output") ~= nil and tab == vim.api.nvim_get_current_tabpage()
   end
 
   function view:dispose()

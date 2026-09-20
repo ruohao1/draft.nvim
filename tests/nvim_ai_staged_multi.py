@@ -77,7 +77,12 @@ class MultiFileTest(single.StagedTest):
         original_stat = self.second.stat()
         self.assertEqual(proposal["files"][1]["oldText"], proposal["files"][1]["newText"])
         self.assertEqual(self.decide(proposal)["phase"], "applied")
-        self.assertEqual(self.second.stat(), original_stat)
+        current_stat = self.second.stat()
+        # Revalidation reads may advance atime; writes/replacements must not occur.
+        for field in ("st_dev", "st_ino", "st_mode", "st_nlink", "st_uid", "st_gid",
+                      "st_size", "st_mtime_ns", "st_ctime_ns"):
+            self.assertEqual(getattr(current_stat, field), getattr(original_stat, field), field)
+        self.assertEqual(self.second.read_bytes(), self.original[1])
         self.file.write_bytes(self.original[0])
         proposal = self.ready_multi("multi-one")
         self.second.write_bytes(b"context changed\n")

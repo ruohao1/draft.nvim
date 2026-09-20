@@ -15,6 +15,7 @@ options = config['provider']['fixture']['options']
 case = options['testCase']
 session = 'fixture-session'
 model, mode = 'fixture/model', 'build'
+resumed = False
 
 
 def audit(value, wait=False):
@@ -34,11 +35,13 @@ def answer(identifier, result):
 
 
 def choices(model='fixture/model', mode='build'):
+    models = (['fixture/second-model'] if case == 'missing-model' else
+              ['fixture/model'] if case == 'switch-model-removed' and resumed else
+              ['fixture/model', 'fixture/second-model'])
     return [dict(id=key, name=key, type='select', category=key, currentValue=current,
                  options=[{'value': value, 'name': value} for value in values])
             for key, current, values in (
-                ('model', model, ['fixture/second-model'] if case == 'missing-model'
-                 else ['fixture/model', 'fixture/second-model']),
+                ('model', model, models),
                 ('mode', mode, ['plan'] if case == 'missing-mode' else ['build', 'plan']))]
 
 
@@ -71,6 +74,7 @@ for raw in sys.stdin:
         Path(os.environ['OPENCODE_DB']).write_bytes(b'synthetic private store')
         answer(identifier, {'sessionId': session, 'configOptions': choices()})
     elif method == 'session/resume':
+        resumed = True
         assert message['params'] == {'cwd': '/tmp/project', 'mcpServers': [], 'sessionId': session}
         assert Path(os.environ['OPENCODE_DB']).stat().st_size > 0
         if case == 'resume-fails':
@@ -82,7 +86,7 @@ for raw in sys.stdin:
         assert params['sessionId'] == session
         value = 'wrong' if case == 'wrong-confirmation' else params['value']
         if params['configId'] == 'model':
-            model = value
+            model = 'fixture/model' if case == 'switch-unconfirmed' and resumed else value
         else:
             mode = value
         answer(identifier, {'configOptions': choices(model, mode)})
