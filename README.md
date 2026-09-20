@@ -124,6 +124,10 @@ a new conversation, which starts fresh context.
 The [model-selection validation record](docs/validation/2026-09-20-conversation-model.md)
 covers synthetic providers and real editor keys.
 
+The [Linux acceptance checklist](docs/validation/2026-09-20-conversation-linux.md)
+combines model changes, per-file approval and failure recovery in a disposable
+worktree-Neovim session, with exact expected file contents.
+
 When a turn proposes edits, open its frozen diff with `gd` or
 `:NvimAIChatReview`. In the diff, `a` accepts the displayed file and advances to
 the next pending file; `r` rejects it and stays on that file. Navigate with `]f`
@@ -314,6 +318,14 @@ files and receipts; do not retry approval tokens or assume rollback occurred.
 Crash recovery and retention management are incomplete. Inspect only the exact
 artifact path reported by status when cleaning up obsolete evidence. Do not
 delete whole temporary-directory families or reuse old proposal tokens.
+
+A new editor starts fresh conversation context. SIGKILL can leave private
+`/tmp/draft-conversation-config-*` launch configuration, and interrupted cache
+writes can leave untrusted `.receipt-*` files in the compatibility cache. No
+automatic retention limit is provided for these remnants. Confirm their users
+have stopped before exact-path cleanup. Closing after a blocked or uncertain
+publication preserves the recovery reason and file outcomes; it does not retry
+writes, clear uncertainty or imply rollback.
 
 See [testing and validation](tests/README.md) and `:help draft` for more detail.
 Licensed under [MIT](LICENSE).

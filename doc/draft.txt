@@ -254,10 +254,18 @@ Crash recovery and retention management remain incomplete. Only inspect/remove
 an exact artifact path identified by status when no owned worker can still use
 it. Do not sweep temporary-directory families.
 
+A new editor starts fresh context. SIGKILL can leave private launch configuration
+under /tmp/draft-conversation-config-*. Interrupted compatibility-cache writes can
+leave untrusted .receipt-* files; no automatic aggregate retention limit exists.
+Close after a blocked/uncertain publication preserves recovery and file outcomes.
+It never retries writes, clears uncertainty or implies rollback.
+
 Conversations retain OpenCode context across explicit turns with fresh isolated
 workers. Ordinary staged follow-ups still use fresh generations. Linux fixtures
 and pinned OpenCode with a local scripted provider are separate from live-account
 acceptance. See tests/README.md and docs/validation/2026-09-20-conversation-approval.md
 for the UI evidence, and the 2026-09-19 controller record for provider interop.
+The exact disposable Linux checklist, expected file contents and recovery limits
+are in docs/validation/2026-09-20-conversation-linux.md.
 
  vim:tw=80:ts=8:noet:ft=help:norl:

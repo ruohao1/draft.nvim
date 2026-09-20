@@ -95,6 +95,13 @@ Python dependencies. The committed captures and acceptance record are in
 and the earlier UI record. Model selection has its own
 [validation record](../docs/validation/2026-09-20-conversation-model.md).
 
+The integrated [Linux acceptance record and exact worktree-Neovim checklist](../docs/validation/2026-09-20-conversation-linux.md)
+connect discussion, model changes, partial decisions, revisions and later turns.
+It distinguishes fixture automation, actual terminal input, agent-operated
+checklists, and unperformed user/live-account acceptance. It also records abrupt
+editor shutdown, retained launch/cache artifacts, and Close after terminal writer
+failures without losing publication recovery evidence.
+
 ## Linux CI
 
 [Linux tests](../.github/workflows/linux-tests.yml) runs the complete default
@@ -202,7 +209,8 @@ workers, retained storage, review receipts, cancellation/backpressure and proces
 lifetime. A separate scripted controller remains in the isolated pipe unit suite.
 Real headless tests exercise the production factory, guarded publication, dirty
 hidden aliases, frozen-panel changes, source-refresh failures and editor EOF.
-Passing these internal engine tests does not make the unfinished chat UI available.
+Public chat commands and actual keyboard paths are covered by the conversation
+UI suites above; fixture success does not imply live-account acceptance.
 
 The first extraction is validated on Linux with Neovim 0.12.4, Python 3.14.4,
 Bubblewrap 0.11.1, Git 2.53.0 and tmux 3.6. This is not a claim that older Neovim,

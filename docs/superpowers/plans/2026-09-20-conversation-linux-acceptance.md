@@ -10,7 +10,7 @@
 
 **Spec:** [ISQ-237](https://linear.app/isqrd/issue/ISQ-237/validate-conversational-pre-write-workflow-end-to-end-on-linux), together with the existing [UI](../specs/2026-09-20-conversation-ui-design.md), [approval](../specs/2026-09-20-conversation-approval-design.md), and [model](../specs/2026-09-20-conversation-model-design.md) contracts. This is an acceptance plan for those interfaces, not a new architectural design.
 
-**Execution state:** Tasks 1–3 are verified; Task 4 remains. Coverage audited at `f4ec449d2c11532c7ad2a185d26d70b17e4a6cd7`; checked steps below have execution evidence in the task ledger. The existing [main CI](https://github.com/ruohao1/draft.nvim/actions/runs/35513883573) passed 58/58. That is baseline evidence, not a result for these proposed additions. Worktree: `.worktrees/conversation-acceptance`; branch: `test/conversation-linux-acceptance`.
+**Execution state:** Tasks 1–4 are implemented and verified; final review and delivery are recorded on ISQ-237 and its PR. The complete local gate passed 58/58 suites at `b2c765b` with the acceptance documentation present; `.test-results/run-0qoqqydb` contains per-suite logs. Coverage was audited at `f4ec449d2c11532c7ad2a185d26d70b17e4a6cd7`; its [main CI](https://github.com/ruohao1/draft.nvim/actions/runs/35513883573) is separate baseline evidence. Checked steps below have execution evidence in the task ledger. Worktree: `.worktrees/conversation-acceptance`; branch: `test/conversation-linux-acceptance`.
 
 ## Global Constraints
 
@@ -311,7 +311,7 @@ Keep restart semantics explicit: normal editor EOF can let the surviving control
 
 - [x] **Step 0: Repair the terminal-receipt Close failure exposed by the walkthrough.** Two real-journal tests and the public partial-approval/drift journey fail before the fix. The writer has already consumed a terminal failure's authority, but the registry keeps it current and requests a second cancel receipt on Close. Clear `current` after every validated receipt with no pending files, preserving its context and the owner's recovery/cleanup evidence. The existing receipt reader must still prove the consumption marker and terminal journal; a missing marker must retain the current review and refuse ingestion. Run `python3 -I -B tests/run.py nvim_ai_conversation_review ai_chat_approval ai_conversation_review`. Expected: blocked and uncertain receipts close without replay or journal changes; partial accepted bytes and external edits survive; unproven receipt evidence remains refused. No writer, protocol or recovery-reset change is needed.
 
-- [ ] **Step 1: Write the evidence record with four explicitly labeled evidence classes.** Record baseline SHA, final tested SHA, environment/version output, actual command/log paths, per-criterion test names, expected opt-in skips, and unresolved limitations. Use: automated fixtures; automated real terminal keys; hands-on fixture checklist; installed/live-provider evidence. An unperformed class says `not run`; it never inherits a passing status from another class.
+- [x] **Step 1: Write the evidence record with four explicitly labeled evidence classes.** Record baseline SHA, final tested SHA, environment/version output, actual command/log paths, per-criterion test names, expected opt-in skips, and unresolved limitations. Use: automated fixtures; automated real terminal keys; hands-on fixture checklist; installed/live-provider evidence. An unperformed class says `not run`; it never inherits a passing status from another class.
 
   Record versions without invoking an installed agent:
 
@@ -326,7 +326,7 @@ Keep restart semantics explicit: normal editor EOF can let the surviving control
   uname -srmo
   ```
 
-- [ ] **Step 2: Include this exact disposable manual launcher.** Run it from the intended worktree in a terminal with sufficient size (140 columns × 42 rows is the reference capture). The separate directories are created with a private umask; the plugin's trusted helpers must already have safe permissions.
+- [x] **Step 2: Include this exact disposable manual launcher.** Run it from the intended worktree in a terminal with sufficient size (140 columns × 42 rows is the reference capture). The separate directories are created with a private umask; the plugin's trusted helpers must already have safe permissions.
 
   ```sh
   DRAFT_ACCEPTANCE_PLUGIN="$(pwd -P)"
@@ -356,7 +356,7 @@ Keep restart semantics explicit: normal editor EOF can let the surviving control
 
   Verify the loaded code with `:lua print(vim.api.nvim_get_runtime_file("lua/draft/init.lua", false)[1])`. It must point into this worktree. `:lua print(chat_approval_fixture.root)` identifies the disposable root. In this fixture, `Discuss` is a deliberate case-sensitive control word; use the messages below exactly.
 
-- [ ] **Step 3: Include and execute the complete fixture checklist.** `i` enters the composer; Ctrl-S explicitly sends; Escape returns to normal mode. Allow each expected state to settle before the next step. Inspect all three actual files under the printed root's `project with spaces` directory. Every content value below is one line with a trailing newline.
+- [x] **Step 3: Include and execute the complete fixture checklist.** `i` enters the composer; Ctrl-S explicitly sends; Escape returns to normal mode. Allow each expected state to settle before the next step. Inspect all three actual files under the printed root's `project with spaces` directory. Every content value below is one line with a trailing newline.
 
   | Action | Expected visible state | Disk: first / second / third |
   | --- | --- | --- |
@@ -383,9 +383,9 @@ Keep restart semantics explicit: normal editor EOF can let the surviving control
 
   End each fixture run with `:NvimAIChatClose`, wait for `closed`, then `:lua assert(chat_approval_fixture.snapshot().phase == "closed"); chat_approval_fixture.cleanup()` and `:qa!`. Retain the exact printed directory until evidence is recorded and all owned processes are confirmed stopped. Cleanup is limited to that run's identified paths; no directory-family sweep. If a step is not performed, leave it unchecked and state why.
 
-- [ ] **Step 4: Correct stale documentation and explain recovery/retention.** Remove `tests/README.md`'s obsolete claim that the chat UI is unfinished. Link the new acceptance record from the testing guide, README and help. State explicitly that a new editor starts fresh context; controller-death artifacts and accepted writes are not automatically recovered or rolled back. Document cache orphan mode/size, lack of aggregate retention bound, no adoption, and exact-path cleanup only after users of the artifact have stopped. No new end-user recovery command is implied.
+- [x] **Step 4: Correct stale documentation and explain recovery/retention.** Remove `tests/README.md`'s obsolete claim that the chat UI is unfinished. Link the new acceptance record from the testing guide, README and help. State explicitly that a new editor starts fresh context; controller-death artifacts and accepted writes are not automatically recovered or rolled back. Document cache orphan mode/size, lack of aggregate retention bound, no adoption, and exact-path cleanup only after users of the artifact have stopped. No new end-user recovery command is implied.
 
-- [ ] **Step 5: Run the complete provider-free gate once after the changes.** It includes the required staged, native lifecycle, cache, review and confinement regressions. Capture the command output and installed-provider skip reasons. Do not rerun unchanged green focused suites separately afterward.
+- [x] **Step 5: Run the complete provider-free gate once after the changes.** It includes the required staged, native lifecycle, cache, review and confinement regressions. Capture the command output and installed-provider skip reasons. Do not rerun unchanged green focused suites separately afterward.
 
   ```sh
   stylua --check lua tests
