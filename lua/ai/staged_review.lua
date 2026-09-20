@@ -592,6 +592,16 @@ function M.open(frozen, captured, options)
       first = index
     end
   end
+  local navigation = vim.api.nvim_create_autocmd({ "TabLeave", "BufWinLeave" }, {
+    callback = function(event)
+      if
+        (event.event == "TabLeave" and state.tab == vim.api.nvim_get_current_tabpage())
+        or (event.event == "BufWinLeave" and state.panels and state.panels[event.buf])
+      then
+        state.revision = (state.revision or 0) + 1
+      end
+    end,
+  })
   local handle = {}
   function handle:show(path)
     if state.phase ~= "review_ready" then
@@ -695,6 +705,7 @@ function M.open(frozen, captured, options)
   function handle:retire()
     -- This handle owns only editor eligibility; Python retires writer authority.
     state.phase = "retired"
+    pcall(vim.api.nvim_del_autocmd, navigation)
     close_review(state)
   end
   handle.close = handle.retire

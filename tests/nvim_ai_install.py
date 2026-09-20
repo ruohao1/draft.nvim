@@ -41,7 +41,7 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_relocated_commands_and_helpers_ignore_the_working_directory(self):
-        for name in ("draft_setup", "ai_opencode_runtime_paths", "ai_conversation_driver", "ai_conversation_controller", "ai_chat_controller", "ai_scope"):
+        for name in ("draft_setup", "ai_opencode_runtime_paths", "ai_conversation_driver", "ai_conversation_controller", "ai_chat_controller", "ai_chat_approval", "ai_scope"):
             with self.subTest(suite=name):
                 self.run_editor(self.plugin / "tests" / (name + ".lua"))
 

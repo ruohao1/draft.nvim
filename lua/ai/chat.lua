@@ -4,7 +4,7 @@ local sources = require("ai.staged_sources")
 
 function M.new(options)
   local chat = {}
-  local owner, view, unsubscribe, frozen, return_tab
+  local owner, view, unsubscribe, frozen, return_tab, navigation
   local epoch, opening = 0, false
 
   local function detach()
@@ -74,6 +74,13 @@ function M.new(options)
   end
 
   local function show()
+    if not navigation then
+      navigation = vim.api.nvim_create_autocmd("TabLeave", {
+        callback = function()
+          epoch = epoch + 1
+        end,
+      })
+    end
     epoch = epoch + 1
     detach()
     local state = owner:snapshot()
@@ -433,6 +440,10 @@ function M.new(options)
     self:hide()
     if view then
       view:dispose()
+    end
+    if navigation then
+      pcall(vim.api.nvim_del_autocmd, navigation)
+      navigation = nil
     end
     owner, view, frozen, return_tab = nil, nil, nil, nil
     return true

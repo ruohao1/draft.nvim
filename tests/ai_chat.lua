@@ -213,6 +213,12 @@ local ok, reason = xpcall(function()
   eligible = true
   assert(last().owner:snapshot().phase == "review", "review eligibility must survive the dialog")
   assert(chat:close())
+  local departed_dialog = #pending
+  vim.cmd("tabnew")
+  vim.cmd("tabclose")
+  choose(departed_dialog)
+  assert(last().owner:snapshot().phase == "review", "returning to a tab cannot revive its dialog")
+  assert(chat:close())
   local older_dialog = #pending
   assert(chat:cancel())
   choose(older_dialog)
