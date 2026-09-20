@@ -16,7 +16,8 @@ local function act(owner, action)
 end
 local function fixture()
   local driver = { commands = {}, callbacks = {}, sequence = 0 }
-  function driver:send(command, receive)
+  function driver:send(command, receive, disconnected)
+    self.disconnected = disconnected
     self.commands[#self.commands + 1], self.callbacks[#self.callbacks + 1] =
       vim.deepcopy(command), receive
     return true
@@ -86,6 +87,133 @@ local function receipt(sequence, phase, first, second)
     cleanup_pending = {},
   }
 end
+
+local function remaining(owner, choice)
+  local round = owner:snapshot().review
+  return act(owner, {
+    kind = "decide",
+    choice = choice,
+    remaining = true,
+    round_id = round.id,
+    proposal_revision = round.revision,
+    proposal_token = round.token,
+  })
+end
+
+scenario("one explicit batch waits for a complete matching receipt", function()
+  for _, case in ipairs({
+    { choice = "approve", state = "accepted", phase = "applied" },
+    { choice = "reject", state = "rejected", phase = "rejected" },
+  }) do
+    local owner, driver = fixture()
+    assert(complete(owner, driver))
+    assert(remaining(owner, case.choice))
+    eq(owner:snapshot().phase, "publishing")
+    eq(owner:snapshot().review.files[1].state, "pending")
+    eq(owner:snapshot().review.files[2].state, "pending")
+    eq(driver.commands[2].remaining, true)
+    eq(driver.commands[2].path, nil)
+    assert(driver:emit(2, {
+      kind = "decided",
+      receipt = receipt(1, case.phase, case.state, case.state),
+    }))
+    local view = owner:snapshot()
+    eq(view.phase, "idle")
+    eq(view.review, nil)
+    eq(view.rounds[1].receipt_sequence, 1)
+    eq(view.rounds[1].files[1].state, case.state)
+    eq(view.rounds[1].files[2].state, case.state)
+  end
+end)
+
+scenario("a batch targets only remaining files and preserves earlier acceptance", function()
+  local owner, driver = fixture()
+  assert(complete(owner, driver))
+  assert(decide(owner, "approve", "first.txt"))
+  assert(driver:emit(2, {
+    kind = "decided",
+    receipt = receipt(1, "review_ready", "accepted", "pending"),
+  }))
+  assert(remaining(owner, "reject"))
+  assert(driver:emit(3, {
+    kind = "decided",
+    receipt = receipt(2, "applied", "accepted", "rejected"),
+  }))
+  eq(owner:snapshot().phase, "idle")
+  eq(owner:snapshot().rounds[1].files, {
+    { path = "first.txt", state = "accepted" },
+    { path = "second.txt", state = "rejected" },
+  })
+end)
+
+scenario("partial batch receipts retain successes and fence uncertain files", function()
+  local owner, driver = fixture()
+  assert(complete(owner, driver))
+  assert(remaining(owner, "approve"))
+  driver:emit(2, {
+    kind = "decided",
+    receipt = receipt(1, "partial", "accepted", "uncertain"),
+  })
+  local view = owner:snapshot()
+  eq(view.phase, "failed")
+  eq(view.recovery_required, true)
+  eq(view.rounds[1].files[1].state, "accepted")
+  eq(view.rounds[1].files[2].state, "uncertain")
+  assert(not remaining(owner, "approve"))
+end)
+
+scenario("missing or contradictory batch evidence makes every possible write uncertain", function()
+  for _, broken in ipairs({ "send", "disconnect", "receipt" }) do
+    local owner, driver = fixture()
+    assert(complete(owner, driver))
+    if broken == "send" then
+      driver.send = function()
+        return false
+      end
+    end
+    assert(remaining(owner, "approve"))
+    if broken == "disconnect" then
+      driver.disconnected()
+    elseif broken == "receipt" then
+      assert(not driver:emit(2, {
+        kind = "decided",
+        receipt = receipt(1, "review_ready", "accepted", "pending"),
+      }))
+    end
+    local view = owner:snapshot()
+    eq(view.phase, "failed")
+    eq(view.rounds[1].files[1].state, "uncertain")
+    eq(view.rounds[1].files[2].state, "uncertain")
+  end
+end)
+
+scenario("batch target forms remain closed and exclusive", function()
+  local owner, driver = fixture()
+  assert(complete(owner, driver))
+  local view = owner:snapshot()
+  local action = {
+    kind = "decide",
+    choice = "approve",
+    remaining = true,
+    round_id = 1,
+    proposal_revision = 1,
+    proposal_token = "proposal-1",
+  }
+  for _, change in ipairs({
+    { remaining = false },
+    { remaining = 1 },
+    { remaining = "true" },
+    { path = "first.txt" },
+    { paths = { "first.txt", "second.txt" } },
+    { reviewed = true },
+  }) do
+    assert(not owner:dispatch(vim.tbl_extend("force", action, change), view.view_revision))
+    eq(owner:snapshot(), view)
+  end
+  action.remaining = nil
+  assert(not owner:dispatch(action, view.view_revision))
+  eq(#driver.commands, 1)
+end)
 
 scenario("source refresh failure retains confirmed receipts and fences remaining work", function()
   local owner, driver = fixture()

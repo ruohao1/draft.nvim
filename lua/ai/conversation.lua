@@ -11,12 +11,11 @@
 -- space. A receive result only acknowledges ingestion, not worker termination.
 -- The adapter must enforce actual deadlines/shutdown and treat callback refusal
 -- as a reason to stop safely. Never pass raw ACP bodies or agent-supplied proof.
--- decide is one explicit file intent, not a write receipt. The production adapter
+-- decide is one explicit file/remaining-files intent, not a write receipt. The adapter
 -- must validate visible frozen review, buffers/sources and existing writer gates.
 -- Receipt data is normalized trusted evidence, never an agent notification.
 -- Follow-up restoration needs active predecessor AND unused-candidate retirement
 -- evidence. Replacement needs the opposite: retired predecessor, fresh candidate.
--- Batch decisions remain deliberately unsupported.
 local M = {}
 local MAX_BYTES, MAX_EVENTS = 32 * 1024 * 1024, 20000
 local function plain(value)
@@ -88,6 +87,7 @@ local ACTIONS = {
     kind = true,
     choice = true,
     path = true,
+    remaining = true,
     round_id = true,
     proposal_revision = true,
     proposal_token = true,
@@ -385,7 +385,7 @@ function M.new(options)
         if file.state == "pending" then
           file.state = intent
               and intent.choice == "approve"
-              and file.path == intent.path
+              and (intent.remaining or file.path == intent.path)
               and "uncertain"
             or "blocked"
         end
@@ -441,7 +441,7 @@ function M.new(options)
     local pending, accepted = false, false
     for index, prior in ipairs(round.files) do
       local expected = prior.state
-      local selected = intent.choice == "cancel" or prior.path == intent.path
+      local selected = intent.choice == "cancel" or intent.remaining or prior.path == intent.path
       if prior.state == "pending" and selected then
         expected = intent.choice == "approve" and "accepted"
           or intent.choice == "cancel" and "cancelled"
@@ -976,9 +976,17 @@ function M.new(options)
       and action.proposal_revision == state.review.revision
       and action.proposal_token == state.review.token
       and (action.choice == "approve" or action.choice == "reject")
+      and (
+        (action.remaining == true and action.path == nil)
+        or (action.remaining == nil and action.path ~= nil)
+      )
     then
       for index, file in ipairs(state.review.files) do
-        if file.path == action.path and file.state == "pending" then
+        if
+          not target
+          and file.state == "pending"
+          and (action.remaining or file.path == action.path)
+        then
           target = index
         end
       end
@@ -1015,7 +1023,8 @@ function M.new(options)
       end
     elseif target then
       state.phase, state.review.current_index = "publishing", target
-      state.pending_decision = { choice = action.choice, path = action.path }
+      state.pending_decision =
+        { choice = action.choice, path = action.path, remaining = action.remaining }
     else
       state.phase = close and "closing" or "cancelling"
       if
@@ -1049,6 +1058,7 @@ function M.new(options)
     if state.review then
       if target then
         command.choice, command.path = action.choice, action.path
+        command.remaining = action.remaining
       end
       command.round_id, command.proposal_revision, command.proposal_token =
         state.review.id, state.review.revision, state.review.token

@@ -36,7 +36,7 @@
 **Files:** modify `lua/ai/conversation.lua`, `scripts/nvim-ai-conversation-protocol.py`, `scripts/nvim-ai-conversation-review.py`; extend `tests/ai_conversation_review.lua`, `tests/nvim_ai_conversation_protocol.py`, `tests/nvim_ai_conversation_review.py`.
 **Interfaces:** consume existing `decide` identities/receipts; produce exclusive `path` or `remaining=true` targeting on owner actions and controller commands. ReviewRegistry derives ordered pending targets internally.
 
-- [ ] Add failing real-owner cases for approved/rejected batches, preservation of prior decisions, malformed target forms, partial receipts and driver loss. Existing path-plus-remaining rejection must stay valid.
+- [x] Add failing real-owner cases for approved/rejected batches, preservation of prior decisions, malformed target forms, partial receipts and driver loss. Existing path-plus-remaining rejection must stay valid.
 
 ```lua
 assert(owner:dispatch({ kind = "decide", choice = "approve", remaining = true,
@@ -47,7 +47,7 @@ assert(owner:snapshot().phase == "publishing")
 -- disconnect before that receipt makes both pending targets uncertain.
 ```
 
-- [ ] Add protocol cases accepting only `remaining=true` without path and rejecting false/numeric/string targets or both fields. Add registry cases using the real `staging.decide(..., remaining=True)` journal, rejecting a single-file receipt presented as a batch and preserving inherited decisions.
+- [x] Add protocol cases accepting only `remaining=true` without path and rejecting false/numeric/string targets or both fields. Add registry cases using the real `staging.decide(..., remaining=True)` journal, rejecting a single-file receipt presented as a batch and preserving inherited decisions.
 
 ```python
 command = self.command(choice='approve', remaining=True)
@@ -56,9 +56,9 @@ receipt = self.registry.receipt(command)
 self.assertEqual([item['state'] for item in receipt['decisions']], ['accepted', 'accepted'])
 ```
 
-- [ ] Run `python3 -I -B tests/run.py ai_conversation_review nvim_ai_conversation_protocol nvim_ai_conversation_review`; expect batch admission/receipt failures before implementation.
-- [ ] Extend the closed schemas and target selection. Record `pending_decision.remaining`, derive each expected outcome from pending membership, and apply the same targeting to uncertain-state recovery. Emit a path only for a single-file intent. In Python derive pending paths before reading and normalizing the real journal.
-- [ ] Run the three changed suites plus `ai_conversation`, `ai_conversation_followup`, `nvim_ai_conversation_controller`; expect all pass. Commit `feat: verify explicit conversation batch decisions`.
+- [x] Run `python3 -I -B tests/run.py ai_conversation_review nvim_ai_conversation_protocol nvim_ai_conversation_review`; expect batch admission/receipt failures before implementation.
+- [x] Extend the closed schemas and target selection. Record `pending_decision.remaining`, derive each expected outcome from pending membership, and apply the same targeting to uncertain-state recovery. Emit a path only for a single-file intent. In Python derive pending paths before reading and normalizing the real journal.
+- [x] Run the three changed suites plus `ai_conversation`, `ai_conversation_followup`, `nvim_ai_conversation_controller`; expect all pass. Commit `feat: verify explicit conversation batch decisions`.
 
 ## Task 2: Expose guarded review controls through the trusted adapter
 
