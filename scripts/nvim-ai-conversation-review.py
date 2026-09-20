@@ -97,7 +97,9 @@ class ReviewRegistry:
         entry['files'], entry['receipt_sequence'] = states, value['sequence']
         entry['journal_files'] = copy.deepcopy(value['decisions'])
         self.context = copy.deepcopy(states)
-        if not failed and not any(item['state'] == 'pending' for item in states):
+        # Terminal failures consume pending authority too. Preserve their
+        # context, but do not invent another cancel decision during close.
+        if not any(item['state'] == 'pending' for item in states):
             self.current = None
         return result
 

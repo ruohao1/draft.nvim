@@ -432,7 +432,10 @@ class EngineTest(unittest.TestCase):
     def test_public_chat_editor_eof_closes_controller_and_worker(self):
         self.check_editor_eof("chat_production_editor.lua")
 
-    def check_editor_eof(self, fixture):
+    def test_public_chat_editor_sigkill_retains_only_private_launch_configuration(self):
+        self.check_editor_eof("chat_production_editor.lua", abrupt=True)
+
+    def check_editor_eof(self, fixture, *, abrupt=False):
         nvim = shutil.which("nvim")
         self.assertIsNotNone(nvim)
         gate = self.scratch / "editor-exit"
@@ -459,16 +462,38 @@ class EngineTest(unittest.TestCase):
             owned.append((controller, controller_fd))
             args = Path(f"/proc/{controller}/cmdline").read_bytes().split(b'\0')
             launch = Path(os.fsdecode(args[args.index(b'--config') + 1]))
+            launch_bytes = launch.read_bytes()
+            launch_stat = launch.lstat()
             worker, task, store = self.worker_paths(controller)
             worker_fd = os.pidfd_open(worker)
             owned.append((worker, worker_fd))
-            gate.touch()
+            if abrupt:
+                editor.kill()
+            else:
+                gate.touch()
             out, error = editor.communicate(timeout=12)
-            self.assertEqual(editor.returncode, 0, out + error)
+            self.assertEqual(editor.returncode, -signal.SIGKILL if abrupt else 0, out + error)
             self.assertTrue(select.select([controller_fd], [], [], 12)[0], "Controller survived editor EOF")
             self.assertTrue(select.select([worker_fd], [], [], 0)[0], "Worker survived its controller")
-            self.assertFalse(task.exists() or store.exists() or launch.parent.exists())
+            remaining = [str(path) for path in (task, store) if path.exists()]
+            self.assertFalse(remaining, remaining)
             self.assertEqual(self.source.read_bytes(), b"original text\n")
+            if abrupt:
+                # The killed editor cannot run its Lua-owned exit callback.
+                # The controller owns the stopped worker/store, not this path.
+                self.assertEqual(list(launch.parent.iterdir()), [launch])
+                node = launch.lstat()
+                self.assertEqual((node.st_dev, node.st_ino),
+                                 (launch_stat.st_dev, launch_stat.st_ino))
+                self.assertEqual(node.st_mode & 0o7777, 0o600)
+                self.assertEqual((node.st_uid, node.st_nlink), (os.getuid(), 1))
+                self.assertEqual(launch.parent.stat().st_mode & 0o7777, 0o700)
+                self.assertEqual(launch.read_bytes(), launch_bytes)
+                # Test-owned artifact, removed only after process/identity proof.
+                launch.unlink()
+                launch.parent.rmdir()
+            else:
+                self.assertFalse(launch.parent.exists(), str(launch.parent))
         finally:
             if editor.poll() is None:
                 editor.kill()
