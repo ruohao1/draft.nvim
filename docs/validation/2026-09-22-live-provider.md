@@ -73,6 +73,6 @@ the turn limit was not a monetary cap.
 
 Automatic crash recovery, transcript restoration, orphan retention management
 and atomic multi-file publication remain outside this validation. No personal
-installation, package change or release was performed by the pilot. The next
-acceptance step is installation in the user's normal Neovim setup and a small
-real-project workflow before a Linux prerelease decision.
+installation, package change or release was performed by the pilot. The later
+[normal-configuration acceptance](2026-09-26-normal-config.md) records the
+installation and a reviewed real-project edit before a Linux prerelease decision.
