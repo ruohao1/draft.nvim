@@ -19,6 +19,10 @@ same saved-source and frozen-review guards as staging. The
 [approval validation record](docs/validation/2026-09-20-conversation-approval.md) covers
 synthetic providers; the [controller record](docs/validation/2026-09-19-conversation-controller.md)
 separately covers pinned OpenCode with a local scripted provider.
+The [Linux live-provider record](docs/validation/2026-09-22-live-provider.md)
+documents a four-turn OpenAI OAuth / GPT-6 Astra pilot with discussion, per-file
+decisions, revision and conversation recall. It covers one disposable Linux
+setup, not everyday use across accounts, models or backends.
 
 ## Requirements
 

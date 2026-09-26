@@ -6,6 +6,9 @@ runtime, production controller, Bubblewrap workers, frozen review and guarded
 writer with a scripted ACP peer. The [acceptance plan](../superpowers/plans/2026-09-20-conversation-linux-acceptance.md)
 maps the existing tests and the added boundaries.
 
+A subsequent [live-provider pilot](2026-09-22-live-provider.md) passed on
+2026-09-22. This record retains the scope and results of the earlier fixture run.
+
 Baseline: `f4ec449d2c11532c7ad2a185d26d70b17e4a6cd7`;
 implementation checkpoint: `b2c765b`. Final candidate and CI evidence are recorded
 on the issue and delivery PR. The baseline's 58/58 CI is distinct from this run.
