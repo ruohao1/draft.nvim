@@ -19,6 +19,13 @@ same saved-source and frozen-review guards as staging. The
 [approval validation record](docs/validation/2026-09-20-conversation-approval.md) covers
 synthetic providers; the [controller record](docs/validation/2026-09-19-conversation-controller.md)
 separately covers pinned OpenCode with a local scripted provider.
+The [Linux live-provider record](docs/validation/2026-09-22-live-provider.md)
+documents a four-turn OpenAI OAuth / GPT-6 Astra pilot with discussion, per-file
+decisions, revision and conversation recall. It covers one disposable Linux
+setup, not everyday use across accounts, models or backends.
+The subsequent [normal-configuration acceptance](docs/validation/2026-09-26-normal-config.md)
+covers installation and one reviewed README edit in a fresh editor using the
+user's existing Neovim configuration. Both checks were agent-operated.
 
 ## Requirements
 
@@ -66,6 +73,10 @@ Configure options on the first setup call; repeated setup calls return the
 existing runtime. Restart Neovim after changing the plugin version or setup
 options. The internal `ai` module names and `NvimAI*` commands are retained;
 use one installation per Neovim process.
+
+If migrating from an embedded `lua/ai` copy, move that copy out of your
+Neovim configuration before loading Draft so its internal modules resolve from
+the plugin.
 
 ## Ask questions in a conversation
 
