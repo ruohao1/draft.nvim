@@ -13,6 +13,10 @@ provider, reading credentials or creating a session. Configure once per editor;
 repeated setup calls return the existing runtime. Restart after changing options
 or updating the plugin. Use one Draft installation per Neovim process.
 
+If migrating from an embedded lua/ai copy, move that copy out of your Neovim
+configuration before loading Draft so its internal modules resolve from the
+plugin.
+
 REQUIREMENTS                                                *draft-requirements*
 
 Linux, Neovim 0.12+ with LuaJIT, Python 3, Git, a POSIX shell, and working Bubblewrap
