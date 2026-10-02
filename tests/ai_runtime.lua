@@ -15,7 +15,7 @@ local base = assert(uv.fs_mkdtemp("/tmp/ai-runtime-XXXXXX"))
 assert(uv.fs_chmod(base, 448))
 local old_cwd, old_runtime, old_state =
   vim.fn.getcwd(), vim.env.XDG_RUNTIME_DIR, vim.env.XDG_STATE_HOME
-local old_select, old_input = vim.ui.select, vim.ui.input
+local old_select, old_input, old_notify = vim.ui.select, vim.ui.input, vim.notify
 local cleanups, sequence = {}, 0
 local function directory(path)
   vim.fn.mkdir(path, "p", 448)
@@ -1397,6 +1397,75 @@ local ok, err = xpcall(function()
     assert(f.runtime:shutdown())
   end
 
+  for _, notifier in ipairs({ "default", "custom" }) do
+    local messages, notify = {}, vim.notify
+    local defaults = 0
+    f = fixture({
+      configure = function(value)
+        value.options.notify = notifier == "custom"
+            and function(message)
+              messages[#messages + 1] = message
+            end
+          or nil
+        value.validation = "checking"
+        local health = value.options.registry.health
+        local get = value.options.registry.get
+        value.options.registry.health = function(registry, name)
+          local result = health(registry, name == "opencode" and "claude" or name)
+          if name == "opencode" then
+            result.compatibility = value.validation
+          end
+          return result
+        end
+        value.options.registry.get = function(registry, name)
+          return get(registry, name == "opencode" and "claude" or name)
+        end
+        value.adapter.new_session = function()
+          value.prepared = true
+          return nil, "PRIVATE_PROFILE_FAILURE"
+        end
+        value.options.registry.ensure_opencode_compatibility = function()
+          value.queued = true
+          return { state = value.validation }
+        end
+        value.options.registry.take_opencode_open = function()
+          if value.validation == "ready" and value.queued then
+            value.queued = false
+            return true
+          end
+          return false
+        end
+        value.options.registry.subscribe_opencode_compatibility = function(_, callback)
+          value.validated = callback
+          return function() end
+        end
+      end,
+    })
+    vim.notify = function(message)
+      defaults = defaults + 1
+      messages[#messages + 1] = message
+    end
+    vim.cmd("NvimAIBackend opencode")
+    assert(messages[1]:find("opening queued", 1, true), "public command reports pending startup")
+    f.validation = "ready"
+    f.validated({ state = "ready" })
+    assert(
+      vim.wait(1500, function()
+        return f.prepared
+      end, 10),
+      "queued startup attempts profile preparation"
+    )
+    vim.notify = notify
+    eq(messages, {
+      "AI OpenCode validation is in progress; opening queued without prompt text",
+      "AI backend launch preparation failed",
+    }, notifier .. " notification reports deferred failure exactly once")
+    eq(defaults, notifier == "default" and 2 or 0, "custom notifier is respected")
+    eq(#f.invocations, 0, "failed preparation starts no provider process")
+    assert(not vim.inspect(messages):find("PRIVATE_PROFILE_FAILURE", 1, true))
+    assert(f.runtime:shutdown())
+  end
+
   for _, phase in ipairs({ "failed", "not_checked" }) do
     f = fixture({
       configure = function(value)
@@ -1468,7 +1537,7 @@ local ok, err = xpcall(function()
   )
   assert(f.runtime:shutdown())
 end, debug.traceback)
-vim.ui.select, vim.ui.input = old_select, old_input
+vim.ui.select, vim.ui.input, vim.notify = old_select, old_input, old_notify
 for _, cleanup in ipairs(cleanups) do
   pcall(cleanup)
 end

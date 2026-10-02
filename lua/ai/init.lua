@@ -200,8 +200,14 @@ function M.setup(options)
         "Open this worktree in its own Neovim instance, or request an explicit scope grant from the pinned companion"
     end
     if not companion then
+      local notifications = 0
+      local function notify(...)
+        notifications = notifications + 1
+        return (options.notify or vim.notify)(...)
+      end
       companion, err = require("ai.companion").new(vim.tbl_extend("force", {}, options, {
         identity = identity,
+        notify = options.notify and notify or nil,
         publish = function(snapshot, category)
           display:update(snapshot, category)
         end,
@@ -210,12 +216,11 @@ function M.setup(options)
         -- after the original user command has returned.
         schedule_native = function(callback)
           vim.schedule(function()
-            local completed, why = native_transaction(function()
-              callback()
-              return true
-            end)
-            if not completed and not state.stopped then
-              (options.notify or vim.notify)(why, vim.log.levels.WARN)
+            local notified = notifications
+            local completed, why = native_transaction(callback)
+            -- Session failures already reach an injected notifier directly.
+            if not completed and not state.stopped and notifications == notified then
+              notify(why or "AI command failed", vim.log.levels.WARN)
             end
           end)
         end,

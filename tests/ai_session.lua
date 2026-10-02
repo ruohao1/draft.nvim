@@ -700,10 +700,10 @@ do
   f.validation = "ready"
   f.validation_callback({ state = "ready" })
   assert(f.scheduled, "ready notification schedules the opening")
-  f.scheduled()
+  assert(f.scheduled(), "successful queued opening reports completion")
   eq(#f.processes, 1, "validated queued open launches exactly once")
   eq(f.pasted, nil, "queued open retains no prompt bytes")
-  f.scheduled()
+  assert(f.scheduled(), "duplicate callback completes silently")
   eq(#f.processes, 1, "late duplicate callback cannot relaunch")
 
   -- Reopened Neovim has no compatibility cache, even though its pane survived.
@@ -731,7 +731,7 @@ do
       assert(f.coordinator[action](f.coordinator))
     end
     assert(f.cancelled, "explicit lifecycle cancellation clears queued opening")
-    f.scheduled()
+    assert(f.scheduled(), "cancelled callback completes silently")
     eq(
       #f.processes,
       action == "switch" and 1 or 0,
@@ -743,8 +743,22 @@ do
   f.current_identity = vim.tbl_extend("force", identity, { key = string.rep("f", 32) })
   f.validation = "ready"
   f.validation_callback({ state = "ready" })
-  f.scheduled()
+  local opened, reason = f.scheduled()
+  eq(opened, nil, "identity change reports deferred failure")
+  eq(
+    reason,
+    "AI queued opening cancelled because the current identity changed",
+    "identity failure reaches the deferred caller"
+  )
   eq(#f.processes, 0, "queued opening rechecks current identity")
+
+  f = queued_fixture()
+  assert(not f.coordinator:open("opencode"))
+  f.validation = "ready"
+  f.validation_callback({ state = "ready" })
+  f.queued = false
+  assert(f.scheduled(), "already consumed opening completes silently")
+  eq(#f.processes, 0, "already consumed opening starts no process")
 
   f = queued_fixture()
   assert(not f.coordinator:open("opencode"))

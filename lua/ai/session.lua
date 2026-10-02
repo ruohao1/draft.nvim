@@ -1212,10 +1212,10 @@ function M.new(options)
         local schedule = options.schedule or vim.schedule
         schedule(function()
           if stopped or not pending_open or generation ~= queue_generation then
-            return
+            return true
           end
           if not call(registry, "take_opencode_open", identity.key) then
-            return
+            return true
           end
           pending_open = false
           local resolver = options.current_identity
@@ -1232,13 +1232,12 @@ function M.new(options)
             or current.owner_pane ~= identity.owner_pane
             or current.tmux_socket ~= identity.tmux_socket
           then
-            fail("AI queued opening cancelled because the current identity changed")
-            return
+            return fail("AI queued opening cancelled because the current identity changed")
           end
           if pane and record.active_backend ~= "opencode" then
-            coordinator:switch("opencode")
+            return coordinator:switch("opencode")
           else
-            coordinator:open("opencode")
+            return coordinator:open("opencode")
           end
         end)
       elseif report.state == "failed" or report.state == "not_checked" then
