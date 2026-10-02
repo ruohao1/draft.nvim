@@ -131,7 +131,7 @@ ripgrep 14.1.0 and ACL tools 2.3.2, alongside the pinned Neovim 0.12.4 and tmux 
 
 The deterministic managed-OpenCode suite explicitly skips its installed-binary
 artifact audit by default. To include that audit, pass the canonical path to
-OpenCode **1.18.30**:
+OpenCode **1.18.34**:
 
 ```sh
 python3 -I -B tests/run.py --opencode /absolute/path/to/opencode ai_opencode_managed
@@ -157,7 +157,7 @@ installed-binary probes. `ai_transport_manual.lua` is an interactive transport
 demo and is never part of automated testing.
 
 Run the production-controller proof from the checkout with a canonical path to
-the installed **1.18.30** executable. This exact invocation constructs an
+the installed **1.18.34** executable. This exact invocation constructs an
 allowlisted environment and removes only its own disposable profile directories:
 
 ```sh
@@ -199,6 +199,35 @@ tmux panes with fake Codex, Claude and OpenCode processes. Optional terminal UI
 cases can be selected explicitly, for example
 `sh tests/nvim-ai-native.sh prompt` or `sh tests/nvim-ai-native.sh review`.
 Use Neovim 0.12+ on PATH for these direct invocations.
+
+### Native resize and feedback
+
+The following real-key TUI cases supplement the default native lifecycle suite;
+select them explicitly when checking resize, startup feedback or conflict review:
+
+```sh
+sh tests/nvim-ai-native.sh resize-codex
+sh tests/nvim-ai-native.sh resize-opencode
+sh tests/nvim-ai-native.sh size-guard-opencode
+sh tests/nvim-ai-native.sh prompt-review-opencode
+sh tests/nvim-ai-native.sh version-upgrade-opencode
+sh tests/nvim-ai-native.sh review-conflict
+sh tests/nvim-ai-native.sh notice-layouts
+```
+
+They use fake provider processes in disposable Neovim instances and private tmux
+servers. The resize cases check zoom, unzoom, repeated dimension changes, visible
+redraw and cleanup. The size-guard case checks startup below 40 columns, stopping
+after a shrink, and explicit reopening with review, session, grants and unsaved
+buffers intact. Recovery uses actual editor keys: a delayed failure notification
+can make an RPC `execute()` report an error even when the reopen succeeds.
+
+The [native acceptance record](../docs/validation/2026-10-01-native-resize.md)
+covers these fixtures, the installed OpenCode 1.18.34 audit, and separate real
+OpenCode terminal smoke checks in tmux and Neovim splits. Its remaining checklist
+distinguishes those results from broader live-account and everyday acceptance.
+
+### Installation and conversation coverage
 
 The install suite copies the plugin to a directory containing spaces, launches
 Neovim from an unrelated cwd, exercises real sibling helpers/controller fixtures,

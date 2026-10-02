@@ -124,7 +124,7 @@ def native_terminal(state, session, resumed, config_read_only=None):
 
 def opencode(args):
     help_output = {
-        ("--version",): "1.18.30",
+        ("--version",): "1.18.34",
         ("--help",): "--pure serve attach",
         ("serve", "--help"): "--hostname --port",
         ("attach", "--help"): "--dir --session OPENCODE_SERVER_PASSWORD",

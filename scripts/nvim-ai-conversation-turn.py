@@ -164,7 +164,7 @@ class Turn:
                 info, capabilities = result.get('agentInfo'), result.get('agentCapabilities')
                 sessions = capabilities.get('sessionCapabilities') if isinstance(capabilities, dict) else None
                 if (type(result.get('protocolVersion')) is not int or result['protocolVersion'] != 1
-                        or not isinstance(info, dict) or info.get('version') != '1.18.30'
+                        or not isinstance(info, dict) or info.get('version') != '1.18.34'
                         or not isinstance(sessions, dict) or not isinstance(sessions.get('resume'), dict)):
                     raise protocol.Refused('Pinned ACP version and resume capability required')
                 params = {'cwd': staging.PROJECT, 'mcpServers': []}

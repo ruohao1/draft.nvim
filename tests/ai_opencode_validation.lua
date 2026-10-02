@@ -107,7 +107,7 @@ end
 local function fixture_results()
   local report = managed._test.compatibility_fixture()
   local results = {
-    version = { code = 0, signal = 0, stdout = "1.18.30\n", stderr = "" },
+    version = { code = 0, signal = 0, stdout = "1.18.34\n", stderr = "" },
     root_help = { code = 0, signal = 0, stdout = "", stderr = "--pure serve attach" },
     serve_help = { code = 0, signal = 0, stdout = "", stderr = "--hostname --port" },
     attach_help = {
@@ -287,9 +287,17 @@ local function expect_parse_failure(label, mutate)
 end
 
 expect_parse_failure("prefixed version", function(results)
-  results.version.stdout = "opencode 1.18.30 secret-canary\n"
+  results.version.stdout = "opencode 1.18.34 secret-canary\n"
 end)
-for _, version in ipairs({ "1.18.18", "1.18.28", "1.18.29", "1.18.31", "1.19.0" }) do
+for _, version in ipairs({
+  "1.18.18",
+  "1.18.28",
+  "1.18.29",
+  "1.18.30",
+  "1.18.31",
+  "1.18.35",
+  "1.19.0",
+}) do
   for _, suffix in ipairs({ "", "\n" }) do
     local results = fixture_results()
     results.version.stdout = version .. suffix
@@ -1233,7 +1241,7 @@ do
   eq(#fixture.starts, 0, "valid receipt skips all probes")
   eq(publications, 0, "cache hits do not extend receipt expiry")
   report.version = "1.18.31"
-  eq(fixture.controller:report().version, "1.18.30", "cached reports are copied")
+  eq(fixture.controller:report().version, "1.18.34", "cached reports are copied")
   eq(fixture.controller:take_open(IDENTITY_KEY), true, "cache hit preserves exact queued opening")
   fixture.controller:ensure({ reason = "picker" })
   eq(lookups, 1, "ready controller keeps its in-memory result")
@@ -1248,7 +1256,7 @@ do
           if broken then
             error("fixture cache read failure")
           end
-          return { version = "1.18.30" }, { key = "fixture" }
+          return { version = "1.18.34" }, { key = "fixture" }
         end,
         publish = function()
           publications = publications + 1
@@ -1323,7 +1331,7 @@ do
   eq(#fixture.starts, 1, "mismatch stops before help or semantic probes")
   eq(
     fixture.notifications[1].message,
-    "managed OpenCode version mismatch: installed 1.18.31; requires 1.18.30",
+    "managed OpenCode version mismatch: installed 1.18.31; requires 1.18.34",
     "notification identifies detected and audited releases"
   )
   fixture.controller:ensure({ reason = "picker" })
@@ -3479,7 +3487,7 @@ for _, active in ipairs({ true, false }) do
     state = "ready",
     installed = true,
     executable = "/usr/bin/opencode",
-    version = "1.18.30",
+    version = "1.18.34",
     category = "",
     queued = false,
   }

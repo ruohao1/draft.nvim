@@ -29,7 +29,7 @@ MAX_TEXT_BYTES = 8192
 MAX_ARGUMENTS = 256
 MAX_COLLECTION_ENTRIES = 128
 MAX_EVENT_BYTES = 1024 * 1024
-AUDITED_VERSION = "1.18.30"
+AUDITED_VERSION = "1.18.34"
 # Workaround for the audited OpenTUI renderer crashing at narrow widths. This
 # is a relay diagnostic, not evidence that the upstream renderer is repaired.
 OPENCODE_MIN_COLUMNS = 40

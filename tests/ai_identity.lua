@@ -1012,16 +1012,18 @@ local function run_filesystem_tests()
     managed.opencode_profile = {
       token = string.rep("b", 32),
       fingerprint = string.rep("c", 64),
-      version = "1.18.30",
+      version = "1.18.34",
     }
     assert(store:write_record(managed))
     eq(store:read_record(), managed, "durable OpenCode profile round trip")
-    local legacy = vim.deepcopy(managed)
-    legacy.opencode_profile.version = "1.18.28"
-    legacy.sessions.opencode = "ses_saved_before_upgrade"
-    legacy.review_id = "review_abc123"
-    assert(store:write_record(legacy), "previous audited reference remains readable for recovery")
-    eq(store:read_record(), legacy, "legacy reference preserves sessions and review")
+    for _, version in ipairs({ "1.18.28", "1.18.30" }) do
+      local legacy = vim.deepcopy(managed)
+      legacy.opencode_profile.version = version
+      legacy.sessions.opencode = "ses_saved_before_upgrade"
+      legacy.review_id = "review_abc123"
+      assert(store:write_record(legacy), "previous audited reference remains readable for recovery")
+      eq(store:read_record(), legacy, "legacy reference preserves sessions and review")
+    end
     assert(store:write_record(managed))
     for _, mutate in ipairs({
       function(value)

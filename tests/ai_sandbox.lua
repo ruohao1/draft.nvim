@@ -52,7 +52,7 @@ local direct_launch = {
 
 local managed_profile = {
   schema = 1,
-  version = "1.18.30",
+  version = "1.18.34",
   profile_root = "/state/ai/backend/profiles/" .. string.rep("b", 32),
   fingerprint = string.rep("c", 64),
   config_source = "/state/ai/backend/profiles/" .. string.rep("b", 32) .. "/xdg-config",
@@ -439,13 +439,16 @@ local profile_mutations = {
     profile.version = "1.18.18"
   end,
   ["previous audited version"] = function(profile)
+    profile.version = "1.18.30"
+  end,
+  ["older audited version"] = function(profile)
     profile.version = "1.18.28"
   end,
   ["unaudited intervening version"] = function(profile)
     profile.version = "1.18.29"
   end,
   ["future version"] = function(profile)
-    profile.version = "1.18.31"
+    profile.version = "1.18.35"
   end,
   ["changed version"] = function(profile)
     profile.version = "1.18.19"

@@ -41,7 +41,7 @@ function M.validate(data)
     if
       not hex(data.opencode_token, 32)
       or not hex(data.opencode_fingerprint, 64)
-      or data.opencode_version ~= "1.18.30"
+      or data.opencode_version ~= "1.18.34"
     then
       return nil, "invalid OpenCode profile metadata"
     end

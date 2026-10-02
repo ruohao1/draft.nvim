@@ -115,7 +115,7 @@ local ok, err = xpcall(function()
     session = "ses_fixture;",
     opencode_token = string.rep("b", 32),
     opencode_fingerprint = string.rep("c", 64),
-    opencode_version = "1.18.30",
+    opencode_version = "1.18.34",
   })
   assert(transport:tag(pane, profile))
   local observed = assert(transport:discover(identity))[1]
@@ -123,7 +123,7 @@ local ok, err = xpcall(function()
   assert(
     observed.opencode_token == profile.opencode_token
       and observed.opencode_fingerprint == profile.opencode_fingerprint
-      and observed.opencode_version == "1.18.30",
+      and observed.opencode_version == "1.18.34",
     "OpenCode tag/discovery did not round trip"
   )
   assert(transport:tag(pane, metadata))

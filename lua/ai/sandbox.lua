@@ -220,7 +220,7 @@ local function validate_managed_profile(value, backend_state)
   if not exact then
     return nil, exact_error
   end
-  if value.schema ~= 1 or value.version ~= "1.18.30" then
+  if value.schema ~= 1 or value.version ~= "1.18.34" then
     return nil, "managed profile schema or version is unsupported"
   end
   if not valid_hex(value.fingerprint, 64) then
@@ -250,7 +250,7 @@ local function validate_managed_profile(value, backend_state)
   end
   return {
     schema = 1,
-    version = "1.18.30",
+    version = "1.18.34",
     profile_root = root,
     fingerprint = value.fingerprint,
     config_source = expected.config_source,

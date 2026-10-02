@@ -213,8 +213,8 @@ class Worker:
         info = self.request("initialize", {"protocolVersion": 1,
             "clientInfo": {"name": "nvim-ai-acp-proof", "version": "0.1"},
             "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False}})
-        if info.get("protocolVersion") != 1 or info.get("agentInfo", {}).get("version") != "1.18.30":
-            raise ProtocolError("The proof requires pinned OpenCode 1.18.30 / ACP 1")
+        if info.get("protocolVersion") != 1 or info.get("agentInfo", {}).get("version") != "1.18.34":
+            raise ProtocolError("The proof requires pinned OpenCode 1.18.34 / ACP 1")
         if "resume" not in info.get("agentCapabilities", {}).get("sessionCapabilities", {}):
             raise ProtocolError("Resume capability not advertised")
         self.session = session

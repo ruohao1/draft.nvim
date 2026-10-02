@@ -27,7 +27,7 @@ local expected_policy = {
 local expected_config_json =
   '{"$schema":"https://opencode.ai/config.json","autoupdate":false,"permission":{"bash":"ask","doom_loop":"ask","external_directory":"ask","skill":"deny","task":"deny","webfetch":"ask","websearch":"ask"},"agent":{"general":{"disable":true},"explore":{"disable":true},"compaction":{"permission":{"*":"deny"}},"summary":{"permission":{"*":"deny"}},"title":{"permission":{"*":"deny"}}}}'
 
-eq(managed.version(), "1.18.30", "audited OpenCode version")
+eq(managed.version(), "1.18.34", "audited OpenCode version")
 eq(managed.policy(), expected_policy, "managed permission policy")
 assert(managed.policy()["*"] == nil, "no wildcard permission")
 assert(managed.policy().read == nil, "native read permission preserved")
@@ -112,7 +112,7 @@ eq(request, {
   global_auth = "/home/user/.local/share/opencode/auth.json",
   user_agents = paths.home_agents,
   repo_agents = "/work/repo/AGENTS.md",
-  version = "1.18.30",
+  version = "1.18.34",
   config_json = expected_config_json,
   policy_json = managed.policy_json(),
 }, "exact managed profile request")
@@ -169,17 +169,17 @@ end, "changed token")
 
 local managed_profile = {
   schema = 1,
-  version = "1.18.30",
+  version = "1.18.34",
   profile_root = "/state/identity/backends/opencode/profiles/" .. token,
   fingerprint = string.rep("c", 64),
 }
 eq(assert(managed.profile_reference(managed_profile)), {
   token = token,
   fingerprint = string.rep("c", 64),
-  version = "1.18.30",
+  version = "1.18.34",
 }, "bounded durable profile reference")
 
-for _, version in ipairs({ "1.18.28", "1.18.31" }) do
+for _, version in ipairs({ "1.18.28", "1.18.30", "1.18.31", "1.18.35" }) do
   local reference = assert(managed.profile_reference(managed_profile))
   reference.version = version
   local request, err = managed.inspection_request(reference, identity, paths)
@@ -220,13 +220,19 @@ local invalid_profile_cases = {
   {
     label = "previous audited version",
     change = function(profile)
+      profile.version = "1.18.30"
+    end,
+  },
+  {
+    label = "older audited version",
+    change = function(profile)
       profile.version = "1.18.28"
     end,
   },
   {
     label = "future version",
     change = function(profile)
-      profile.version = "1.18.31"
+      profile.version = "1.18.35"
     end,
   },
   {
@@ -337,7 +343,7 @@ end
 
 local function audited_compatibility_report()
   return {
-    version = "1.18.30",
+    version = "1.18.34",
     help = {
       root = { "--pure", "serve", "attach" },
       serve = { "--hostname", "--port" },
@@ -669,7 +675,7 @@ local profile_token = string.rep("b", 32)
 local profile_fingerprint = string.rep("c", 64)
 local helper_profile = {
   schema = 1,
-  version = "1.18.30",
+  version = "1.18.34",
   profile_root = "/state/identity/backends/opencode/profiles/" .. profile_token,
   fingerprint = profile_fingerprint,
   config_source = "/state/identity/backends/opencode/profiles/" .. profile_token .. "/xdg-config",
@@ -684,7 +690,7 @@ local helper_profile = {
 }
 local public_profile = {
   schema = 1,
-  version = "1.18.30",
+  version = "1.18.34",
   profile_root = helper_profile.profile_root,
   fingerprint = helper_profile.fingerprint,
   config_source = helper_profile.config_source,
@@ -780,7 +786,7 @@ local function provider_free_adapter_assertions()
       state = "ready",
       installed = true,
       executable = "/usr/bin/opencode",
-      version = "1.18.30",
+      version = "1.18.34",
       category = "",
       queued = false,
     }
@@ -875,7 +881,7 @@ local function provider_free_adapter_assertions()
   eq(assert(managed_adapter:profile_reference(managed_launch)), {
     token = profile_token,
     fingerprint = profile_fingerprint,
-    version = "1.18.30",
+    version = "1.18.34",
   }, "adapter profile reference is bounded and secret-free")
   eq(#managed_calls.prepare, 1, "first activation prepares one fresh profile")
   eq(managed_calls.prepare[1], request, "adapter sends the exact managed request to prepare")
@@ -884,7 +890,7 @@ local function provider_free_adapter_assertions()
   reference_paths.opencode_profile = {
     token = profile_token,
     fingerprint = profile_fingerprint,
-    version = "1.18.30",
+    version = "1.18.34",
   }
   local reused =
     assert(managed_adapter:resume_session(launch_identity, reference_paths, "ses_test123"))
@@ -898,7 +904,7 @@ local function provider_free_adapter_assertions()
       token = profile_token,
       identity_key = launch_identity.key,
       root = launch_identity.root,
-      version = "1.18.30",
+      version = "1.18.34",
       fingerprint = profile_fingerprint,
     },
   }, "profile inspection receives only the nonsecret identity-bound reference")
@@ -1194,7 +1200,7 @@ local semantic_probe = registry_module._test.read_only_probe("/usr/bin/opencode"
   run = function(argv, options)
     semantic_probe_argv = vim.deepcopy(argv)
     semantic_probe_options = vim.deepcopy(options)
-    return { code = 0, signal = 0, stdout = "1.18.30\n", stderr = "" }
+    return { code = 0, signal = 0, stdout = "1.18.34\n", stderr = "" }
   end,
 })
 eq(semantic_probe.code, 0, "semantic Bubblewrap probe result")
@@ -3136,7 +3142,7 @@ end
     state = "ready",
     installed = true,
     executable = installed_opencode,
-    version = "1.18.30",
+    version = "1.18.34",
     category = "",
     queued = true,
   }, "real compatibility ready snapshot")

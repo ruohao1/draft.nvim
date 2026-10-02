@@ -208,7 +208,7 @@ local function fixture()
   end
   f.adapters.opencode.profile_reference = function()
     return f.backend_paths.opencode_profile
-      or { token = string.rep("b", 32), fingerprint = string.rep("c", 64), version = "1.18.30" }
+      or { token = string.rep("b", 32), fingerprint = string.rep("c", 64), version = "1.18.34" }
   end
   f.adapters.opencode.validate_profile = function(_, reference, actual_identity, paths)
     eq(actual_identity.root, identity.root, "reconnect inspects exact physical root")
@@ -341,14 +341,14 @@ do
   eq(f.closed, 1, "confirmed stale-profile close stops exactly one pane")
   assert(reopened:open("opencode"))
   eq(f.backend_paths.opencode_profile, nil, "explicit reopen builds a fresh generation")
-  eq(f.record.opencode_profile.version, "1.18.30", "fresh profile replaces stale reference")
+  eq(f.record.opencode_profile.version, "1.18.34", "fresh profile replaces stale reference")
 end
 
-do
+for _, version in ipairs({ "1.18.28", "1.18.30" }) do
   local f = fixture()
   assert(f.coordinator:open("opencode"))
-  f.panes[1].opencode_version = "1.18.28"
-  f.record.opencode_profile.version = "1.18.28"
+  f.panes[1].opencode_version = version
+  f.record.opencode_profile.version = version
   f.record.sessions.opencode = "ses_before_upgrade"
   f.record.review_id = "review_abc123"
   f.record.completed_review_id = "review_def456"
@@ -358,7 +358,7 @@ do
   f.confirmed = false
   assert(not reopened:close(), "upgrade recovery needs explicit close confirmation")
   eq(f.closed, nil, "declining recovery leaves the pane running")
-  eq(f.record.opencode_profile.version, "1.18.28", "declining preserves the old reference")
+  eq(f.record.opencode_profile.version, version, "declining preserves the old reference")
   f.confirmed = true
   assert(reopened:close())
   eq(f.record.opencode_profile, vim.NIL, "close clears the old generation reference")
@@ -367,7 +367,7 @@ do
   eq(f.record.completed_review_id, "review_def456", "upgrade recovery preserves the review receipt")
   assert(reopened:open("opencode"))
   eq(f.backend_paths.opencode_profile, nil, "upgrade reopen prepares a fresh generation")
-  eq(f.record.opencode_profile.version, "1.18.30", "reopen uses only the new audited release")
+  eq(f.record.opencode_profile.version, "1.18.34", "reopen uses only the new audited release")
 end
 
 do
@@ -467,7 +467,7 @@ do
   eq(f.coordinator:snapshot().opencode_profile, {
     token = string.rep("b", 32),
     fingerprint = string.rep("c", 64),
-    version = "1.18.30",
+    version = "1.18.34",
   }, "managed profile persists with session")
   assert(f.coordinator:finish_review("review_0123456789abcdef"))
   eq(f.launches[4].writable, false, "finishing review restores read-only root")

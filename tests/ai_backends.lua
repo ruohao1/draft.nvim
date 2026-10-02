@@ -79,7 +79,7 @@ local profile_token = string.rep("b", 32)
 local profile_fingerprint = string.rep("c", 64)
 local prepared_profile = {
   schema = 1,
-  version = "1.18.30",
+  version = "1.18.34",
   profile_root = "/state/identity/backends/opencode/profiles/" .. profile_token,
   fingerprint = profile_fingerprint,
   config_source = "/state/identity/backends/opencode/profiles/" .. profile_token .. "/xdg-config",
@@ -98,7 +98,7 @@ local compatibility_state = {
     state = "ready",
     installed = true,
     executable = "/usr/bin/opencode",
-    version = "1.18.30",
+    version = "1.18.34",
     category = "",
     queued = false,
   },
@@ -164,7 +164,7 @@ local registry = registry_module._test.new({
   end,
   version = function(name, executable)
     table.insert(calls.version, { name, executable })
-    local output = name == "opencode" and "1.18.30\n" or name .. " 1.0\n"
+    local output = name == "opencode" and "1.18.34\n" or name .. " 1.0\n"
     return { code = 0, signal = 0, stdout = output, stderr = "" }
   end,
   auth = function(name, executable)
@@ -417,7 +417,7 @@ for _, case in ipairs({
       state = "ready",
       installed = true,
       executable = "/usr/bin/stale-opencode",
-      version = "1.18.30",
+      version = "1.18.34",
       category = "",
       queued = false,
     },
@@ -460,7 +460,7 @@ local blocked_resume_paths = vim.deepcopy(paths)
 blocked_resume_paths.opencode_profile = {
   token = profile_token,
   fingerprint = profile_fingerprint,
-  version = "1.18.30",
+  version = "1.18.34",
 }
 local blocked_resume_before = launch_side_effect_counts()
 local blocked_resume, blocked_resume_error =
@@ -525,7 +525,7 @@ eq(opencode_launch.protected_paths, {
 }, "OpenCode protected paths")
 eq(opencode_launch.managed_profile, {
   schema = 1,
-  version = "1.18.30",
+  version = "1.18.34",
   profile_root = prepared_profile.profile_root,
   fingerprint = profile_fingerprint,
   config_source = prepared_profile.config_source,
@@ -542,7 +542,7 @@ eq(calls.prepare, {
     global_auth = paths.global_opencode_data .. "/auth.json",
     user_agents = paths.home_agents,
     repo_agents = identity.root .. "/AGENTS.md",
-    version = "1.18.30",
+    version = "1.18.34",
     config_json = managed.config_json(),
     policy_json = managed.policy_json(),
   },
@@ -552,7 +552,7 @@ local resume_paths = vim.deepcopy(paths)
 resume_paths.opencode_profile = {
   token = profile_token,
   fingerprint = profile_fingerprint,
-  version = "1.18.30",
+  version = "1.18.34",
 }
 local opencode_resume = assert(opencode:resume_session(identity, resume_paths, "ses_test123"))
 eq(opencode_resume.attach_argv, {
@@ -578,7 +578,7 @@ eq(calls.inspect_profile, {
     token = profile_token,
     identity_key = identity.key,
     root = identity.root,
-    version = "1.18.30",
+    version = "1.18.34",
     fingerprint = profile_fingerprint,
   },
 }, "OpenCode reuse inspects only the exact nonsecret reference")
@@ -732,13 +732,13 @@ do
   eq(health.version, "1.18.31", "mismatch health shows the detected release")
   eq(
     health.error,
-    "managed OpenCode version mismatch: installed 1.18.31; requires 1.18.30",
+    "managed OpenCode version mismatch: installed 1.18.31; requires 1.18.34",
     "mismatch health explains the exact audited release"
   )
   eq(health.auth, "unknown", "mismatch skips authentication")
   eq(health.capabilities, {}, "mismatch grants no capabilities")
   eq(compatibility_state.report_calls, report_calls, "mismatch reads no report")
-  for _, version in ipairs({ "", "1.18.30", "1.18.31 private-canary", "1.18.31\n", "01.18.31" }) do
+  for _, version in ipairs({ "", "1.18.34", "1.18.31 private-canary", "1.18.31\n", "01.18.31" }) do
     compatibility_state.snapshot.version = version
     health = registry:health("opencode")
     eq(health.version, "", "malformed mismatch retains no version")
@@ -1166,7 +1166,7 @@ end
 
 local healthy_opencode, healthy_order = managed_health()
 eq(healthy_opencode.installed, true, "managed OpenCode is installed")
-eq(healthy_opencode.version, "1.18.30", "managed OpenCode exact health version")
+eq(healthy_opencode.version, "1.18.34", "managed OpenCode exact health version")
 eq(healthy_opencode.auth, "authenticated", "managed OpenCode filtered authentication")
 eq(healthy_opencode.capabilities, opencode:capabilities(), "managed OpenCode health capabilities")
 eq(healthy_opencode.error, "", "managed OpenCode health succeeds")
@@ -1582,7 +1582,7 @@ local terminal_ready_snapshot = {
   state = "ready",
   installed = true,
   executable = "/usr/bin/opencode",
-  version = "1.18.30",
+  version = "1.18.34",
   category = "",
   queued = false,
 }
@@ -1686,7 +1686,7 @@ local function new_terminal_registry(label, executable_present)
   resume_paths.opencode_profile = {
     token = profile_token,
     fingerprint = profile_fingerprint,
-    version = "1.18.30",
+    version = "1.18.34",
   }
   return {
     registry = registry,

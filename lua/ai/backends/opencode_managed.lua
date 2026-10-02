@@ -1,6 +1,6 @@
 local M = {}
 
-local VERSION = "1.18.30"
+local VERSION = "1.18.34"
 local POLICY = {
   bash = "ask",
   doom_loop = "ask",

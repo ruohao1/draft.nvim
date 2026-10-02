@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 MAX_BYTES = 1024 * 1024
 MAX_MESSAGE = 16 * MAX_BYTES
 MAX_FILES = 16
-VERSION = "1.18.30"
+VERSION = "1.18.34"
 PROJECT = "/tmp/project"
 AGENT = "/tmp/agent"
 SYSTEM_FILES = ("/etc/ssl", "/etc/ca-certificates", "/etc/resolv.conf", "/etc/hosts",
@@ -285,7 +285,7 @@ def acp_turn(request, task, editor):
             "clientInfo": {"name": "nvim-ai-staged", "version": "0.1"},
             "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False}})
         if info.get("protocolVersion") != 1 or info.get("agentInfo", {}).get("version") != VERSION:
-            raise Refused("This opt-in path requires OpenCode 1.18.30 / ACP 1")
+            raise Refused("This opt-in path requires OpenCode 1.18.34 / ACP 1")
         session = response(2, "session/new", {"cwd": PROJECT, "mcpServers": []})
         if not isinstance(session.get("sessionId"), str):
             raise Refused("ACP session identity is missing")

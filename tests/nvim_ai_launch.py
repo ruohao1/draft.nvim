@@ -30,7 +30,7 @@ if SPEC is None or SPEC.loader is None:
 launcher = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(launcher)
 
-VERSION = "1.18.30"
+VERSION = "1.18.34"
 IDENTITY_KEY = "a" * 32
 PROFILE_TOKEN = "b" * 32
 LAUNCH_TOKEN = "c" * 32
@@ -817,9 +817,11 @@ class ManifestTests(unittest.TestCase):
             "extra field": lambda value: value.update({"auth": "authenticated"}),
             "version": lambda value: value.update({"version": "1.18.19"}),
             "older version": lambda value: value.update({"version": "1.18.18"}),
-            "previous audited version": lambda value: value.update({"version": "1.18.28"}),
+            "previous audited version": lambda value: value.update({"version": "1.18.30"}),
+            "older audited version": lambda value: value.update({"version": "1.18.28"}),
             "unaudited intervening version": lambda value: value.update({"version": "1.18.29"}),
-            "future version": lambda value: value.update({"version": "1.18.31"}),
+            "unaudited later version": lambda value: value.update({"version": "1.18.31"}),
+            "future version": lambda value: value.update({"version": "1.18.35"}),
             "fingerprint": lambda value: value.update({"fingerprint": "C" * 64}),
             "root outside backend state": lambda value: value.update(
                 {"profile_root": str(self.fixture.base / "outside" / PROFILE_TOKEN)}

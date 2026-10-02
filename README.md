@@ -26,6 +26,9 @@ setup, not everyday use across accounts, models or backends.
 The subsequent [normal-configuration acceptance](docs/validation/2026-09-26-normal-config.md)
 covers installation and one reviewed README edit in a fresh editor using the
 user's existing Neovim configuration. Both checks were agent-operated.
+The [OpenCode 1.18.34 follow-up](docs/validation/2026-10-01-native-resize.md)
+covers installed-binary compatibility, local-provider conversations and edits,
+and real terminal resizing in tmux and Neovim splits.
 
 ## Requirements
 
@@ -34,7 +37,7 @@ user's existing Neovim configuration. Both checks were agent-operated.
 - Python 3 (standard library only), Git, and a POSIX shell. Tested with Python
   **3.14.4**, Git **2.53.0**, and Bubblewrap **0.11.1**.
 - The CLI for your chosen backend, installed and authenticated separately.
-  Managed OpenCode and staging require exactly **OpenCode 1.18.30 / ACP 1**;
+  Managed OpenCode and staging require exactly **OpenCode 1.18.34 / ACP 1**;
   other OpenCode versions are refused.
 - `rg` (ripgrep) for the staged file picker.
 - Optional tmux. Health recommends **3.7+** for the full tmux integration;
@@ -43,6 +46,11 @@ user's existing Neovim configuration. Both checks were agent-operated.
 
 macOS and Windows launches are not supported. Linux fixture results do not
 establish live-provider acceptance across all three backends.
+
+When upgrading from OpenCode 1.18.30 or 1.18.28, restart Neovim with the updated
+plugin. If an old companion remains, run `:NvimAIClose`, confirm its closure,
+then `:NvimAIOpen`. Draft preserves saved session and review references while
+creating a fresh profile for 1.18.34.
 
 ## Install
 

@@ -626,9 +626,13 @@ local function validate_record(record, identity)
       or type(profile.fingerprint) ~= "string"
       or #profile.fingerprint ~= 64
       or not profile.fingerprint:match("^[0-9a-f]+$")
-      -- Read the previous audited reference for explicit close/reopen recovery.
+      -- Read previous audited references for explicit close/reopen recovery.
       -- Transport adoption, profile inspection and launch remain current-only.
-      or (profile.version ~= "1.18.30" and profile.version ~= "1.18.28")
+      or (
+        profile.version ~= "1.18.34"
+        and profile.version ~= "1.18.30"
+        and profile.version ~= "1.18.28"
+      )
     then
       return nil, "durable OpenCode profile is invalid"
     end

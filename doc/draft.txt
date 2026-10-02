@@ -26,7 +26,12 @@ Tmux is optional; its full integration recommends 3.7+. Native terminals are
 used outside tmux. macOS and Windows launch are disabled.
 
 Install/authenticate your chosen CLI separately. Managed OpenCode and staging
-require exactly OpenCode 1.18.30 / ACP 1. Other releases fail closed.
+require exactly OpenCode 1.18.34 / ACP 1. Other releases fail closed.
+
+When upgrading from OpenCode 1.18.30 or 1.18.28, restart Neovim with the updated
+plugin. If an old companion remains, run :NvimAIClose and confirm its closure,
+then :NvimAIOpen. Saved session and review references are preserved; reopening
+creates a fresh profile for 1.18.34.
 
 Run :checkhealth draft for local diagnostics. The nvim-ai health name is a
 compatibility alias. Health does not create Draft state or submit a prompt.

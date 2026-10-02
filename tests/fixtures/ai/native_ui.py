@@ -226,6 +226,15 @@ class NativeUI(native.Lifecycle):
             os.close(slave)
 
     def size_guard_case(self, owner):
+        def reopen(count):
+            # A scheduled failure notice can make remote execute() report an
+            # error even when reopening succeeds. Exercise the user's keys and
+            # establish success from the exact launch count and pane state.
+            self.tm("select-pane", "-t", owner)
+            self.tm("send-keys", "-t", owner, "-l", ":NvimAIOpen")
+            self.tm("send-keys", "-t", owner, "Enter")
+            self.ready("a", "opencode", count)
+
         self.tm("resize-window", "-t", owner, "-x", "94", "-y", "21")
         self.command("a", "NvimAIBackend opencode")
         wait_for(lambda: self.owned(owner), "narrow managed companion created")
@@ -235,8 +244,7 @@ class NativeUI(native.Lifecycle):
         wait_for(lambda: 'state = "failed"' in self.command("a", "NvimAIStatus"), "narrow startup publishes failure")
         check(not self.events("a", "opencode", "ready"), "unsafe initial TUI never starts")
         self.tm("resize-pane", "-t", pane, "-x", "40")
-        self.command("a", "NvimAIOpen")
-        self.ready("a", "opencode", 1)
+        reopen(1)
         self.command("a", "NvimAIPrompt")
         self.ready("a", "opencode", 2)
         wait_for(lambda: self.record("a")["sessions"]["opencode"] == "ses_lifecycle", "saved exact session")
@@ -255,9 +263,11 @@ class NativeUI(native.Lifecycle):
         check((after["review_id"], after["sessions"], after["grants"]) == (before["review_id"], before["sessions"], before["grants"]), "guard preserves review, exact sessions and grants")
         check(self.source_snapshot() == source, "guard preserves unsaved editor contents")
         self.tm("resize-pane", "-t", pane, "-x", "40")
-        self.command("a", "NvimAIOpen")
-        self.ready("a", "opencode", 3)
-        check(self.owned(owner)[0]["pane_id"] == pane and self.record("a")["review_id"] == before["review_id"], "explicit reopen recovers same pane and review")
+        reopen(3)
+        check(self.owned(owner)[0]["pane_id"] == pane, "explicit reopen recovers the same pane")
+        reopened = self.record("a")
+        check((reopened["review_id"], reopened["sessions"], reopened["grants"]) == (before["review_id"], before["sessions"], before["grants"]), "explicit reopen preserves review, exact sessions and grants")
+        check(self.source_snapshot() == source, "explicit reopen preserves unsaved editor contents")
         check(not self.events("a", "opencode", "input"), "guard never types or replays input")
         self.command("a", "NvimAIClose")
         wait_for(lambda: not self.owned(owner), "guarded companion closes")
@@ -498,10 +508,10 @@ class NativeUI(native.Lifecycle):
         # Seed only this owned fixture's pre-upgrade reference and pane tuple.
         # Recovery must never rewrite or authorize the immutable old generation.
         legacy = self.record("a")
-        legacy["opencode_profile"]["version"] = "1.18.28"
+        legacy["opencode_profile"]["version"] = "1.18.30"
         record_path = self.state("a") / "record.json"
         record_path.write_text(json.dumps(legacy, separators=(",", ":")) + "\n")
-        self.tm("set-option", "-p", "-t", pane, "@draft_nvim_opencode_version", "1.18.28")
+        self.tm("set-option", "-p", "-t", pane, "@draft_nvim_opencode_version", "1.18.30")
         self.start_owner("a", owner, native_ui=True)
         self.command("a", "NvimAIOpen")
         check(self.record("a") == legacy, "rejected old pane does not discard durable state")
@@ -527,7 +537,7 @@ class NativeUI(native.Lifecycle):
         self.command("a", "NvimAIOpen")
         self.ready("a", "opencode", 3)
         current = self.record("a")
-        check(current["opencode_profile"]["version"] == "1.18.30", "fresh generation uses current audited version")
+        check(current["opencode_profile"]["version"] == "1.18.34", "fresh generation uses current audited version")
         check(current["opencode_profile"]["token"] != before["opencode_profile"]["token"], "explicit reopen creates a new generation")
         check(current["review_id"] == before["review_id"] and current["sessions"] == before["sessions"], "fresh activation retains review and session references")
         check(published == {str(path.relative_to(profile)): path.read_bytes() for path in profile.rglob("*") if path.is_file()}, "old generation is never rewritten or removed")

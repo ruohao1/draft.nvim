@@ -67,7 +67,7 @@ for raw in sys.stdin:
         assert message['params']['clientCapabilities'] == {
             'fs': {'readTextFile': False, 'writeTextFile': False}, 'terminal': False}
         answer(identifier, {'protocolVersion': 1, 'agentInfo': {
-            'name': 'fixture', 'version': 'wrong' if case == 'wrong-version' else '1.18.30'},
+            'name': 'fixture', 'version': 'wrong' if case == 'wrong-version' else '1.18.34'},
             'agentCapabilities': {'sessionCapabilities': {} if case == 'missing-resume' else {'resume': {}}}})
     elif method == 'session/new':
         assert message['params'] == {'cwd': '/tmp/project', 'mcpServers': []}

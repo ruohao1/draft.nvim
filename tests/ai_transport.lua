@@ -171,7 +171,7 @@ local opencode = vim.deepcopy(metadata)
 opencode.backend = "opencode"
 opencode.opencode_token = string.rep("b", 32)
 opencode.opencode_fingerprint = string.rep("c", 64)
-opencode.opencode_version = "1.18.30"
+opencode.opencode_version = "1.18.34"
 local profiled = fixture(row("%40", opencode))
 eq(
   assert(profiled:discover(identity))[1].opencode_fingerprint,
@@ -189,6 +189,7 @@ for _, change in ipairs({
   { opencode_version = "1.18.18" },
   { opencode_version = "1.18.29" },
   { opencode_version = "1.18.28" },
+  { opencode_version = "1.18.30" },
   { opencode_version = "1.18.31" },
   { opencode_token = "bad" },
   { backend = "codex" },

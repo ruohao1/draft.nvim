@@ -23,7 +23,7 @@ for line in sys.stdin:
     if method == "initialize":
         assert message["params"]["clientCapabilities"]["fs"]["writeTextFile"] is False
         assert "NVIM_STAGED_SENTINEL" not in os.environ
-        answer(identifier, {"protocolVersion": 1, "agentInfo": {"name": "fixture", "version": "1.18.30"}})
+        answer(identifier, {"protocolVersion": 1, "agentInfo": {"name": "fixture", "version": "1.18.34"}})
     elif method == "session/new":
         assert message["params"]["mcpServers"] == []
         answer(identifier, {"sessionId": "fixture-session"})

@@ -201,7 +201,7 @@ class Lifecycle:
         wait_for(lambda: self.record("a")["sessions"]["opencode"] == "ses_lifecycle", "exact synthetic OpenCode session event")
         profile = self.record("a")["opencode_profile"]
         check(self.events("a", "opencode", "ready")[0]["config_read_only"] is True, "managed configuration is read-only in the native TUI")
-        check(profile["version"] == "1.18.30", "audited managed profile version")
+        check(profile["version"] == "1.18.34", "audited managed profile version")
         for field in ("token", "fingerprint", "version"):
             check(self.owned(owner_a)[0]["@draft_nvim_opencode_" + field] == profile[field], f"exact nonsecret OpenCode {field}")
         profile_root = self.state("a") / "backends/opencode/profiles" / profile["token"]

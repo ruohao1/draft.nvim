@@ -48,7 +48,7 @@ BOOTSTRAP_GITIGNORE_SHA256 = (
 IDENTITY_KEY = "a" * 32
 TOKEN = "b" * 32
 SECOND_TOKEN = "c" * 32
-VERSION = "1.18.30"
+VERSION = "1.18.34"
 MAX_SOURCE_BYTES = 256 * 1024
 MAX_SNAPSHOT_BYTES = 512 * 1024
 MAX_JSON_BYTES = 1024 * 1024
@@ -750,7 +750,9 @@ class ProfileConstructionTests(unittest.TestCase):
             ("version", "1.18.18"),
             ("version", "1.18.28"),
             ("version", "1.18.29"),
+            ("version", "1.18.30"),
             ("version", "1.18.31"),
+            ("version", "1.18.35"),
             ("config_json", CONFIG_JSON + " "),
             ("policy_json", '{"bash":"allow"}'),
         ):

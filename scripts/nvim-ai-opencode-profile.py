@@ -9,7 +9,7 @@ import pathlib
 import stat
 import sys
 
-AUDITED_VERSION = "1.18.30"
+AUDITED_VERSION = "1.18.34"
 AUDITED_POLICY_JSON = (
     '{"bash":"ask","doom_loop":"ask","external_directory":"ask",'
     '"skill":"deny","task":"deny","webfetch":"ask","websearch":"ask"}'

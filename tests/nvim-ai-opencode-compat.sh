@@ -340,7 +340,7 @@ request = {
     "global_auth": str(global_data / "auth.json"),
     "user_agents": str(home / "AGENTS.md"),
     "repo_agents": str(project / "AGENTS.md"),
-    "version": "1.18.30",
+    "version": "1.18.34",
     "config_json": config,
     "policy_json": policy,
 }
@@ -580,7 +580,7 @@ try:
         "auth_source", "home_mask_source", "auth", "credential_count",
     }:
         raise AssertionError("profile report keys changed")
-    if report["schema"] != 1 or report["version"] != "1.18.30":
+    if report["schema"] != 1 or report["version"] != "1.18.34":
         raise AssertionError("profile report version changed")
     if report["auth"] != "authenticated" or report["credential_count"] != 2:
         raise AssertionError("profile authentication summary changed")
@@ -733,7 +733,7 @@ if hashlib.sha256(bootstrap).hexdigest() != (
             require_nonzero=True,
         )
 
-    if outputs["version"] not in ((b"1.18.30\n", b""), (b"1.18.30", b"")):
+    if outputs["version"] not in ((b"1.18.34\n", b""), (b"1.18.34", b"")):
         raise AssertionError("OpenCode version changed")
 
     config_stdout, config_stderr = outputs["config"]
