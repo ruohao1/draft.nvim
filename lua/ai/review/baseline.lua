@@ -357,17 +357,27 @@ local function parse_index(bytes)
   return result
 end
 
-local function parse_names(bytes, label)
+local function parse_names(bytes, label, directory_records)
   local records, err = split_nul(bytes, label)
   if not records then
     return nil, err
   end
   local result = {}
   for _, path in ipairs(records) do
+    -- Git reports nested repositories with a trailing slash. Retain the record
+    -- kind for inventory race checks, but fingerprint the canonical leaf path.
+    local directory = directory_records and path:sub(-1) == "/"
+    if directory then
+      path = path:sub(1, -2)
+      local valid, path_error = validate_relative(path)
+      if not valid then
+        return nil, path_error
+      end
+    end
     if result[path] then
       return nil, label .. " returned a duplicate path"
     end
-    result[path] = true
+    result[path] = directory and "directory" or true
   end
   return result
 end
@@ -1333,7 +1343,8 @@ local function new(overrides)
       return nil, "Git untracked path enumeration failed"
     end
     local untracked
-    untracked, parse_error = parse_names(untracked_result.stdout, "Git untracked path enumeration")
+    untracked, parse_error =
+      parse_names(untracked_result.stdout, "Git untracked path enumeration", true)
     if not untracked then
       return nil, parse_error
     end
@@ -1350,7 +1361,7 @@ local function new(overrides)
       return nil, "Git ignored path enumeration failed"
     end
     local ignored
-    ignored, parse_error = parse_names(ignored_result.stdout, "Git ignored path enumeration")
+    ignored, parse_error = parse_names(ignored_result.stdout, "Git ignored path enumeration", true)
     if not ignored then
       return nil, parse_error
     end
@@ -1512,7 +1523,12 @@ local function new(overrides)
       review_task.checkpoint()
     end
 
-    local ignored_paths = vim.tbl_keys(inventory.ignored)
+    -- A staged-deleted file can remain in HEAD while an ignored repository
+    -- replaces it. Its directory fingerprint belongs to the visible baseline.
+    local ignored_paths = vim.tbl_filter(function(path)
+      return inventory.ignored[path] ~= "directory"
+        or not (inventory.tree[path] or inventory.index[path])
+    end, vim.tbl_keys(inventory.ignored))
     table.sort(ignored_paths)
     for _, path in ipairs(ignored_paths) do
       local object, bytes, path_error = fingerprint_path(identity.root, path, deps)
