@@ -238,6 +238,10 @@ reports when validation is pending or unavailable.
 after-write review baseline, transfers the prompt into the native companion,
 and focuses it **without submitting**. Inspect it and submit in the CLI.
 `:NvimAIReview` opens detected changes; native edits have already reached disk.
+The picker lists only paths still needing review, with the most recently observed
+changes first. Changes observed together use alphabetical path order. Recency is
+tracked for the current Neovim session; conflicts and changed ignored paths remain
+available for manual review.
 Approval acknowledges those changes, while rejection uses the saved baseline
 and source checks. It is not pre-write protection.
 

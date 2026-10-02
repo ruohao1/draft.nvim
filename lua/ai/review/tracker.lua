@@ -243,6 +243,7 @@ local function new(options)
   local manifest
   local records = {}
   local metadata = {}
+  local observation_epoch = 0
   local subscribers = {}
   local signaled = {}
   local watcher
@@ -424,6 +425,7 @@ local function new(options)
       baseline_hash = baseline_hash,
       current_hash = baseline_hash,
       last_hash = baseline_hash,
+      last_changed = 0,
       last_nvim_hash = nil,
       nvim_seen = false,
       external_seen = false,
@@ -1302,6 +1304,10 @@ local function new(options)
     end
     local ordered = vim.tbl_keys(names)
     table.sort(ordered)
+    -- One observation can discover several changes; do not invent an edit
+    -- order from the alphabetical scan traversal.
+    observation_epoch = observation_epoch + 1
+    local scan_order = observation_epoch
 
     for _, path in ipairs(ordered) do
       if retry_stale_snapshot() then
@@ -1351,6 +1357,9 @@ local function new(options)
           ignored ~= nil,
           current_entry.reason
         )
+        if changed then
+          meta.last_changed = scan_order
+        end
         if
           changed
           and ignored == nil
@@ -1469,6 +1478,10 @@ local function new(options)
     end
     local meta = metadata[path] or ensure_record(path, absent_object(), false, false)
     write_epoch = write_epoch + 1
+    if current.hash ~= meta.last_hash then
+      observation_epoch = observation_epoch + 1
+      meta.last_changed = observation_epoch
+    end
     meta.nvim_seen = true
     meta.last_nvim_hash = current.hash
     meta.last_hash = current.hash
@@ -1515,6 +1528,34 @@ local function new(options)
     local result = {}
     for _, path in ipairs(paths) do
       table.insert(result, clone(records[path]))
+    end
+    return result
+  end
+
+  local function needs_review(path)
+    local state = records[path].state
+    return state == "conflicted"
+      or state == "unresolved"
+      or (metadata[path].external_seen and state ~= "accepted" and state ~= "rejected")
+  end
+
+  function tracker:pending_paths()
+    local paths = {}
+    for path in pairs(records) do
+      if needs_review(path) then
+        paths[#paths + 1] = path
+      end
+    end
+    table.sort(paths, function(left, right)
+      local left_order, right_order = metadata[left].last_changed, metadata[right].last_changed
+      if left_order ~= right_order then
+        return left_order > right_order
+      end
+      return left < right
+    end)
+    local result = {}
+    for _, path in ipairs(paths) do
+      result[#result + 1] = clone(records[path])
     end
     return result
   end
@@ -1993,12 +2034,8 @@ local function new(options)
     end
     local observed, unresolved = false, batch_conflict_reason ~= nil
     for path, meta in pairs(metadata) do
-      local state = records[path].state
       observed = observed or meta.external_seen
-      unresolved = unresolved
-        or state == "conflicted"
-        or state == "unresolved"
-        or (meta.external_seen and state ~= "accepted" and state ~= "rejected")
+      unresolved = unresolved or needs_review(path)
     end
     return {
       review_id = active and "review_" .. active:id() or nil,

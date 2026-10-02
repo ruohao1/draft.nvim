@@ -473,10 +473,7 @@ function M.new(options)
     end
     generation = generation + 1
     local request = generation
-    local items = tracker:paths()
-    table.sort(items, function(left, right)
-      return left.path < right.path
-    end)
+    local items = tracker:pending_paths()
     for _, item in ipairs(items) do
       item.label = label(item)
     end

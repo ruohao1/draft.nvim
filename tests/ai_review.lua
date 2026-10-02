@@ -21780,6 +21780,7 @@ local function run()
       ["z $\n.lua"] = { kind = "regular", bytes = "before\n" },
     })
     t.put("a.lua", { kind = "regular", bytes = "agent\n" })
+    t.put("z $\n.lua", { kind = "regular", bytes = "agent\n" })
     assert(t.tracker:scan("agent"))
     local before = t.tracker:paths()
     local tabs, buffers = vim.api.nvim_list_tabpages(), vim.api.nvim_list_bufs()
@@ -21804,18 +21805,77 @@ local function run()
     })
     assert(ui:open())
     eq(
-      picked[3].label,
-      "[unchanged] z%20%24%0A.lua",
-      "picker sorts literal paths and percent-encodes unsafe bytes"
+      picked[2].label,
+      "[unresolved] z%20%24%0A.lua - Git-visible external change",
+      "same-observation ties use literal paths and percent-encode unsafe bytes"
     )
     eq(
-      picked[4].label,
+      picked[3].label,
       "[batch] Abandon review batch",
       "picker ends with explicit batch abandonment"
     )
     eq(vim.api.nvim_list_tabpages(), tabs, "picker cancellation opens no tab")
     eq(vim.api.nvim_list_bufs(), buffers, "picker cancellation creates no scratch buffer")
     eq(t.tracker:paths(), before, "picker cancellation changes no decision")
+    assert(ui:close())
+    assert(t.tracker:abandon())
+  end
+
+  do
+    local t = task8_fixture("ui-picker-recent", {
+      ["a.lua"] = { kind = "regular", bytes = "before\n" },
+      ["z.lua"] = { kind = "regular", bytes = "before\n" },
+      ["user.lua"] = { kind = "regular", bytes = "before\n" },
+      [".gitignore"] = { kind = "regular", bytes = "ignored.log\n" },
+      ["ignored.log"] = { kind = "regular", bytes = "before\n" },
+    })
+    local picked
+    local ui = require("ai.review.ui").new({
+      tracker = t.tracker,
+      select = function(items, _, callback)
+        picked = {}
+        for _, item in ipairs(items) do
+          if not item.abandon then
+            picked[#picked + 1] = item.path
+          end
+        end
+        callback(nil)
+      end,
+    })
+    local function choices()
+      assert(ui:open())
+      return picked
+    end
+    eq(choices(), {}, "unchanged and untouched ignored paths do not fill the picker")
+    t.put("a.lua", { kind = "regular", bytes = "older edit\n" })
+    assert(t.tracker:scan("older"))
+    t.put("zz-new.lua", { kind = "regular", bytes = "new file\n" })
+    assert(t.tracker:scan("newer"))
+    eq(choices(), { "zz-new.lua", "a.lua" }, "newest observed edit precedes alphabetic order")
+    assert(t.tracker:scan("unchanged-rescan"))
+    eq(choices(), { "zz-new.lua", "a.lua" }, "reopening and rescanning preserve edit order")
+    t.put("z.lua", { kind = "absent" })
+    assert(t.tracker:scan("deleted"))
+    eq(choices(), { "z.lua", "zz-new.lua", "a.lua" }, "deletions also sort newest first")
+    t.put("a.lua", { kind = "regular", bytes = "latest edit\n" })
+    assert(t.tracker:scan("edited-again"))
+    eq(choices(), { "a.lua", "z.lua", "zz-new.lua" }, "editing an older path moves it first")
+    assert(t.tracker:accept_file("a.lua", t.tracker:get("a.lua").current_hash))
+    assert(t.tracker:reject_file("zz-new.lua", t.tracker:get("zz-new.lua").current_hash))
+    eq(choices(), { "z.lua" }, "accepted and rejected paths leave the picker")
+    t.put("ignored.log", { kind = "regular", bytes = "external ignored edit\n" })
+    assert(t.tracker:scan("ignored-change"))
+    eq(choices(), { "ignored.log", "z.lua" }, "changed ignored paths remain manually reviewable")
+    t.put("user.lua", { kind = "regular", bytes = "saved by Neovim\n" })
+    local buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(buf, t.fixture:path("user.lua"))
+    assert(t.tracker:record_nvim_write(buf))
+    eq(choices(), { "ignored.log", "z.lua" }, "Neovim-only writes need no review")
+    vim.api.nvim_buf_set_name(buf, t.fixture:path("z.lua"))
+    t.put("z.lua", { kind = "regular", bytes = "mixed writer\n" })
+    assert(t.tracker:record_nvim_write(buf))
+    eq(choices(), { "z.lua", "ignored.log" }, "new mixed-writer conflicts move first")
+    vim.api.nvim_buf_delete(buf, { force = true })
     assert(ui:close())
     assert(t.tracker:abandon())
   end

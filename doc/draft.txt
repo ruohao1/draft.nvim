@@ -199,6 +199,11 @@ review. Approval acknowledges those writes; rejection attempts guarded recovery
 from the saved baseline. This is not pre-write protection. Inspect transferred
 prompts and explicitly submit them in the native CLI.
 
+:NvimAIReview lists only paths still needing review, newest observed changes
+first. Changes observed together use alphabetical path order. Recency is tracked
+for the current Neovim session. Conflicts and changed ignored paths remain
+available for manual review.
+
 One native runtime pins one physical project/worktree. Native activity and staged
 turns/dialogs exclude each other. Before staging, close the native companion and
 resolve or explicitly abandon its review. A damaged baseline blocks further
