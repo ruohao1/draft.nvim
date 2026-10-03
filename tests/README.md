@@ -31,7 +31,7 @@ Choose individual suites by filename stem:
 ```sh
 python3 -I -B tests/run.py draft_setup draft_state ai_runtime
 python3 -I -B tests/run.py nvim_ai_acp_worker ai_conversation_driver
-python3 -I -B tests/run.py ai_chat ai_chat_view ai_chat_controller ai_chat_approval nvim_ai_chat_ui
+python3 -I -B tests/run.py ai_chat ai_chat_view ai_chat_controller ai_chat_approval ai_chat_auto_review nvim_ai_chat_ui
 ```
 
 The review suite needs private root/platform variables; the runner supplies
@@ -44,7 +44,7 @@ environment; do not relax production ownership or sandbox checks.
 
 `ai_chat_controller` exercises the public commands through the production
 runtime, controller, confinement and copied fake ACP peer: two explicit turns,
-streamed text/progress, eligible context resume, hidden cancellation, deferred
+streamed text/progress, eligible context resume, hidden cancellation, automatic
 frozen previews, source refusal and cleanup. `nvim_ai_install` repeats that flow
 from a plugin path with spaces and an unrelated cwd. `ai_chat_approval` extends
 that production path with partial acceptance/rejection, pending revision,
@@ -55,6 +55,12 @@ after the original tab closes. Relocated-install coverage repeats this flow.
 The controller suite also
 observes public-chat Neovim EOF through process handles and checks private-state
 removal. These tests send no live-account requests.
+
+`ai_chat_auto_review` checks automatic first-pending-file presentation, hidden
+and background chat deferral, preserved drafts and repurposed windows, revisions,
+discussion-only turns and explicit approval. The TUI suite also checks that
+typing remains in the composer until Escape, then exercises the automatically
+opened diff through acceptance, rejection and navigation at 70 columns.
 
 `nvim_ai_chat_ui` uses actual keys in a private tmux server and Neovim TUI. Its
 basic input/layout case uses deterministic in-process provider events. Its

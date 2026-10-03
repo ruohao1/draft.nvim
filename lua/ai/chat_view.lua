@@ -402,6 +402,14 @@ function M.new(options)
     end
   end
 
+  function view:visible()
+    return visible
+      and not disposed
+      and window("input")
+      and window("output")
+      and tab == vim.api.nvim_get_current_tabpage()
+  end
+
   function view:hide()
     local was_visible = visible
     local focus = vim.api.nvim_get_current_win()

@@ -288,7 +288,7 @@ function M.new(options)
               decisions = event.prior_review and event.prior_review.files,
               defer = options.defer_review,
               actions = actions,
-              controls = actions and " a accept | r reject | f chat | A/R all | ]f/[f | q cancel"
+              controls = actions and " a accept | r reject | f chat%< | A/R all | ]f/[f | q cancel"
                 or options.defer_review and "Frozen preview | :NvimAIChat to return | :NvimAIChatCancel to discard"
                 or nil,
             })

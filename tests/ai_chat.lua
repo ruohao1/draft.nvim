@@ -186,14 +186,15 @@ local ok, reason = xpcall(function()
     end,
   })
   assert(last().config.defer_review == true)
+  assert(previews == 1, "accepted proposal must open its first pending diff automatically")
   assert(chat:review())
   local stale_review = #pending
   compose("changed before preview choice")
   choose(stale_review, 1)
-  assert(previews == 0)
+  assert(previews == 1)
   assert(chat:review())
   choose(nil, 1)
-  assert(previews == 1 and #last().driver.requests == 1, "preview must never dispatch a decision")
+  assert(previews == 2 and #last().driver.requests == 1, "preview must never dispatch a decision")
   assert(type(last().config.on_review_action) == "function")
   for _, method in ipairs({ "approve_all", "reject_all" }) do
     assert(chat[method](chat))
@@ -268,7 +269,7 @@ local ok, reason = xpcall(function()
   choose()
   assert(last().owner:snapshot().phase == "cancelling")
   choose(retired_review, 1)
-  assert(previews == 1, "review choice must be fenced by the current owner revision")
+  assert(previews == 2, "review choice must be fenced by the current owner revision")
   assert(last().driver:emit({
     kind = "cancelled",
     stopped = true,

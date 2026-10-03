@@ -84,8 +84,8 @@ After installation and `:checkhealth draft`:
    does not launch a provider, discover models or send work.
 4. Press `i`, type a question about the file, and press **Ctrl-S** to send.
    Enter adds a newline. Read the reply, then ask for a small edit and send again.
-5. When the proposal is ready, press Escape then `gd`. Choose the file and press
-   Enter to open its frozen diff. Your project file is still unchanged by Draft.
+5. The first pending frozen diff opens automatically when the proposal is ready.
+   If you are still typing, press Escape to show it. Your project file is still unchanged.
 6. Inspect the diff. Press `a` to approve this file or `r` to reject it.
    Only approval writes the proposed contents to your project.
 7. Run `:NvimAIChat` to return to the composer, or press `f` while a diff is open.
@@ -122,7 +122,7 @@ Ctrl-S, press Escape and run `:NvimAIChatSend`.
 | `:NvimAIChatCancel` | Cancel generation; confirm discarding a pending review |
 | `:NvimAIChatRetry` | Retry only a failure proven safe to retry |
 | `:NvimAIChatClose` | Close the owner; confirm discarding a pending review |
-| `:NvimAIChatReview` | Choose a frozen proposal file for a read-only preview |
+| `:NvimAIChatReview` | Choose another frozen proposal file or reopen its diff |
 | `:NvimAIChatModel` | Choose an advertised model for the next turn while idle |
 | `:NvimAIChatApprove` | Accept the visible pending file and advance after confirmation from the writer |
 | `:NvimAIChatReject` | Reject the visible pending file, leaving it on screen |
@@ -159,21 +159,30 @@ The [Linux acceptance checklist](docs/validation/2026-09-20-conversation-linux.m
 combines model changes, per-file approval and failure recovery in a disposable
 worktree-Neovim session, with exact expected file contents.
 
-When a turn proposes edits, open its frozen diff with `gd` or
-`:NvimAIChatReview`. In the diff, `a` accepts the displayed file and advances to
-the next pending file; `r` rejects it and stays on that file. Navigate with `]f`
+When a turn proposes edits, its first pending frozen diff opens automatically.
+Typing keeps focus in the composer until you press Escape. A hidden chat or a
+chat in another tab waits until you reopen it with `:NvimAIChat`. Each proposal
+opens automatically once, so returning to chat does not bounce back to the diff.
+Use `gd` or `:NvimAIChatReview` to choose another file or reopen a diff.
+
+In the diff, `a` accepts the displayed file and advances to the next pending file;
+`r` rejects it and stays on that file. Navigate with `]f`
 and `[f`. `A` / `R` confirm accepting/rejecting all remaining files. Batch
 approval requires visiting every pending diff in the current proposal revision.
 The approval commands require visible frozen panels and do not open them for you.
 
 Press `f` in a diff to return to the composer. **Send while review is pending is
 a follow-up**: discuss the proposal or request a revision without accepting it.
-A replacement requires fresh review; previously accepted/rejected files remain
-confirmed context. Chat reports file outcomes from the writer's receipts, including
-pending, accepted, rejected, cancelled, blocked and uncertain states.
+A replacement automatically opens its first pending diff and requires fresh review;
+previously accepted/rejected files remain confirmed context. Chat reports file
+outcomes from the writer's receipts, including pending, accepted, rejected,
+cancelled, blocked and uncertain states.
 
-![Frozen conversational review](docs/images/conversation-review.png)
+![Automatically opened frozen conversational review](docs/images/chat-auto-review.png)
 ![Confirmed file outcomes in chat](docs/images/conversation-decisions.png)
+
+The [automatic-review validation](docs/validation/2026-10-03-chat-auto-review.md)
+covers focus, drafts and the keyboard journey in wide and narrow windows.
 
 Return to chat with `f` or `:NvimAIChat`. In a diff, `q` confirms discarding pending
 files. ChatCancel and ChatClose also confirm this; earlier accepted files stay

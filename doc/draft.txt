@@ -51,8 +51,8 @@ After setup and :checkhealth draft:
    does not launch a provider, discover models or send work.
 4. Press i, type a question about the file, and press Ctrl-S to send. Enter adds
    a newline. Read the reply, then ask for a small edit and send again.
-5. When the proposal is ready, press Escape then gd. Choose the file and press
-   Enter to open its frozen diff. Your project file is still unchanged by Draft.
+5. The first pending frozen diff opens automatically when the proposal is ready.
+   If you are still typing, press Escape to show it. Your project file is unchanged.
 6. Inspect the diff. Press a to approve this file or r to reject it. Only
    approval writes the proposed contents to your project.
 7. Run :NvimAIChat to return to the composer, or press f while a diff is open.
@@ -151,7 +151,7 @@ COMMANDS                                                        *draft-commands*
 :NvimAIChatCancel      Cancel generation or confirm discarding pending review.
 :NvimAIChatRetry       Explicitly retry a failure proven safe to retry.
 :NvimAIChatClose       Close the owner and release its scope after cleanup.
-:NvimAIChatReview      Select a frozen proposal file for read-only preview.
+:NvimAIChatReview      Choose another frozen proposal file or reopen its diff.
 :NvimAIChatModel       Choose an advertised next-turn model while idle.
 :NvimAIChatApprove     Accept the visible pending file and advance after receipt.
 :NvimAIChatReject      Reject the visible pending file and stay on it.
@@ -171,15 +171,19 @@ modes, such as 0600, identify the file and supported modes before submission.
 A refused Send keeps your unsent draft. Choose a supported file; Draft
 does not change file permissions for you.
 
-Opening focuses the composer. Press i, type a question, and Ctrl-S to send.
-Enter inserts a newline. Send a second question with Ctrl-S to reuse eligible
+Opening a new conversation focuses the composer. Press i, type a question,
+and Ctrl-S to send. Enter inserts a newline. Send a second question to reuse eligible
 context. Streaming preserves source focus/cursor and your unsent draft. Reading
 older transcript text preserves its viewport; only tail followers auto-scroll.
 
 Chat-buffer keys: Ctrl-S send (normal/insert); q hide (normal); gi compose;
 gd review; gm next-turn model; gc cancel; gr retry; gx close; g? available actions.
-All are local to owned buffers. Opening review is explicit and read-only.
-In its frozen panels:
+All are local to owned buffers. A new proposal automatically opens its first
+pending frozen diff. While you are typing, it waits for Escape and preserves
+your draft. Hidden chats and chats in another tab wait until :NvimAIChat reopens
+them. Each proposal opens automatically once; returning to chat does not bounce
+back to review. Use gd or :NvimAIChatReview to choose another file or reopen it.
+The preview is read-only. In normal mode, its frozen panels use:
   a       Accept the displayed pending file; advance after the writer receipt.
   r       Reject the displayed pending file; stay on it while others are pending.
   ]f/[f   Next/previous file.
@@ -193,8 +197,9 @@ updates outcomes without taking focus back.
 
 While review is pending, explicit Send discusses or revises that proposal; it
 does not approve. A discussion can retain the same validated proposal. A
-replacement retires the previous proposal and requires fresh visits. Accepted
-and rejected files remain confirmed context for later turns. Chat shows file
+replacement retires the previous proposal, automatically opens its first pending
+diff and requires fresh visits. Accepted and rejected files remain confirmed
+context for later turns. Chat shows file
 outcomes from writer receipts, separately from the assistant's text, including
 pending, accepted, rejected, cancelled, blocked and uncertain states.
 

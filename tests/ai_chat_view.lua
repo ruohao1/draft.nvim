@@ -237,6 +237,7 @@ local ok, reason = xpcall(function()
   local repurposed = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_lines(repurposed, 0, -1, false, { "user-owned replacement" })
   vim.api.nvim_win_set_buf(transcript_win, repurposed)
+  assert(not view:visible(), "lost window ownership must block presentation before scheduled hide")
   state.turns[1].text = "late reply after repurposing"
   view:update(state)
   assert(

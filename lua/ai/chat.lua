@@ -4,7 +4,7 @@ local sources = require("ai.staged_sources")
 
 function M.new(options)
   local chat = {}
-  local owner, view, unsubscribe, frozen, return_tab, navigation
+  local owner, view, unsubscribe, frozen, return_tab, navigation, normal_mode
   local epoch, opening = 0, false
 
   local function detach()
@@ -26,6 +26,65 @@ function M.new(options)
       return nil, "Open a conversation with :NvimAIChat first"
     end
     return owner:snapshot()
+  end
+
+  local function current_review()
+    local state = owner and owner:snapshot()
+    local binding = frozen
+    if
+      not state
+      or state.phase ~= "review"
+      or not state.review
+      or not binding
+      or binding.owner ~= owner
+      or not binding.review
+      or binding.review.id ~= state.review.id
+      or binding.review.revision ~= state.review.revision
+      or binding.review.token ~= state.review.token
+    then
+      return nil, "No current frozen review is available"
+    end
+    return binding, state
+  end
+
+  local function present_review(binding, path)
+    local origin = not binding.handle:current() and vim.api.nvim_get_current_tabpage()
+    local ran, result, reason = pcall(binding.handle.show, binding.handle, path)
+    if not ran or not result then
+      return refusal(
+        ran and (reason or "Cannot show frozen preview") or "Cannot show frozen preview"
+      )
+    end
+    binding.presented = true
+    binding.waiting_for_normal = nil
+    view:notice(nil)
+    if origin then
+      return_tab = origin
+    end
+    return true
+  end
+
+  local function open_pending_review()
+    local binding, state = current_review()
+    if not binding or binding.presented then
+      return
+    end
+    binding.waiting_for_normal = nil
+    if not view or not view:visible() then
+      return
+    end
+    -- Never turn composer keystrokes into decisions or carry Insert mode into
+    -- a frozen buffer. ModeChanged retries after the user leaves input mode.
+    if vim.api.nvim_get_mode().mode ~= "n" then
+      binding.waiting_for_normal = true
+      view:notice("Proposal ready. Press Escape to open its diff.")
+      return
+    end
+    for _, file in ipairs(state.review.files) do
+      if file.state == "pending" then
+        return present_review(binding, file.path)
+      end
+    end
   end
 
   local function fence()
@@ -76,6 +135,19 @@ function M.new(options)
       navigation = vim.api.nvim_create_autocmd("TabLeave", {
         callback = function()
           epoch = epoch + 1
+          if frozen then
+            frozen.waiting_for_normal = nil
+          end
+        end,
+      })
+      normal_mode = vim.api.nvim_create_autocmd("ModeChanged", {
+        pattern = "*:n",
+        callback = function()
+          vim.schedule(function()
+            if frozen and frozen.waiting_for_normal then
+              open_pending_review()
+            end
+          end)
         end,
       })
     end
@@ -109,6 +181,7 @@ function M.new(options)
         end
       end)
     end
+    open_pending_review()
     return true
   end
 
@@ -143,6 +216,7 @@ function M.new(options)
       config.on_review = function(handle)
         if owner == created then
           frozen = { owner = created, handle = handle, review = created:snapshot().review }
+          open_pending_review()
         end
       end
       config.on_review_action = function(name, argument)
@@ -170,6 +244,9 @@ function M.new(options)
         end,
         on_hide = function()
           epoch = epoch + 1
+          if frozen then
+            frozen.waiting_for_normal = nil
+          end
           detach()
         end,
       })
@@ -274,25 +351,6 @@ function M.new(options)
 
   function chat:close()
     return stop("close")
-  end
-
-  local function current_review()
-    local state = owner and owner:snapshot()
-    local binding = frozen
-    if
-      not state
-      or state.phase ~= "review"
-      or not state.review
-      or not binding
-      or binding.owner ~= owner
-      or not binding.review
-      or binding.review.id ~= state.review.id
-      or binding.review.revision ~= state.review.revision
-      or binding.review.token ~= state.review.token
-    then
-      return nil, "No current frozen review is available"
-    end
-    return binding, state
   end
 
   function chat:followup()
@@ -408,13 +466,7 @@ function M.new(options)
     local valid = fence()
     vim.ui.select(paths, { prompt = "Open frozen proposal preview" }, function(path)
       if path and vim.list_contains(paths, path) and valid() and frozen == binding then
-        local origin = not binding.handle:current() and vim.api.nvim_get_current_tabpage()
-        local ran, result, reason = pcall(binding.handle.show, binding.handle, path)
-        if not ran or not result then
-          refusal(ran and (reason or "Cannot show frozen preview") or "Cannot show frozen preview")
-        elseif origin then
-          return_tab = origin
-        end
+        present_review(binding, path)
       end
     end)
     return true
@@ -478,7 +530,9 @@ function M.new(options)
     end
     if navigation then
       pcall(vim.api.nvim_del_autocmd, navigation)
+      pcall(vim.api.nvim_del_autocmd, normal_mode)
       navigation = nil
+      normal_mode = nil
     end
     owner, view, frozen, return_tab = nil, nil, nil, nil
     return true
