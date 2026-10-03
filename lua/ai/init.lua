@@ -59,6 +59,17 @@ function M.setup(options)
   )
   state.display = display
   active = state
+  local function redraw_chat_status()
+    vim.schedule(function()
+      if not state.stopped then
+        pcall(options.status and options.status.redraw or function()
+          if #vim.api.nvim_list_uis() > 0 then
+            vim.cmd.redrawstatus()
+          end
+        end)
+      end
+    end)
+  end
   local companion
   local native_running = false
   local function before_staging()
@@ -108,6 +119,10 @@ function M.setup(options)
         if state.conversation == lease then
           state.conversation = nil
           state.generation = state.generation + 1
+          if lease.unsubscribe then
+            lease.unsubscribe()
+          end
+          redraw_chat_status()
         end
         if type(callback) == "function" then
           callback()
@@ -120,6 +135,17 @@ function M.setup(options)
       return nil, ran and reason or "Conversation construction failed"
     end
     lease.owner = owner
+    lease.phase = owner:snapshot().phase
+    lease.unsubscribe = owner:subscribe(function(snapshot)
+      if state.conversation == lease and lease.phase ~= snapshot.phase then
+        lease.phase = snapshot.phase
+        -- Confirmed Close restores native status through on_close above.
+        if snapshot.phase ~= "closed" then
+          redraw_chat_status()
+        end
+      end
+    end)
+    redraw_chat_status()
     return owner
   end
   for _, method in ipairs({
@@ -772,7 +798,32 @@ function M.setup(options)
     return grants
   end
 
+  function runtime:conversation_status()
+    local owner = state.conversation and state.conversation.owner
+    if not owner then
+      return
+    end
+    local snapshot = owner:snapshot()
+    -- Status and health never expose prompts, replies, credentials or source text.
+    return {
+      backend = "opencode",
+      mode = "pre_write",
+      state = snapshot.phase,
+      startup = snapshot.startup,
+      reason = snapshot.reason,
+      model = snapshot.desired_model,
+      turn = snapshot.turn_id,
+      retry_safe = snapshot.retry_safe,
+      recovery_required = snapshot.recovery_required,
+    }
+  end
+
   function runtime:show_status()
+    local chat = runtime:conversation_status()
+    if chat then
+      (options.notify or vim.notify)(vim.inspect(chat), vim.log.levels.INFO)
+      return chat
+    end
     local policy, why = staged.review_mode()
     if not policy then
       return nil, why
@@ -828,7 +879,8 @@ function M.setup(options)
     return state.shutdown_result
   end
   function runtime:compact()
-    return display:compact()
+    local chat = state.conversation
+    return chat and chat.phase and "AI:O " .. chat.phase or display:compact()
   end
 
   for _, name in ipairs({ "open", "native_prompt", "backend" }) do
@@ -928,7 +980,11 @@ function M.setup(options)
 end
 
 function M.compact()
-  return active and active.display:compact() or ""
+  return active and active.runtime:compact() or ""
+end
+
+function M.conversation_status()
+  return active and not active.stopped and active.runtime:conversation_status() or nil
 end
 
 return M

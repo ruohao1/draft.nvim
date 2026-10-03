@@ -94,11 +94,13 @@ local ACTIONS = {
   },
 }
 local EVENTS = {
+  startup = { stage = true },
   submitted = { model = true, models = true },
   text = { text = true },
   progress = { tool_id = true, title = true, status = true },
   stopping = {},
   settled = {
+    diagnostic = true,
     outcome = true,
     stopped = true,
     graceful = true,
@@ -127,6 +129,31 @@ local EVENTS = {
     receipt = true,
   },
   decided = { receipt = true, sources_valid = true },
+}
+local STARTUP = {
+  sources = "Preparing saved file copies",
+  credentials = "Checking configured credentials",
+  launch = "Starting OpenCode in its sandbox",
+  initialize = "Checking OpenCode compatibility (up to 15 seconds)",
+  session = "Opening an OpenCode session (up to 15 seconds)",
+  resume = "Resuming the conversation (up to 15 seconds)",
+  model = "Confirming the selected model (up to 15 seconds)",
+  mode = "Confirming edit mode (up to 15 seconds)",
+}
+local DIAGNOSTICS = {
+  sources = "Saved file validation failed. Save and check the selected files and their permissions.",
+  credentials = "OpenCode credentials could not be loaded. Close chat, then check the auth file and provider with :NvimAIStageSetup.",
+  launch = "OpenCode could not start in its sandbox. Run :checkhealth draft and check the configured executables.",
+  initialize = "OpenCode startup handshake failed. Run :checkhealth draft and verify OpenCode 1.18.34.",
+  compatibility = "OpenCode compatibility check failed. Use OpenCode 1.18.34 and run :checkhealth draft.",
+  session = "OpenCode could not create a session. Check account access and model settings, then close chat.",
+  resume = "OpenCode could not resume this conversation. Close it and use :NvimAIChatNew.",
+  model = "OpenCode did not advertise or confirm the selected model. Close chat and choose a model with :NvimAIStageSetup.",
+  mode = "OpenCode did not confirm edit mode. Verify OpenCode 1.18.34 with :checkhealth draft.",
+  timeout = "OpenCode stopped responding before its deadline. Check connectivity and :checkhealth draft.",
+  generation = "OpenCode request failed. Check account access, model settings and connectivity.",
+  cleanup = "OpenCode shutdown did not confirm a safe result. Close chat and inspect :checkhealth draft.",
+  review = "The generated proposal could not be validated. Inspect the selected files before starting a new conversation.",
 }
 for _, fields in pairs(EVENTS) do
   for _, key in ipairs({
@@ -393,6 +420,7 @@ function M.new(options)
       state.publication_recovery, state.pending_decision = true, nil
     end
     state.phase, state.retry_safe, state.recovery_required = "failed", false, true
+    state.startup = nil
     state.reason = reason
     local turn = state.turns[#state.turns]
     if turn and turn.status == "running" then
@@ -407,7 +435,9 @@ function M.new(options)
       return
     end
     disconnect_reported = true
-    fail("Conversation controller disconnected; explicit recovery required")
+    fail(
+      "Conversation controller disconnected; run :checkhealth draft, then :NvimAIChatClose before starting a new conversation"
+    )
   end
 
   local function on_disconnect()
@@ -576,6 +606,16 @@ function M.new(options)
     if not EVENTS[event.kind] or not keys(event, EVENTS[event.kind]) then
       return fail("Invalid conversation event; explicit recovery required")
     end
+    if
+      event.diagnostic ~= nil
+      and (
+        event.outcome ~= "failed"
+        or type(event.diagnostic) ~= "string"
+        or not DIAGNOSTICS[event.diagnostic]
+      )
+    then
+      return fail("Invalid conversation diagnostic; explicit recovery required")
+    end
     local turn = state.turns[#state.turns]
     if
       event.kind == "settled"
@@ -605,6 +645,11 @@ function M.new(options)
         )
       end
       lease = lease + 1
+    elseif event.kind == "startup" and state.phase == "starting" then
+      if type(event.stage) ~= "string" or not STARTUP[event.stage] then
+        return fail("Invalid startup progress; explicit recovery required")
+      end
+      state.startup = STARTUP[event.stage]
     elseif
       event.kind == "submitted"
       and state.phase == "starting"
@@ -616,6 +661,7 @@ function M.new(options)
       end
       state.available_models = vim.deepcopy(advertised)
       state.phase, state.confirmed_model = "generating", event.model
+      state.startup = nil
       turn.model, turn.submission = event.model, "submitted"
     elseif
       event.kind == "text"
@@ -655,6 +701,7 @@ function M.new(options)
       event.kind == "stopping" and (state.phase == "generating" or state.phase == "starting")
     then
       state.phase = "stopping"
+      state.startup = nil
     elseif event.kind == "settled" and state.phase == "stopping" and event.outcome == "failed" then
       if event.proposal ~= nil then
         return fail("Failed turn cannot carry a frozen proposal")
@@ -692,6 +739,9 @@ function M.new(options)
         end
       end
       turn.status = "failed"
+      if event.diagnostic then
+        state.reason = DIAGNOSTICS[event.diagnostic] .. " " .. state.reason
+      end
       lease = lease + 1
     elseif
       event.kind == "settled"
@@ -816,7 +866,7 @@ function M.new(options)
       return fail("Conversation outcome is unproven; explicit recovery required")
     end
     sequence = event.sequence
-    changed(event.kind ~= "text")
+    changed(event.kind ~= "text" and event.kind ~= "startup")
     return true
   end
 
@@ -1006,6 +1056,7 @@ function M.new(options)
       transcript_bytes = transcript_bytes + #action.text
       state.turn_id, state.worker_generation = state.turn_id + 1, state.worker_generation + 1
       state.phase = "starting"
+      state.startup = "Starting the conversation controller"
       state.retry_safe, state.recovery_required, state.reason = false, false, nil
       state.turns[#state.turns + 1] = {
         id = state.turn_id,
@@ -1027,6 +1078,7 @@ function M.new(options)
         { choice = action.choice, path = action.path, remaining = action.remaining }
     else
       state.phase = close and "closing" or "cancelling"
+      state.startup = nil
       if
         state.review and (state.review.status == "pending" or state.review.status == "revising")
       then

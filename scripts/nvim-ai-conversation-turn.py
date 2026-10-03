@@ -33,6 +33,7 @@ class Turn:
         self.stopped = self.graceful = self.store_valid = False
         self.cancelling = self.cancel_confirmed = False
         self.on_write_wait = None
+        self.diagnostic = 'sources'
 
     def emit(self, kind, **fields):
         self.events.append(dict(kind=kind, **fields))
@@ -41,8 +42,14 @@ class Turn:
         events, self.events = self.events, []
         return events
 
+    def startup(self, stage):
+        # These categories are controller-owned; never forward exception/peer text.
+        self.diagnostic = stage
+        self.emit('startup', stage=stage)
+
     def start(self, command, *, selected=None, context=None):
         self.command = command
+        self.startup('sources')
         if command['model'].split('/', 1)[0] != self.config['model'].split('/', 1)[0]:
             raise protocol.Refused('Configured provider cannot change')
         request = dict(self.config, root=command['root'], files=command['sources'], model=command['model'])
@@ -53,8 +60,10 @@ class Turn:
         agent = self.task / 'agent'
         for name in ('home', 'config', 'data', 'cache', 'state'):
             (agent / name).mkdir(mode=0o700, parents=True)
+        self.startup('credentials')
         config = staging.configuration(request, agent)
         config['compaction'] = {'auto': False, 'prune': False}
+        self.startup('launch')
         argv, env = staging.sandbox(request, self.task, config)
         env.update(OPENCODE_DISABLE_AUTOCOMPACT='true', OPENCODE_DISABLE_PRUNE='true',
                    OPENCODE_SERVER_USERNAME='opencode', OPENCODE_SERVER_PASSWORD=secrets.token_hex(16))
@@ -71,12 +80,21 @@ class Turn:
 
     def begin(self, method, params):
         self.stage = method
+        if method == 'session/prompt':
+            self.diagnostic = 'generation'
+        elif method == 'session/set_config_option':
+            self.startup(self.choice)
+        else:
+            self.startup({'initialize': 'initialize', 'session/new': 'session',
+                          'session/resume': 'resume'}[method])
         timeout = 180 if method == 'session/prompt' else min(15, self.startup_deadline - time.monotonic())
         if timeout <= 0:
+            self.diagnostic = 'timeout'
             raise protocol.Refused('ACP startup deadline exceeded')
         self.pending = self.worker.begin(method, params, timeout=timeout)
 
     def options(self, result, confirmed=None):
+        self.diagnostic = 'model'
         options = result.get('configOptions')
         if not isinstance(options, list) or not 1 <= len(options) <= 32:
             raise protocol.Refused('Missing ACP configuration options')
@@ -87,6 +105,7 @@ class Turn:
             indexed[option['id']] = option
         available = {}
         for key, desired in (('model', self.command['model']), ('mode', 'build')):
+            self.diagnostic = key
             option = indexed.get(key, {})
             choices = option.get('options')
             if option.get('type') != 'select' or not isinstance(choices, list) or not 1 <= len(choices) <= 128:
@@ -166,6 +185,7 @@ class Turn:
                 if (type(result.get('protocolVersion')) is not int or result['protocolVersion'] != 1
                         or not isinstance(info, dict) or info.get('version') != '1.18.34'
                         or not isinstance(sessions, dict) or not isinstance(sessions.get('resume'), dict)):
+                    self.diagnostic = 'compatibility'
                     raise protocol.Refused('Pinned ACP version and resume capability required')
                 params = {'cwd': staging.PROJECT, 'mcpServers': []}
                 if self.session is not None:
@@ -212,14 +232,17 @@ class Turn:
                 self.emit('stopping')
                 if result.get('stopReason') != 'end_turn':
                     raise protocol.Refused('ACP turn did not finish normally')
+                self.diagnostic = 'cleanup'
                 self.store.stop(outcome='completed')
                 self.stopped = self.graceful = self.store_valid = True
                 if self.on_write_wait is not None and self.on_write_wait():
                     raise protocol.Refused('Editor ownership changed before workspace freeze')
+                self.diagnostic = 'sources'
                 for item in self.selected:
                     data, mode, identity = staging.snapshot(self.command['root'], item['path'])
                     if identity != item['identity'] or staging.fingerprint(data, mode) != item['expected']:
                         raise protocol.Refused('Saved source changed during generation')
+                self.diagnostic = 'review'
                 self.frozen = staging.freeze_workspace(self.task, self.command['root'], self.selected,
                                                         multi=True, force_review=self.command['kind'] == 'revise')
                 if self.on_write_wait is not None and self.on_write_wait():
@@ -246,6 +269,9 @@ class Turn:
 
     def fail(self):
         self.events = []
+        if self.worker is not None and self.worker.fault in (
+                'ACP response deadline exceeded', 'ACP input deadline exceeded'):
+            self.diagnostic = 'timeout'
         if not self.cancelling:
             self.emit('stopping')
         if self.worker is not None and not self.stopped:
@@ -284,6 +310,7 @@ class Turn:
         else:
             self.emit('settled', outcome='failed', stopped=self.stopped, graceful=self.graceful,
                       store_valid=self.store_valid, tokens_retired=retired,
+                      diagnostic=self.diagnostic,
                       submission='submitted' if self.submitted else 'not_submitted')
         self.done = True
         return self.drain_events()

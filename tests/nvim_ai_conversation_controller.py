@@ -240,6 +240,8 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("review_ref", settled)
         self.assertEqual([event["text"] for event in self.events if event["kind"] == "text"], ["A bounded answer."])
         self.assertEqual([event["status"] for event in self.events if event["kind"] == "progress"], ["completed"])
+        self.assertEqual([event["stage"] for event in self.events if event["kind"] == "startup"],
+                         ["sources", "credentials", "launch", "initialize", "session", "model", "mode"])
         self.assertEqual([item["method"] for item in self.audit if "method" in item], ["initialize", "session/new",
             "session/set_config_option", "session/set_config_option", "session/prompt"])
         self.assertIn({"exiting": True}, self.audit)
@@ -259,6 +261,9 @@ class EngineTest(unittest.TestCase):
                 self.send("start")
                 event = self.receive("settled")
                 self.assertEqual(event["outcome"], "failed")
+                expected = {"wrong-version": "compatibility", "missing-resume": "compatibility",
+                            "missing-model": "model", "missing-mode": "mode", "wrong-confirmation": "model"}
+                self.assertEqual(event.get("diagnostic"), expected[case])
                 self.assertFalse(any(item.get("method") == "session/prompt" for item in self.audit))
                 self.stop()
 
@@ -388,7 +393,41 @@ class EngineTest(unittest.TestCase):
         event = self.receive("settled")
         self.assertEqual(event["outcome"], "failed")
         self.assertEqual(event["submission"], "not_submitted")
+        self.assertEqual(event.get("diagnostic"), "credentials",
+                         "missing credentials must reach the editor as an actionable category")
         self.assertEqual(self.audit, before, "missing copied auth must refuse before worker launch")
+        self.assertEqual(self.source.read_bytes(), b"original text\n")
+
+    def test_initial_missing_auth_reports_cause_without_private_data(self):
+        self.spawn(auth_file=self.scratch / "PRIVATE_AUTH_PATH.json")
+        self.send("start", message="PRIVATE_USER_PROMPT")
+        event = self.receive("settled")
+        self.assertEqual(event["outcome"], "failed")
+        self.assertEqual(event.get("diagnostic"), "credentials")
+        self.assertEqual(event["submission"], "not_submitted")
+        self.assertEqual(self.audit, [])
+        self.assertNotIn("PRIVATE_", json.dumps(self.events))
+        self.assertTrue(event["stopped"] and event["graceful"] and event["store_valid"])
+
+    def test_malformed_credentials_never_leak_parser_input(self):
+        auth = self.scratch / "PRIVATE_AUTH_PATH.json"
+        auth.write_text('{"fixture":{"type":"api","key":"PRIVATE_TOKEN"}')
+        auth.chmod(0o600)
+        self.spawn(auth_file=auth)
+        self.send("start")
+        event = self.receive("settled")
+        self.assertEqual((event["outcome"], event.get("diagnostic")), ("failed", "credentials"))
+        self.assertEqual(self.audit, [])
+        self.assertNotIn("PRIVATE_", json.dumps(self.events))
+
+    def test_startup_timeout_is_distinct_and_never_claims_retry_safety(self):
+        self.spawn("startup-cancel", fault="startup-timeout")
+        self.send("start")
+        self.assertEqual(self.receive("startup")["stage"], "sources")
+        event = self.receive("settled")
+        self.assertEqual((event["outcome"], event.get("diagnostic")), ("failed", "timeout"))
+        self.assertFalse(event["store_valid"])
+        self.assertFalse(any(item.get("method") == "session/prompt" for item in self.audit))
         self.assertEqual(self.source.read_bytes(), b"original text\n")
 
     def test_clean_cancellation_can_resume_but_resume_failure_never_falls_back(self):

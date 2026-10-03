@@ -168,6 +168,45 @@ class ChatUITest(ChatTerminal):
         self.command("NvimAIChatClose")
 
 
+class ChatStartupUITest(ChatTerminal):
+    fixture_script = "chat_startup_ui.lua"
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(lambda: self.evaluate("pcall(chat_approval_fixture.cleanup)"))
+
+    def test_credentials_failure_preserves_draft_and_shows_next_action(self):
+        self.keys("i")
+        self.literal("Explain the selected files.")
+        self.keys("C-s", "Escape", "i")
+        self.literal("Keep this next question.")
+        self.keys("Escape")
+        self.wait(lambda: "credentials could not be loaded" in self.capture("chat-startup-auth"),
+                  "actionable authentication failure")
+        self.wait(lambda: "Keep this next question." in self.capture("chat-startup-auth"),
+                  "preserved draft visible after failure")
+        screen = self.capture("chat-startup-auth")
+        self.assertIn(":NvimAIStageSetup", screen)
+        self.assertEqual(self.evaluate("vim.api.nvim_get_current_line()"), "Keep this next question.")
+        self.assertEqual(self.evaluate("chat_approval_fixture.snapshot().retry_safe"), "true")
+
+    def test_startup_progress_and_explicit_cancellation(self):
+        auth = self.root / "fixture-auth.json"
+        auth.write_text(json.dumps({"fixture": {"type": "api", "key": "synthetic-fixture-only"}}))
+        auth.chmod(0o600)
+        self.keys("i")
+        self.literal("Explain the selected files.")
+        self.keys("C-s", "Escape")
+        self.wait(lambda: "Checking OpenCode compatibility" in self.capture("chat-startup-progress"),
+                  "visible startup step")
+        self.keys("g", "c")
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().phase") == "failed",
+                  "truthful startup cancellation")
+        self.assertEqual(self.evaluate("chat_approval_fixture.snapshot().retry_safe"), "false")
+        self.command("NvimAIChatClose")
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().phase") == "closed", "closed startup")
+
+
 class ChatApprovalUITest(ChatTerminal):
     fixture_script = "chat_approval_ui.lua"
 

@@ -67,6 +67,9 @@ local function projection(snapshot, notice)
     "Ctrl-S send · q hide · gi compose · g? actions",
     "gd review · gm model for next turn",
   }
+  if snapshot.phase == "starting" and snapshot.startup then
+    header[#header + 1] = snapshot.startup .. ". :NvimAIChatCancel to stop."
+  end
   if snapshot.review and snapshot.review.status == "pending" then
     header[#header + 1] =
       "Send follows up on the pending proposal. Open its diff to accept or reject."

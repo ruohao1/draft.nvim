@@ -99,7 +99,7 @@ tmux_project_pairs      Opt into the legacy session-pair routing convention.
                         Stale/mismatched pairs refuse launch.
 staged                  Session-only staging preferences. Explicit enabled/model/
                         auth_file choices override saved preferences. See below.
-status.redraw           Optional native-status redraw callback. The default uses
+status.redraw           Optional status redraw callback. The default uses
                         Neovim's redrawstatus command.
 
 Advanced staged options include provider (an explicit OpenCode provider config
@@ -107,8 +107,9 @@ table), root, opencode, python and bwrap executable paths. These are not saved b
 the setup dialog. No shell launch string is accepted. Keep executable overrides
 canonical, owned by root or your user, and not group/world writable.
 
-require("draft").compact() returns compact native status, suitable for a custom
-statusline. It does not start the companion.
+require("draft").compact() returns the active chat phase, or compact native status
+when no chat is active, suitable for a custom statusline. It does not start work.
+Phase changes redraw even while chat is hidden; Close restores native status.
 
 COMMANDS                                                        *draft-commands*
 
@@ -125,7 +126,7 @@ COMMANDS                                                        *draft-commands*
 :NvimAIReview!         Confirm abandonment of recovery data and close the companion.
                         Does not revert project files.
 :NvimAIGrants [path]   Inspect/revoke temporary external-directory grants.
-:NvimAIStatus          Show status for the selected review mode.
+:NvimAIStatus          Show active chat status, otherwise the selected review mode.
 :NvimAIClose           Close the native companion and revoke grants.
 
 :NvimAIStageSetup      Configure OpenCode chat/staging; confirm Save and enable.
@@ -175,6 +176,17 @@ Opening a new conversation focuses the composer. Press i, type a question,
 and Ctrl-S to send. Enter inserts a newline. Send a second question to reuse eligible
 context. Streaming preserves source focus/cursor and your unsent draft. Reading
 older transcript text preserves its viewport; only tail followers auto-scroll.
+
+After Send, chat shows its startup step: credentials, sandbox launch, compatibility,
+session creation/resume and model confirmation. Use gc or :NvimAIChatCancel to
+stop waiting. Failures include a recovery action. Retry is offered only when the
+controller proves it safe; an unsubmitted request alone does not prove this.
+
+:NvimAIStatus reports the active chat's phase and startup step or failure reason.
+:checkhealth draft shows the same chat state, with native-companion checks labeled
+separately. Opening chat checks no account access; readiness is checked on explicit
+Send. Diagnostics exclude credentials and conversation text. Recorded startup
+timings and limitations are in docs/validation/2026-10-03-chat-startup.md.
 
 Chat-buffer keys: Ctrl-S send (normal/insert); q hide (normal); gi compose;
 gd review; gm next-turn model; gc cancel; gr retry; gx close; g? available actions.

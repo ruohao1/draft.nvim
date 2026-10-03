@@ -307,7 +307,13 @@ local ok, reason = xpcall(function()
   assert(last().owner:snapshot().retry_safe)
   assert(chat:retry())
   assert(last().driver.requests[#last().driver.requests].command.message == "try safely")
-  assert(chat:cancel())
+  assert(chat:actions())
+  local startup_menu = #pending
+  assert(last().driver:emit({ kind = "startup", stage = "credentials" }))
+  assert(last().driver:emit({ kind = "startup", stage = "resume" }))
+  choose(startup_menu, 1)
+  assert(last().owner:snapshot().phase == "cancelling", "startup progress must preserve Cancel")
+  assert(last().driver.requests[#last().driver.requests].command.kind == "cancel")
   assert(last().driver:emit({
     kind = "cancelled",
     stopped = true,

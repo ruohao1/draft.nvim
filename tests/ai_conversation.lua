@@ -42,6 +42,54 @@ local function act(owner, action)
   return owner:dispatch(action, owner:snapshot().view_revision)
 end
 
+scenario("startup stages and failure causes are bounded and never authorize replay", function()
+  for _, submitted in ipairs({ false, true }) do
+    local owner, driver = fixture()
+    assert(act(owner, { kind = "submit", text = "PRIVATE_PROMPT" }))
+    assert(driver:emit(1, { kind = "startup", stage = "credentials" }))
+    local snapshot = owner:snapshot()
+    eq(snapshot.phase, "starting")
+    assert(snapshot.startup:find("credentials", 1, true))
+    if submitted then
+      assert(driver:emit(1, { kind = "submitted", model = "fixture/model" }))
+      eq(owner:snapshot().startup, nil)
+    end
+    assert(driver:emit(1, { kind = "stopping" }))
+    assert(driver:emit(1, {
+      kind = "settled",
+      outcome = "failed",
+      diagnostic = "credentials",
+      stopped = true,
+      graceful = true,
+      store_valid = true,
+      tokens_retired = true,
+      submission = submitted and "submitted" or "not_submitted",
+    }))
+    snapshot = owner:snapshot()
+    assert(
+      snapshot.reason:find("credentials", 1, true)
+        and snapshot.reason:find("NvimAIStageSetup", 1, true)
+    )
+    eq(snapshot.retry_safe, not submitted)
+    assert(not snapshot.reason:find("PRIVATE_", 1, true))
+    eq(#driver.requests, 1)
+  end
+  for _, event in ipairs({
+    { kind = "startup", stage = "PRIVATE_UNKNOWN_STAGE" },
+    { kind = "startup", stage = "credentials", detail = "PRIVATE_TOKEN" },
+    { kind = "settled", outcome = "failed", diagnostic = "PRIVATE_TOKEN" },
+  }) do
+    local owner, driver = fixture()
+    assert(act(owner, { kind = "submit", text = "test" }))
+    if event.kind == "settled" then
+      assert(driver:emit(1, { kind = "stopping" }))
+    end
+    assert(not driver:emit(1, event))
+    assert(owner:snapshot().recovery_required and not owner:snapshot().retry_safe)
+    assert(not owner:snapshot().reason:find("PRIVATE_", 1, true))
+  end
+end)
+
 scenario("bounded progress is display-only and unknown fields fail closed", function()
   local owner, driver = fixture()
   assert(act(owner, { kind = "submit", text = "read the selected file" }))

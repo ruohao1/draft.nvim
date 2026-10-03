@@ -62,6 +62,14 @@ discussion-only turns and explicit approval. The TUI suite also checks that
 typing remains in the composer until Escape, then exercises the automatically
 opened diff through acceptance, rejection and navigation at 70 columns.
 
+`ai_chat_startup` uses the production controller and confined fake ACP peer to
+check missing credentials, incompatible versions, unavailable models, launch
+failure and cancellation during startup. Chat, status and health agree without
+revealing private content, submitting a prompt or losing an unsent draft.
+Controller tests also cover malformed credentials and response deadlines.
+The TUI suite captures startup progress and actionable credential failures with
+actual keys; see the [startup record and timing measurements](../docs/validation/2026-10-03-chat-startup.md).
+
 `nvim_ai_chat_ui` uses actual keys in a private tmux server and Neovim TUI. Its
 basic input/layout case uses deterministic in-process provider events. Its
 model case uses `gm`, cancellation, hide/reopen and explicit Send to verify

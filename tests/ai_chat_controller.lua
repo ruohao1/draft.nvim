@@ -54,7 +54,7 @@ end
 vim.ui.select = function(items, options, callback)
   callback(items[options.prompt:find("preview", 1, true) and 1 or 2])
 end
-local notices = {}
+local notices, redraws = {}, {}
 local function config(case)
   return {
     enabled = true,
@@ -68,6 +68,11 @@ local function config(case)
 end
 local runtime = require("draft").setup({
   staged = config("stream"),
+  status = {
+    redraw = function()
+      redraws[#redraws + 1] = require("draft").compact()
+    end,
+  },
   notify = function(message)
     notices[#notices + 1] = message
   end,
@@ -141,6 +146,14 @@ local ok, reason = xpcall(function()
   assert(vim.uv.fs_chmod(source_path, 420))
   vim.cmd("NvimAIChat " .. vim.fn.fnameescape(source_path))
   assert(#audit == 0 and #processes == 0, "Opening must remain passive")
+  local status = assert(runtime:show_status())
+  assert(status.backend == "opencode" and status.state == "idle" and status.mode == "pre_write")
+  wait_for(function()
+    return redraws[#redraws] == "AI:O idle"
+  end, "Opening chat must redraw its compact status")
+  assert(runtime:compact() == "AI:O idle")
+  assert(#audit == 0 and #processes == 0, "Chat status must not launch or submit")
+  table.remove(notices)
   vim.cmd("NvimAIChatModel")
   assert(#audit == 0 and #processes == 0, "Initial model refusal must remain passive")
   compose("First explicit question.")
@@ -161,6 +174,11 @@ local ok, reason = xpcall(function()
     return #waiting == 1
   end, "Stream fixture did not reach its gate")
   phase("generating")
+  status = assert(runtime:show_status())
+  assert(status.state == "generating" and status.model == "fixture/model")
+  assert(require("draft").compact() == "AI:O generating")
+  assert(not vim.inspect(status):find("First explicit question", 1, true))
+  table.remove(notices)
   wait_for(function()
     return text("draft-chat"):find("Read selected file [completed]", 1, true) ~= nil
   end, "Progress was not displayed while generating")
@@ -178,6 +196,9 @@ local ok, reason = xpcall(function()
   wait_for(function()
     return count("exiting", true) == 1
   end, "First worker did not exit")
+  wait_for(function()
+    return redraws[#redraws] == "AI:O idle"
+  end, "Hidden chat completion must redraw its compact status")
   vim.cmd("NvimAIChat")
   phase("idle")
   assert(
@@ -218,6 +239,9 @@ local ok, reason = xpcall(function()
   vim.api.nvim_buf_set_lines(source, 0, -1, false, { "original text" })
   vim.bo[source].modified = false
   close()
+  wait_for(function()
+    return require("ai").conversation_status() == nil and redraws[#redraws] == runtime:compact()
+  end, "Confirmed Close must redraw the restored native status")
   print("ok - public commands stream two explicit turns, resume context and retain refused drafts")
 
   require("ai.staged").setup(config("cancel"))

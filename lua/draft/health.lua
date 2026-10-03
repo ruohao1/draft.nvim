@@ -217,13 +217,27 @@ function M.check(options)
     or function(name)
       return require("ai.backends").health(name)
     end
+  local ai = package.loaded["ai"]
+  local chat = ai and ai.conversation_status and ai.conversation_status()
+  if chat then
+    report("info", "OpenCode chat (review before write): " .. chat.state)
+    if chat.startup then
+      report("info", chat.startup)
+    end
+    if chat.reason then
+      report(chat.state == "failed" and "error" or "warn", chat.reason)
+    elseif chat.turn == 0 then
+      report("info", "OpenCode chat readiness is checked on explicit Send.")
+    end
+  end
   for _, name in ipairs({ "codex", "claude", "opencode" }) do
+    local label = name == "opencode" and chat and "opencode native companion" or name
     local ok, value = pcall(backend_health, name)
     if not ok or type(value) ~= "table" then
-      report("error", name .. ": local health probe failed.")
+      report("error", label .. ": local health probe failed.")
     else
-      report("info", name .. " executable: " .. safe(value.executable))
-      report("info", name .. " version: " .. safe(value.version))
+      report("info", label .. " executable: " .. safe(value.executable))
+      report("info", label .. " version: " .. safe(value.version))
       local auth = ({
         authenticated = true,
         unauthenticated = true,
@@ -232,7 +246,7 @@ function M.check(options)
       })[value.auth] and value.auth or "unknown"
       report(
         auth == "authenticated" and "ok" or "warn",
-        name .. " local authentication: " .. auth .. " (no login attempted)"
+        label .. " local authentication: " .. auth .. " (no login attempted)"
       )
       local capabilities = { "open", "closed", "failed" }
       for _, capability in ipairs({ "approval", "busy", "completion", "exact_session" }) do
@@ -240,9 +254,9 @@ function M.check(options)
           capabilities[#capabilities + 1] = capability
         end
       end
-      report("info", name .. " capabilities: " .. table.concat(capabilities, ", "))
+      report("info", label .. " capabilities: " .. table.concat(capabilities, ", "))
       if value.installed ~= true or value.error ~= "" then
-        report("warn", name .. ": " .. safe(value.error))
+        report("warn", label .. ": " .. safe(value.error))
       end
     end
   end

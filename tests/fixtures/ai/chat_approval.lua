@@ -1,5 +1,5 @@
 -- Disposable production runtime with a confined scripted ACP peer, never a writer substitute.
-return function(root)
+return function(root, settings)
   local f = { root = root, audit = {}, owners = {}, proposals = {}, clients = {} }
   f.project, f.peer = root .. "/project with spaces", root .. "/opencode"
   vim.fn.mkdir(f.project, "p", "0700")
@@ -56,7 +56,7 @@ return function(root)
     return system(command, ...)
   end
   f.runtime = require("draft").setup({
-    staged = {
+    staged = vim.tbl_deep_extend("force", {
       enabled = true,
       root = f.project,
       model = "fixture/model",
@@ -64,7 +64,7 @@ return function(root)
       provider = {
         fixture = { options = { testCase = "edit", auditPort = server:getsockname().port } },
       },
-    },
+    }, settings or {}),
   })
   function f.owner()
     return f.owners[#f.owners]

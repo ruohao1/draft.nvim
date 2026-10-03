@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import socket
 import sys
+import time
 
 
 script = Path(__file__).resolve().parents[3] / 'scripts/nvim-ai-conversation.py'
@@ -30,6 +31,13 @@ elif fault == 'freeze-cancel':
                 assert stream.recv(32) == b'continue\n'
         return result
     controller.turns.staging.freeze_workspace = paused_freeze
+elif fault == 'startup-timeout':
+    begin = controller.turns.Turn.begin
+
+    def short_deadline(self, method, params):
+        self.startup_deadline = time.monotonic() + .2
+        return begin(self, method, params)
+    controller.turns.Turn.begin = short_deadline
 else:
     raise ValueError('Unknown test fault')
 

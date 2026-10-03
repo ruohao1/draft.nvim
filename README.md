@@ -103,6 +103,17 @@ mode, such as `0600`, identifies the file and the supported modes before
 submission. A refused Send keeps your unsent draft. Choose a supported
 file; Draft does not change file permissions for you.
 
+After Send, chat shows its current startup step: checking credentials, starting
+OpenCode, checking compatibility, opening or resuming the session, and confirming
+the model. Use `gc` or `:NvimAIChatCancel` to stop waiting. Failures show a recovery
+action; retry is offered only when the controller proves it safe.
+
+`:NvimAIStatus` reports the active chat, including its startup step or failure
+reason. `:checkhealth draft` shows the same chat state and labels native-companion
+checks separately. Opening chat checks no account access; readiness is checked
+on explicit Send. These diagnostics exclude credentials and conversation text.
+See the [startup validation and measured timings](docs/validation/2026-10-03-chat-startup.md).
+
 Chat always uses **review before write**, regardless of the saved
 `:NvimAIPrompt` mode. `:NvimAIReviewMode` controls that prompt command's routing;
 you do not need to change it to use chat. `:NvimAIChatReview` opens chat proposals;
@@ -287,7 +298,7 @@ and source checks. It is not pre-write protection.
 | `:NvimAIReview` | Review native changes after write |
 | `:NvimAIReview!` | Confirm abandonment of native recovery data; does not revert files |
 | `:NvimAIGrants [canonical-path]` | Inspect/revoke temporary outside-directory grants |
-| `:NvimAIStatus` | Show status for the selected review mode |
+| `:NvimAIStatus` | Show active chat status, otherwise the selected review mode |
 | `:NvimAIClose` | Close the native companion and revoke temporary grants |
 
 Native and staged activity exclude each other. Before staging, close the native
@@ -340,8 +351,9 @@ Staging does not inherit provider environment variables, project configuration,
 other buffers, or unselected project files. Submitting authorizes sending the
 selected file contents and your instruction to that provider.
 
-`require("draft").compact()` returns compact native status for a custom
-statusline. Draft requests a standard Neovim statusline redraw when it changes;
+`require("draft").compact()` returns the active chat phase, or compact native
+status when no chat is active, for a custom statusline. Draft requests a standard
+Neovim statusline redraw when it changes, including hidden-chat completion;
 an optional `status = { redraw = function() ... end }` callback can integrate
 with a statusline plugin. No particular UI plugin is required.
 
