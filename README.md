@@ -242,8 +242,16 @@ The picker lists only paths still needing review, with the most recently observe
 changes first. Changes observed together use alphabetical path order. Recency is
 tracked for the current Neovim session; conflicts and changed ignored paths remain
 available for manual review.
+
+The picker opens in a floating window with fuzzy filename search. Type to filter,
+use the arrow keys or `Ctrl-n`/`Ctrl-p` to move, and press Enter to open the diff.
+Escape closes the picker without deciding anything. No additional UI plugin is
+required.
+
 Approval acknowledges those changes, while rejection uses the saved baseline
 and source checks. It is not pre-write protection.
+
+![Native review picker](docs/images/native-review-picker.png)
 
 | Command | Purpose |
 | --- | --- |

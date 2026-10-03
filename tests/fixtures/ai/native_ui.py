@@ -10,7 +10,6 @@ import json
 import os
 from pathlib import Path
 import pty
-import re
 import select
 import signal
 import socket
@@ -36,6 +35,72 @@ class NativeUI(native.Lifecycle):
 
     def source_snapshot(self):
         return self.command("a", 'lua vim.print({vim.bo.modified, vim.api.nvim_buf_get_lines(0, 0, -1, false)})')
+
+    def review_picker_case(self, owner):
+        self.tm("resize-window", "-t", owner, "-x", "180", "-y", "28")
+        self.command("a", "NvimAIBackend codex")
+        self.ready("a", "codex", 1)
+        self.command("a", "NvimAIPrompt")
+        self.ready("a", "codex", 2)
+        source = self.source_snapshot()
+        older, latest = self.root / "root/a-older.lua", self.root / "root/z-latest.lua"
+        older.write_text("return 'older edit'\n")
+        self.schedule("NvimAIReview")
+        wait_for(lambda: "[unresolved] a-older.lua" in self.screen(owner), "first review observation")
+        self.tm("send-keys", "-t", owner, "Escape")
+        wait_for(lambda: "Review changes" not in self.screen(owner), "Escape closes picker")
+        latest.write_text("return 'latest edit'\n")
+        self.schedule("NvimAIReview")
+        output = wait_for(lambda: self.screen(owner) if "[unresolved] z-latest.lua" in self.screen(owner) else "",
+                          "floating review picker")
+        check("Review changes" in output and "Type number" not in output, "review uses a floating search window")
+        check(output.index("[unresolved] z-latest.lua") < output.index("[unresolved] a-older.lua"),
+              "newest file precedes older file")
+        check("[unchanged]" not in output, "unchanged files stay out of review")
+
+        def capture(name):
+            directory = os.environ.get("DRAFT_REVIEW_CAPTURE_DIR")
+            if directory:
+                target = Path(directory)
+                target.mkdir(parents=True, exist_ok=True)
+                columns = int(self.tm("display-message", "-p", "-t", owner, "#{pane_width}"))
+                (target / (name + ".ansi")).write_text(self.tm("capture-pane", "-e", "-p", "-t", owner) + "\n")
+                (target / (name + ".json")).write_text(json.dumps({"columns": columns}) + "\n")
+
+        capture("review-picker-wide")
+        self.command("a", "close")
+        wait_for(lambda: "Review changes" not in self.screen(owner), "external closure cancels picker")
+        mode = self.run([self.nvim, "--server", str(self.owners["a"][1]), "--remote-expr", "mode()"]).stdout.strip()
+        check(mode == "n", "closing the search float must not leave source in insert mode: " + mode)
+        self.schedule("NvimAIReview")
+        wait_for(lambda: "[unresolved] z-latest.lua" in self.screen(owner), "picker reopens after external closure")
+        self.tm("send-keys", "-t", owner, "-l", "old")
+        wait_for(lambda: "[unresolved] a-older.lua" in self.screen(owner)
+                 and "[unresolved] z-latest.lua" not in self.screen(owner), "typing filters results")
+        self.tm("send-keys", "-t", owner, "C-u")
+        wait_for(lambda: "[unresolved] z-latest.lua" in self.screen(owner), "clearing search restores order")
+        self.tm("resize-window", "-t", owner, "-x", "90", "-y", "22")
+        time.sleep(.2)
+        check("Review changes" in self.screen(owner), "picker survives a narrow editor")
+        capture("review-picker-narrow")
+        self.tm("resize-window", "-t", owner, "-x", "180", "-y", "28")
+        self.tm("send-keys", "-t", owner, "C-n")
+        self.tm("send-keys", "-t", owner, "Enter")
+        wait_for(lambda: "older edit" in self.screen(owner) and "Kind: absent" in self.screen(owner),
+                 "Ctrl-n and Enter open the older file")
+        self.tm("send-keys", "-t", owner, "-l", "q")
+        wait_for(lambda: "older edit" not in self.screen(owner), "closing diff returns to source")
+        check(self.source_snapshot() == source, "navigation preserves source buffer")
+        check(latest.read_text() == "return 'latest edit'\n", "navigation never decides files")
+        self.schedule("NvimAIReview")
+        wait_for(lambda: "[unresolved] z-latest.lua" in self.screen(owner), "reopened picker")
+        self.tm("send-keys", "-t", owner, "-l", "zlat")
+        self.tm("send-keys", "-t", owner, "Enter")
+        wait_for(lambda: "latest edit" in self.screen(owner) and "Kind: absent" in self.screen(owner),
+                 "fuzzy search and Enter open the latest file")
+        self.tm("send-keys", "-t", owner, "-l", "R")
+        wait_for(lambda: not latest.exists(), "guarded rejection removes only the selected file")
+        check(older.read_text() == "return 'older edit'\n", "older pending file survives rejection")
 
     def notice_layout_case(self, owner):
         message = ("Context published to OpenCode, not submitted; :NvimAIReview after edits. "
@@ -125,9 +190,7 @@ class NativeUI(native.Lifecycle):
         self.tm("send-keys", "-t", owner, "Enter")
         output = wait_for(lambda: self.screen(owner) if "[unresolved] main.lua" in self.screen(owner) else "",
                           "native review picker finds the sandbox edit")
-        selected = re.search(r"(\d+): \[unresolved\] main\.lua", output)
-        check(selected is not None, "edited file is an observed review choice")
-        self.tm("send-keys", "-t", owner, "-l", selected.group(1))
+        self.tm("send-keys", "-t", owner, "-l", "main.lua")
         self.tm("send-keys", "-t", owner, "Enter")
         try:
             wait_for(lambda: "hello from the companion" in self.screen(owner),
@@ -276,6 +339,7 @@ class NativeUI(native.Lifecycle):
         owner = self.tm("display-message", "-p", "-t", "nvim-ai:0.0", "#{pane_id}")
         self.start_owner("a", owner, native_ui=True)
         special_cases = {
+            "review-picker": self.review_picker_case,
             "notice-layouts": self.notice_layout_case,
             "prompt-review-opencode": self.prompt_review_case,
             "graphics-opencode": self.terminal_response_case,
@@ -448,9 +512,7 @@ class NativeUI(native.Lifecycle):
             self.schedule("NvimAIReview")
             output = wait_for(lambda: self.screen(owner) if "[conflicted] main.lua" in self.screen(owner) else "",
                               "native review identifies the conflicted file")
-            selected = re.search(r"(\d+): \[conflicted\] main\.lua", output)
-            check(selected is not None, "conflicted path is an observed picker choice")
-            self.tm("send-keys", "-t", owner, "-l", selected.group(1))
+            self.tm("send-keys", "-t", owner, "-l", "main.lua")
             self.tm("send-keys", "-t", owner, "Enter")
             try:
                 wait_for(lambda: "Writer: mixed" in self.screen(owner) and "press m" in self.screen(owner),
@@ -479,9 +541,7 @@ class NativeUI(native.Lifecycle):
                   "clean-buffer review must not block in a file-change prompt or busy tracker\n" + output)
             output = wait_for(lambda: self.screen(owner) if "[unresolved] created.txt" in self.screen(owner) else "",
                               "native review picker displays the created file")
-            selected = re.search(r"(\d+): \[unresolved\] created\.txt", output)
-            check(selected is not None, "created file is an observed picker choice")
-            self.tm("send-keys", "-t", owner, "-l", selected.group(1))
+            self.tm("send-keys", "-t", owner, "-l", "created.txt")
             self.tm("send-keys", "-t", owner, "Enter")
             wait_for(lambda: "Kind: absent" in self.screen(owner) and "native-ui-review" in self.screen(owner),
                      "native review opens the exact created-file diff")

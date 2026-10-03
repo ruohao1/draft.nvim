@@ -21822,6 +21822,33 @@ local function run()
   end
 
   do
+    local t = task8_fixture("ui-floating-picker")
+    t.put("latest.lua", { kind = "regular", bytes = "return true\n" })
+    assert(t.tracker:scan("external"))
+    local original_select, default_called = vim.ui.select, false
+    vim.ui.select = function()
+      default_called = true
+    end
+    local ui = require("ai.review.ui").new({ tracker = t.tracker })
+    assert(ui:open())
+    vim.ui.select = original_select
+    eq(default_called, false, "native review has a floating picker without UI plugins")
+    local prompt = vim.api.nvim_get_current_win()
+    assert(vim.api.nvim_win_get_config(prompt).relative ~= "", "review picker floats")
+    eq(vim.bo.filetype, "nvim-ai-review-search", "typing starts in the review search field")
+    assert(ui:open())
+    eq(vim.api.nvim_win_is_valid(prompt), false, "reopening review retires its previous picker")
+    local replacement = vim.api.nvim_get_current_win()
+    vim.wait(20, function()
+      return false
+    end)
+    assert(ui:close())
+    eq(vim.api.nvim_win_is_valid(replacement), false, "closing review closes its picker")
+    eq(t.tracker:get("latest.lua").state, "unresolved", "cancelling never decides a file")
+    assert(t.tracker:abandon())
+  end
+
+  do
     local t = task8_fixture("ui-picker-recent", {
       ["a.lua"] = { kind = "regular", bytes = "before\n" },
       ["z.lua"] = { kind = "regular", bytes = "before\n" },

@@ -204,6 +204,11 @@ first. Changes observed together use alphabetical path order. Recency is tracked
 for the current Neovim session. Conflicts and changed ignored paths remain
 available for manual review.
 
+The picker is a floating window with fuzzy filename search. Type to filter;
+<Up>/<Down> or <C-n>/<C-p> move between results; <CR> opens the selected diff.
+<Esc> closes without a decision. In Normal mode, j/k navigate, / returns to
+search, and q closes. No additional UI plugin is needed.
+
 One native runtime pins one physical project/worktree. Native activity and staged
 turns/dialogs exclude each other. Before staging, close the native companion and
 resolve or explicitly abandon its review. A damaged baseline blocks further

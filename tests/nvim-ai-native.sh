@@ -12,8 +12,8 @@ fixture=native_lifecycle.py
 [ "$#" -le 1 ] || { printf '%s\n' 'expected at most one native UI case' >&2; exit 2; }
 case "${1-}" in
   '') set -- ;;
-  prompt|prompt-chunked|prompt-drop|prompt-redirect|prompt-timeout|prompt-oversized|prompt-boundary|prompt-review-opencode|notice-layouts|review|review-reentry|review-conflict|close|crash|crash-opencode|resize-codex|resize-opencode|graphics-opencode|termcap-opencode|size-guard-opencode|version-upgrade-opencode) fixture=native_ui.py ;;
-  *) printf '%s\n' 'usage: nvim-ai-native.sh [prompt[-chunked|-drop|-redirect|-timeout|-oversized|-boundary|-review-opencode]|notice-layouts|review[-reentry|-conflict]|close|crash[-opencode]|resize-codex|resize-opencode|graphics-opencode|termcap-opencode|size-guard-opencode|version-upgrade-opencode]' >&2; exit 2 ;;
+  prompt|prompt-chunked|prompt-drop|prompt-redirect|prompt-timeout|prompt-oversized|prompt-boundary|prompt-review-opencode|notice-layouts|review|review-reentry|review-conflict|review-picker|close|crash|crash-opencode|resize-codex|resize-opencode|graphics-opencode|termcap-opencode|size-guard-opencode|version-upgrade-opencode) fixture=native_ui.py ;;
+  *) printf '%s\n' 'usage: nvim-ai-native.sh [prompt[-chunked|-drop|-redirect|-timeout|-oversized|-boundary|-review-opencode]|notice-layouts|review[-reentry|-conflict|-picker]|close|crash[-opencode]|resize-codex|resize-opencode|graphics-opencode|termcap-opencode|size-guard-opencode|version-upgrade-opencode]' >&2; exit 2 ;;
 esac
 test_parent=$(CDPATH='' cd -- "${TMPDIR:-/tmp}" && pwd -P)
 test_root=$(mktemp -d "$test_parent/draft-native.XXXXXX")
@@ -63,6 +63,7 @@ env -i HOME="$test_root/home" PATH="$test_root/bin:$PATH" SHELL=/bin/sh \
 tmux_started=true
 env -i HOME="$test_root/home" PATH="$PATH" SHELL=/bin/sh \
   TERM="${TERM:-xterm-256color}" NVIM_LOG_FILE=/dev/null PYTHONDONTWRITEBYTECODE=1 \
+  DRAFT_REVIEW_CAPTURE_DIR="${DRAFT_REVIEW_CAPTURE_DIR:-}" \
   "$real_python" -I -B "$nvim_root/tests/fixtures/ai/$fixture" \
   "$test_root" "$socket" "$real_tmux" "$real_nvim" "$real_python" "$nvim_root" ${1+"$1"}
 cleanup

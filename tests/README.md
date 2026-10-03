@@ -212,8 +212,21 @@ sh tests/nvim-ai-native.sh size-guard-opencode
 sh tests/nvim-ai-native.sh prompt-review-opencode
 sh tests/nvim-ai-native.sh version-upgrade-opencode
 sh tests/nvim-ai-native.sh review-conflict
+sh tests/nvim-ai-native.sh review-picker
 sh tests/nvim-ai-native.sh notice-layouts
 ```
+
+The `review-picker` case covers fuzzy search, keyboard navigation, cancellation,
+external window closure, resizing, and guarded rejection in the actual Neovim
+TUI. Capture its wide and narrow grids with:
+
+```sh
+DRAFT_REVIEW_CAPTURE_DIR=/tmp/draft-review-captures \
+  sh tests/nvim-ai-native.sh review-picker
+```
+
+Each `.ansi` capture has an adjacent `.json` file with its column count for
+`render_chat_capture.py`.
 
 They use fake provider processes in disposable Neovim instances and private tmux
 servers. The resize cases check zoom, unzoom, repeated dimension changes, visible

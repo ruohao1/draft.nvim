@@ -1,6 +1,7 @@
 -- Native review controls. Only the tracker may decide or mutate reviewed files.
 local M = {}
 local reducer = require("ai.review.reducer")
+local picker = require("ai.review.picker")
 
 local function display_path(path)
   return (
@@ -190,9 +191,17 @@ end
 
 function M.new(options)
   local tracker = assert(options.tracker, "review tracker is required")
-  local select = options.select or vim.ui.select
+  local select = options.select or picker.select
   local ui, generation = {}, 0
   local handle, shown, unsubscribe
+  local cancel_picker
+  local function close_picker()
+    if cancel_picker then
+      local cancel = cancel_picker
+      cancel_picker = nil
+      cancel()
+    end
+  end
   local schedule = options.schedule or vim.schedule
   local render, dispose = options.open_diff or open_diff, options.close_diff or close_diff
   local is_open = options.is_open or live_diff
@@ -356,6 +365,7 @@ function M.new(options)
   end
 
   function ui:open_path(path)
+    close_picker()
     local view, err = tracker:view(path)
     if not view then
       return nil, err
@@ -473,18 +483,25 @@ function M.new(options)
     end
     generation = generation + 1
     local request = generation
+    close_picker()
     local items = tracker:pending_paths()
     for _, item in ipairs(items) do
       item.label = label(item)
     end
     items[#items + 1] = { label = "[batch] Abandon review batch", abandon = true }
-    select(items, {
+    local selected = false
+    local cancel = select(items, {
       prompt = "AI review batch " .. review_id,
       format_item = function(item)
         return item.label
       end,
     }, function(item)
-      if not item or generation ~= request then
+      selected = true
+      if generation ~= request then
+        return
+      end
+      cancel_picker = nil
+      if not item then
         return
       end
       generation = generation + 1
@@ -515,11 +532,15 @@ function M.new(options)
         notify(err)
       end
     end)
+    if not selected and type(cancel) == "function" then
+      cancel_picker = cancel
+    end
     return true
   end
 
   function ui:close()
     generation = generation + 1
+    close_picker()
     local closed, err = dispose(handle)
     if not closed then
       return nil, err
