@@ -18,6 +18,13 @@ editor handles, credentials or real-agent opt-in environment variables.
 Logs go under ignored `.test-results/`; failed-suite scratch is retained under
 the exact `/tmp/draft-tests-*` path printed by the runner.
 
+For a named Linux/OpenCode candidate, follow the reusable
+[beta acceptance checklist](../docs/validation/linux-beta-checklist.md). It maps
+the integrated workflow to existing suites, gives a terminal walkthrough and
+separates fixtures, installed-binary checks and release-time live-provider scope.
+`nvim_ai_install` additionally runs the full approval and recovery journeys from
+a relocated checkout with no tmux executable available to Neovim.
+
 Create development checkouts with `umask 022`. Draft refuses group- or
 world-writable helpers and executable fixtures. If a checkout was created with
 a shared-write umask, correct those file permissions before running the suite:

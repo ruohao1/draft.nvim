@@ -415,6 +415,11 @@ bounded shutdown checks, restart behavior and retained-artifact limits.
 
 ## Validation
 
+The [Linux beta acceptance checklist](docs/validation/linux-beta-checklist.md)
+provides repeatable installation, chat, review and recovery checks for a named
+candidate. It distinguishes local fixtures, installed-OpenCode checks and
+live-provider acceptance.
+
 The [OpenCode onboarding record](docs/validation/2026-10-03-opencode-onboarding.md)
 covers the documented setup, discussion, frozen review and approval flow with a
 confined fake provider, including preservation of an existing native prompt mode.

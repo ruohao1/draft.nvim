@@ -45,6 +45,24 @@ class InstallTest(unittest.TestCase):
             with self.subTest(suite=name):
                 self.run_editor(self.plugin / "tests" / (name + ".lua"))
 
+    def test_relocated_core_chat_without_tmux(self):
+        binaries = self.base / "core-bin"
+        binaries.mkdir(mode=0o700)
+        for name in ("nvim", "python3", "bwrap", "git", "sh", "rg"):
+            executable = shutil.which(name)
+            self.assertIsNotNone(executable, name + " is required for core chat acceptance")
+            (binaries / name).symlink_to(Path(executable).resolve())
+        self.env["PATH"] = str(binaries)
+        script = self.base / "without-tmux.lua"
+        for name in ("ai_chat_approval", "ai_chat_recovery"):
+            with self.subTest(suite=name):
+                script.write_text('''
+assert(vim.fn.executable("tmux") == 0, "Core chat acceptance must run without tmux")
+assert(vim.env.TMUX == nil and vim.env.TMUX_PANE == nil)
+dofile(vim.env.DRAFT_TEST_INSTALL .. "/tests/''' + name + '''.lua")
+''')
+                self.run_editor(script)
+
     def test_help_tags_resolve_the_public_documentation(self):
         script = self.base / "help.lua"
         script.write_text('''
