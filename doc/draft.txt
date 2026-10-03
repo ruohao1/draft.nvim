@@ -2,6 +2,7 @@
 
 Draft is an early Linux plugin. Its public Lua module is "draft". Internal
 modules remain under "ai", and commands retain the NvimAI prefix.
+Start with OpenCode chat and approval before project writes: |draft-quickstart|.
 
 SETUP                                                        *draft* *draft-setup*
 
@@ -35,6 +36,41 @@ creates a fresh profile for 1.18.34.
 
 Run :checkhealth draft for local diagnostics. The nvim-ai health name is a
 compatibility alias. Health does not create Draft state or submit a prompt.
+
+START WITH OPENCODE CHAT                                      *draft-quickstart*
+
+After setup and :checkhealth draft:
+
+1. Open and save one existing text file in your project. Close an open native
+   companion with :NvimAIClose and resolve any pending native review first.
+2. Run :NvimAIStageSetup. Choose an explicit provider/model available to your
+   OpenCode account and an existing auth-file path if needed. Choose Save and
+   enable. This setup is shared by chat and standalone staging; it sends no prompt.
+3. Run :NvimAIChat. The composer opens with the current file selected. Opening
+   does not launch a provider, discover models or send work.
+4. Press i, type a question about the file, and press Ctrl-S to send. Enter adds
+   a newline. Read the reply, then ask for a small edit and send again.
+5. When the proposal is ready, press Escape then gd. Choose the file and press
+   Enter to open its frozen diff. Your project file is still unchanged by Draft.
+6. Inspect the diff. Press a to approve this file or r to reject it. Only
+   approval writes the proposed contents to your project.
+7. Run :NvimAIChat to return to the composer, or press f while a diff is open.
+   Continue with i and Ctrl-S. With review pending, Send discusses or revises
+   the proposal; it does not approve it.
+8. Run :NvimAIChatClose when finished. Confirm discarding pending proposals if
+   asked. Earlier accepted files stay saved. Use :NvimAIChatNew for a new conversation.
+
+Press Escape then q in chat to hide it. :NvimAIChat reopens the transcript and
+unsent draft. To select several files, use :NvimAIChat src/one.lua src/two.lua.
+The selection stays fixed until close. See |draft-chat| for all controls.
+
+Chat always uses review before write, regardless of the saved :NvimAIPrompt
+mode. :NvimAIReviewMode controls that prompt command's routing; you do not need
+to change it to use chat. :NvimAIChatReview opens chat proposals. :NvimAIReview
+is for changes already written by a native companion.
+
+If Ctrl-S freezes terminal output, press Ctrl-Q to resume. To send without
+Ctrl-S, press Escape and run :NvimAIChatSend.
 
 OPTIONS                                                          *draft-options*
 >lua
@@ -91,7 +127,7 @@ COMMANDS                                                        *draft-commands*
 :NvimAIStatus          Show status for the selected review mode.
 :NvimAIClose           Close the native companion and revoke grants.
 
-:NvimAIStageSetup      Choose model/auth path; confirm Save and enable.
+:NvimAIStageSetup      Configure OpenCode chat/staging; confirm Save and enable.
 :NvimAIStage [text]    Stage the saved current file; ask for an instruction if absent.
 :NvimAIStageFiles [files...]
                         Select saved files with a picker or explicit paths.
@@ -193,6 +229,9 @@ submissions have a 32 KiB limit. Refused and oversized drafts remain intact.
 No transcript archive, swap or persistent undo is written by the chat view.
 
 NATIVE AFTER-WRITE REVIEW                                   *draft-native-review*
+
+This is an optional terminal workflow. Use :NvimAIChat for the recommended
+OpenCode conversation with approval before project writes.
 
 Native agents can write within their authorized scope before you inspect the
 review. Approval acknowledges those writes; rejection attempts guarded recovery

@@ -2,7 +2,7 @@
 local M = {}
 local active
 local bindings = {
-  { "NvimAIOpen", "aa", "open", "AI: open or focus companion" },
+  { "NvimAIOpen", "aa", "open", "AI: open native companion (after-write review)" },
   { "NvimAIPrompt", "ap", "prompt", "AI: prompt using configured review mode" },
   { "NvimAINativePrompt", false, "native_prompt", "AI: native prompt (after-write review)" },
   { "NvimAIBackend", "ab", "backend", "AI: switch backend" },
@@ -10,7 +10,7 @@ local bindings = {
   { "NvimAIGrants", "ag", "grants", "AI: inspect or revoke temporary grants" },
   { "NvimAIStatus", "as", "show_status", "AI: show companion status" },
   { "NvimAIClose", "ax", "close", "AI: close companion" },
-  { "NvimAIChat", "at", "chat_open", "Draft: open or focus conversation" },
+  { "NvimAIChat", "at", "chat_open", "Draft: OpenCode chat (review before write)" },
   { "NvimAIChatNew", false, "chat_new", "Draft: start a new conversation after close" },
   { "NvimAIChatSend", false, "chat_send", "Draft: explicitly send composer" },
   { "NvimAIChatHide", false, "chat_hide", "Draft: hide conversation without stopping it" },
@@ -281,7 +281,7 @@ function M.setup(options)
     local generation = state.generation
     local select = options.select or vim.ui.select
     select(entries, {
-      prompt = "AI backend",
+      prompt = "Native AI backend (after-write review)",
       format_item = function(item)
         return item.name .. (item.hint ~= "" and (" (" .. item.hint .. ")") or "")
       end,

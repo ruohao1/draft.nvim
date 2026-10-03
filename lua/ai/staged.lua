@@ -348,7 +348,7 @@ function M.configure()
   local loaded = configured()
   local config = loaded or options
   vim.ui.input(
-    { prompt = "Staged OpenCode model (provider/model): ", default = config.model or "" },
+    { prompt = "OpenCode chat/staging model (provider/model): ", default = config.model or "" },
     function(model)
       if not valid() then
         return
@@ -392,7 +392,7 @@ function M.configure()
           review_mode = config.review_mode or (not loaded and "pre_write" or nil),
         }
         vim.ui.select({ "Cancel", "Save and enable" }, {
-          prompt = "Save model/auth path only? Each staged prompt sends only explicitly selected saved files to "
+          prompt = "Save OpenCode chat/staging settings? Sending shares selected files and messages with "
             .. model
             .. ".",
         }, function(choice)
@@ -410,7 +410,7 @@ function M.configure()
           options.enabled, options.model, options.auth_file, options.review_mode =
             saved.enabled, saved.model, saved.auth_file, saved.review_mode
           policy_revision = policy_revision + 1
-          notify("Settings saved; no prompt sent. Use :NvimAIStage for pre-write review.")
+          notify("Settings saved; no prompt sent. Use :NvimAIChat for review before write.")
         end)
       end)
     end
@@ -1039,7 +1039,7 @@ local function setup_keymaps()
     "n",
     "<leader>ac",
     M.configure,
-    { silent = true, desc = "AI: configure staged edits" }
+    { silent = true, desc = "Draft: configure OpenCode chat and staged edits" }
   )
   vim.keymap.set(
     "n",
@@ -1115,7 +1115,7 @@ function M.setup(config, guard, keymaps)
   vim.api.nvim_create_user_command(
     "NvimAIStageSetup",
     M.configure,
-    { desc = "AI: configure staged edits" }
+    { desc = "Draft: configure OpenCode chat and staged edits" }
   )
   vim.api.nvim_create_user_command(
     "NvimAIStageReset",

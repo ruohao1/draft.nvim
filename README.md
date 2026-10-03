@@ -1,34 +1,18 @@
 # Draft.nvim
 
-An AI companion for Neovim, with explicit context and file review.
+An OpenCode conversation beside your code, with approval before project writes.
 
-Draft has two editing workflows:
+Start with [OpenCode chat](#start-with-opencode-chat): discuss selected saved
+files, request an edit, inspect its frozen diff, then approve or reject it.
+`:NvimAIChat` keeps the conversation and review inside Neovim. Tmux is optional.
 
-- **Native companions:** use Codex CLI, Claude Code, or OpenCode in a terminal,
-  then review their changes **after they have been written**.
-- **Staged OpenCode edits:** select saved files, let OpenCode edit isolated
-  copies, and approve each frozen proposal **before it reaches your project**.
+Draft is an early Linux plugin. In chat, OpenCode edits isolated copies; project
+files change only when you approve a frozen proposal. Review happens after
+generation finishes, before project writes.
 
-This is an early Linux extraction. `:NvimAIChat` offers multi-turn OpenCode
-questions and edits beside your code, with streamed replies and explicit per-file
-approval of frozen proposals. Configure the initial model with
-`:NvimAIStageSetup`; use `:NvimAIChatModel` to choose a later turn's model.
-
-Chat retains context across explicit turns with fresh isolated workers and the
-same saved-source and frozen-review guards as staging. The
-[approval validation record](docs/validation/2026-09-20-conversation-approval.md) covers
-synthetic providers; the [controller record](docs/validation/2026-09-19-conversation-controller.md)
-separately covers pinned OpenCode with a local scripted provider.
-The [Linux live-provider record](docs/validation/2026-09-22-live-provider.md)
-documents a four-turn OpenAI OAuth / GPT-6 Astra pilot with discussion, per-file
-decisions, revision and conversation recall. It covers one disposable Linux
-setup, not everyday use across accounts, models or backends.
-The subsequent [normal-configuration acceptance](docs/validation/2026-09-26-normal-config.md)
-covers installation and one reviewed README edit in a fresh editor using the
-user's existing Neovim configuration. Both checks were agent-operated.
-The [OpenCode 1.18.34 follow-up](docs/validation/2026-10-01-native-resize.md)
-covers installed-binary compatibility, local-provider conversations and edits,
-and real terminal resizing in tmux and Neovim splits.
+For a single instruction without chat, use [standalone staging](#standalone-staged-edits).
+The optional [native CLI companion](#native-companions-and-after-write-review)
+has **after-write review**: the agent writes first, then you inspect its changes.
 
 ## Requirements
 
@@ -86,20 +70,42 @@ If migrating from an embedded `lua/ai` copy, move that copy out of your
 Neovim configuration before loading Draft so its internal modules resolve from
 the plugin.
 
-## Ask questions in a conversation
+## Start with OpenCode chat
 
-1. Save the file you want to discuss. Run `:NvimAIStageSetup`, choose an explicit
-   `provider/model` and optional existing auth-file path, then **Save and enable**.
-2. Run `:NvimAIChat`, or `:NvimAIChat src/one.lua src/two.lua` for an explicit
-   selection. Opening does not launch a provider, discover models or send work.
-3. Press `i` in the composer and type a question. Enter adds a newline;
-   **Ctrl-S** explicitly sends. Replies stream without moving your source cursor.
-4. Ask another question with Ctrl-S. Press Escape then `q` to hide; run
-   `:NvimAIChat` to reopen with the transcript and unsent draft intact.
-5. Run `:NvimAIChatClose` to stop the conversation and release its scope.
-   Closed history stays readable. Use `:NvimAIChatNew` for a fresh conversation.
+After installation and `:checkhealth draft`:
 
-![Conversation beside code](docs/images/conversation-wide.png)
+1. Open and save one existing text file in your project. If a native companion
+   is open, close it with `:NvimAIClose` and resolve any pending native review.
+2. Run `:NvimAIStageSetup`. Choose an explicit `provider/model` available to your
+   OpenCode account and an existing auth-file path if needed. Choose **Save and
+   enable**. This setup is shared by chat and standalone staging; it sends no prompt.
+3. Run `:NvimAIChat`. The composer opens with the current file selected. Opening
+   does not launch a provider, discover models or send work.
+4. Press `i`, type a question about the file, and press **Ctrl-S** to send.
+   Enter adds a newline. Read the reply, then ask for a small edit and send again.
+5. When the proposal is ready, press Escape then `gd`. Choose the file and press
+   Enter to open its frozen diff. Your project file is still unchanged by Draft.
+6. Inspect the diff. Press `a` to approve this file or `r` to reject it.
+   Only approval writes the proposed contents to your project.
+7. Run `:NvimAIChat` to return to the composer, or press `f` while a diff is open.
+   Continue the conversation with `i` and Ctrl-S. With review pending, Send
+   discusses or revises the proposal; it does not approve it.
+8. Run `:NvimAIChatClose` when finished. Confirm discarding pending proposals if
+   asked. Earlier accepted files stay saved. Use `:NvimAIChatNew` for a new conversation.
+
+Press Escape then `q` in chat to hide it. `:NvimAIChat` reopens the transcript and
+unsent draft. For several files, start with `:NvimAIChat src/one.lua src/two.lua`;
+the selection stays fixed until close.
+
+Chat always uses **review before write**, regardless of the saved
+`:NvimAIPrompt` mode. `:NvimAIReviewMode` controls that prompt command's routing;
+you do not need to change it to use chat. `:NvimAIChatReview` opens chat proposals;
+`:NvimAIReview` is for changes already written by a native companion.
+
+If Ctrl-S freezes terminal output, press Ctrl-Q to resume. To send without
+Ctrl-S, press Escape and run `:NvimAIChatSend`.
+
+![OpenCode chat with the review-before-write label](docs/images/opencode-chat-start.png)
 
 | Command | Purpose |
 | --- | --- |
@@ -182,7 +188,10 @@ The owner retains up to 64 turns / 32 MiB; composer submissions are limited to
 32 KiB and oversized drafts are refused intact. Chat scratch buffers disable
 swap files, persistent undo and modelines; no transcript archive is written.
 
-## Start with pre-write approval
+## Standalone staged edits
+
+Use `:NvimAIStage` for a single instruction without the chat composer. It shares
+the model settings and review-before-write boundary described above.
 
 1. Open and save a small text file in your project.
 2. Run `:NvimAIStageSetup`. Choose an explicit `provider/model` and, if needed,
@@ -228,6 +237,9 @@ staging does not silently switch prompting back to native writes. Invalid
 settings or unsupported backends refuse the prompt without a native fallback.
 
 ## Native companions and after-write review
+
+This is an optional terminal workflow. Use `:NvimAIChat` for the recommended
+OpenCode conversation with approval before project writes.
 
 `:NvimAIOpen` opens a read-only companion or focuses the existing one. Choose
 an installed backend with `:NvimAIBackend [codex|claude|opencode]`.
@@ -357,6 +369,28 @@ automatic retention limit is provided for these remnants. Confirm their users
 have stopped before exact-path cleanup. Closing after a blocked or uncertain
 publication preserves the recovery reason and file outcomes; it does not retry
 writes, clear uncertainty or imply rollback.
+
+## Validation
+
+The [OpenCode onboarding record](docs/validation/2026-10-03-opencode-onboarding.md)
+covers the documented setup, discussion, frozen review and approval flow with a
+confined fake provider, including preservation of an existing native prompt mode.
+
+Chat retains context across explicit turns with fresh isolated workers and the
+same saved-source and frozen-review guards as staging. The
+[approval validation record](docs/validation/2026-09-20-conversation-approval.md) covers
+synthetic providers; the [controller record](docs/validation/2026-09-19-conversation-controller.md)
+separately covers pinned OpenCode with a local scripted provider.
+The [Linux live-provider record](docs/validation/2026-09-22-live-provider.md)
+documents a four-turn OpenAI OAuth / GPT-6 Astra pilot with discussion, per-file
+decisions, revision and conversation recall. It covers one disposable Linux
+setup, not everyday use across accounts, models or backends.
+The subsequent [normal-configuration acceptance](docs/validation/2026-09-26-normal-config.md)
+covers installation and one reviewed README edit in a fresh editor using the
+user's existing Neovim configuration. Both checks were agent-operated.
+The [OpenCode 1.18.34 follow-up](docs/validation/2026-10-01-native-resize.md)
+covers installed-binary compatibility, local-provider conversations and edits,
+and real terminal resizing in tmux and Neovim splits.
 
 See [testing and validation](tests/README.md) and `:help draft` for more detail.
 Licensed under [MIT](LICENSE).

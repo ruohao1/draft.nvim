@@ -117,7 +117,7 @@ class ChatUITest(ChatTerminal):
         self.wait(lambda: "Two edge cases" in self.capture("conversation-wide"), "wide transcript")
         self.tm("resize-window", "-t", "draft", "-x", "70", "-y", "28")
         self.wait(lambda: self.evaluate("vim.o.columns") == "70", "narrow resize")
-        self.wait(lambda: "Draft · idle · next: fixture/model" in self.capture("conversation-narrow"), "narrow rendered state")
+        self.wait(lambda: "Draft · pre-write · idle · next: fixture/model" in self.capture("conversation-narrow"), "narrow rendered state")
         self.keys("q")
         self.wait(lambda: self.evaluate("#vim.api.nvim_list_wins()") == "1", "passive hide")
         self.command("NvimAIChat")

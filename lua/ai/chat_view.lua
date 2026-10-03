@@ -62,6 +62,7 @@ local function projection(snapshot, notice)
   end
   local header = {
     "Draft · " .. (snapshot.phase or "idle") .. " · next: " .. (snapshot.desired_model or ""),
+    "OpenCode · review before write",
     "Scope: " .. table.concat(snapshot.selection or {}, ", "),
     "Ctrl-S send · q hide · gi compose · g? actions",
     "gd review · gm model for next turn",
@@ -171,7 +172,7 @@ function M.new(options)
         end)
       end
       vim.wo[win].winbar = (
-        " Draft · "
+        " Draft · pre-write · "
         .. (latest.phase or "idle")
         .. " · next: "
         .. (latest.desired_model or "")
@@ -289,7 +290,8 @@ function M.new(options)
       vim.wo[win].wrap = true
       vim.wo[win].signcolumn = "no"
       vim.wo[win].foldenable = false
-      vim.wo[win].statusline = kind == "input" and " Draft message" or " Draft conversation"
+      vim.wo[win].statusline = kind == "input" and " Draft message"
+        or " Draft conversation · pre-write"
       vim.wo[win].winbar = kind == "input" and " Compose · Ctrl-S send · Enter newline"
         or " Draft"
     end
