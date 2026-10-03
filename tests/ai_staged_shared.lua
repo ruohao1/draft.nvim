@@ -10,6 +10,22 @@ for _, path in ipairs(files) do
 end
 local handle
 local ok, reason = xpcall(function()
+  for _, mode in ipairs({ 384, 448, 436, 2541 }) do
+    assert(vim.uv.fs_chmod(files[2], mode))
+    local captured, refusal = sources.capture(files, root)
+    assert(not captured, "unsupported permission bits must be rejected during passive capture")
+    assert(refusal:find(string.format("%04o", mode), 1, true))
+    assert(refusal:find("second.txt", 1, true), "identify the unsupported file in a selection")
+    assert(bit.band(vim.uv.fs_stat(files[2]).mode, 4095) == mode)
+    assert(vim.fn.readfile(files[2])[1] == "original text")
+  end
+  for _, mode in ipairs({ 420, 493 }) do
+    assert(vim.uv.fs_chmod(files[2], mode))
+    assert(sources.capture(files, root))
+  end
+  assert(vim.uv.fs_chmod(files[2], 420))
+  print("ok - passive source capture explains unsupported permissions without changing files")
+
   local staged = require("ai.staged")
   staged.setup({
     enabled = true,

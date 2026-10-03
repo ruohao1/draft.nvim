@@ -46,6 +46,7 @@ end
 
 return parse
 ''')
+        (self.root / "parser.lua").chmod(0o644)
         command = [self.nvim, "--clean", "-u", "NONE", "-i", "NONE", "--listen", str(self.editor),
                    "--cmd", "lua vim.opt.rtp:prepend(vim.env.DRAFT_TEST_ROOT)",
                    "-c", "lua dofile(vim.env.DRAFT_CHAT_UI_SCRIPT)"]

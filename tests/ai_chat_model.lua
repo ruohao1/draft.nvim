@@ -2,6 +2,7 @@
 local root = assert(vim.uv.fs_mkdtemp("/tmp/draft-chat-model-XXXXXX"))
 local path = root .. "/example.txt"
 vim.fn.writefile({ "original source" }, path)
+assert(vim.uv.fs_chmod(path, 420))
 vim.o.columns, vim.o.lines, vim.o.swapfile = 140, 42, false
 vim.cmd.edit(vim.fn.fnameescape(path))
 local saved = { root = root, model = "fixture/model" }

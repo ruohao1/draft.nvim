@@ -92,6 +92,15 @@ local function capture(files, root)
     if file:sub(1, #root + 1) ~= root .. "/" then
       return nil, "Every selected file must be inside the first file's project root"
     end
+    local mode = bit.band(node.mode, 4095)
+    if mode ~= 420 and mode ~= 493 then
+      return nil,
+        string.format(
+          "%s has unsupported permissions %04o; select a file with mode 0644 or 0755",
+          vim.fn.strtrans(file:sub(#root + 2)),
+          mode
+        )
+    end
     local buf = files and vim.fn.bufadd(file) or vim.api.nvim_get_current_buf()
     local loaded = pcall(vim.fn.bufload, buf)
     if not loaded or not vim.api.nvim_buf_is_loaded(buf) or not text_buffer(buf) then

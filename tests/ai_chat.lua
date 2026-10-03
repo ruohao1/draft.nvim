@@ -6,6 +6,7 @@ vim.o.columns, vim.o.lines, vim.o.swapfile = 140, 42, false
 local root = assert(vim.uv.fs_mkdtemp("/tmp/draft-chat-test-XXXXXX"))
 local path = root .. "/example.txt"
 vim.fn.writefile({ "original source" }, path)
+assert(vim.uv.fs_chmod(path, 420))
 vim.cmd.edit(vim.fn.fnameescape(path))
 local source = vim.api.nvim_get_current_buf()
 local instances, fail_create, pending = {}, false, {}

@@ -41,8 +41,9 @@ START WITH OPENCODE CHAT                                      *draft-quickstart*
 
 After setup and :checkhealth draft:
 
-1. Open and save one existing text file in your project. Close an open native
-   companion with :NvimAIClose and resolve any pending native review first.
+1. Open and save one existing text file with permissions 0644 or 0755 in your
+   project. Close an open native companion with :NvimAIClose and resolve any
+   pending native review first.
 2. Run :NvimAIStageSetup. Choose an explicit provider/model available to your
    OpenCode account and an existing auth-file path if needed. Choose Save and
    enable. This setup is shared by chat and standalone staging; it sends no prompt.
@@ -164,6 +165,11 @@ file and run :NvimAIChat. Opening is passive: no provider launch, authentication
 model discovery or submission. Explicit paths select 1-16 saved files, at most
 1 MiB combined, under the same file requirements as |draft-staged-review|.
 Selection and root stay fixed until close; arguments cannot silently rebind them.
+
+Chat checks file permissions when opening and before each Send. Unsupported
+modes, such as 0600, identify the file and supported modes before submission.
+A refused Send keeps your unsent draft. Choose a supported file; Draft
+does not change file permissions for you.
 
 Opening focuses the composer. Press i, type a question, and Ctrl-S to send.
 Enter inserts a newline. Send a second question with Ctrl-S to reuse eligible

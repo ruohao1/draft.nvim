@@ -162,7 +162,7 @@ local visual = vim.fn.maparg(" ap", "x", false, true)
 assert(type(visual.callback) == "function" and visual.silent == 1, "visual prompt mapping")
 eq(
   vim.fn.maparg(" aa", "n", false, true).desc,
-  "AI: open or focus companion",
+  "AI: open native companion (after-write review)",
   "mapping description"
 )
 eq(

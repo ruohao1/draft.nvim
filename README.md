@@ -74,8 +74,9 @@ the plugin.
 
 After installation and `:checkhealth draft`:
 
-1. Open and save one existing text file in your project. If a native companion
-   is open, close it with `:NvimAIClose` and resolve any pending native review.
+1. Open and save one existing text file with permissions `0644` or `0755` in your
+   project. If a native companion is open, close it with `:NvimAIClose` and resolve
+   any pending native review.
 2. Run `:NvimAIStageSetup`. Choose an explicit `provider/model` available to your
    OpenCode account and an existing auth-file path if needed. Choose **Save and
    enable**. This setup is shared by chat and standalone staging; it sends no prompt.
@@ -96,6 +97,11 @@ After installation and `:checkhealth draft`:
 Press Escape then `q` in chat to hide it. `:NvimAIChat` reopens the transcript and
 unsent draft. For several files, start with `:NvimAIChat src/one.lua src/two.lua`;
 the selection stays fixed until close.
+
+Chat checks file permissions when opening and before each Send. An unsupported
+mode, such as `0600`, identifies the file and the supported modes before
+submission. A refused Send keeps your unsent draft. Choose a supported
+file; Draft does not change file permissions for you.
 
 Chat always uses **review before write**, regardless of the saved
 `:NvimAIPrompt` mode. `:NvimAIReviewMode` controls that prompt command's routing;

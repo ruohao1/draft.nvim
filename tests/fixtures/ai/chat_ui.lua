@@ -68,4 +68,5 @@ require("draft").setup({
   staged = { enabled = true, model = "fixture/model", root = vim.env.DRAFT_CHAT_UI_ROOT },
 })
 vim.cmd("NvimAIChat")
+assert(vim.bo.filetype == "draft-chat-input", "Chat fixture did not open the composer")
 vim.g.chat_fixture_ready = true

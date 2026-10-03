@@ -124,11 +124,37 @@ local function close()
   end
 end
 local ok, reason = xpcall(function()
+  assert(vim.uv.fs_chmod(source_path, 384))
+  vim.cmd("NvimAIChat " .. vim.fn.fnameescape(source_path))
+  assert(not buffer("draft-chat"), "unsupported source permissions must refuse chat opening")
+  local permission_notice = table.remove(notices)
+  assert(
+    permission_notice
+      and permission_notice:find("0600", 1, true)
+      and permission_notice:find("0644", 1, true)
+      and permission_notice:find("0755", 1, true),
+    "permission refusal must explain the current mode and supported modes"
+  )
+  assert(#audit == 0 and #processes == 0, "unsupported files must not launch a controller")
+  assert(bit.band(vim.uv.fs_stat(source_path).mode, 4095) == 384)
+  assert(vim.fn.readfile(source_path)[1] == "original text")
+  assert(vim.uv.fs_chmod(source_path, 420))
   vim.cmd("NvimAIChat " .. vim.fn.fnameescape(source_path))
   assert(#audit == 0 and #processes == 0, "Opening must remain passive")
   vim.cmd("NvimAIChatModel")
   assert(#audit == 0 and #processes == 0, "Initial model refusal must remain passive")
   compose("First explicit question.")
+  assert(vim.uv.fs_chmod(source_path, 384))
+  vim.cmd("NvimAIChatSend")
+  wait_for(function()
+    return text("draft-chat"):find("0600", 1, true) ~= nil
+  end, "Send did not display the source permission refusal")
+  phase("idle")
+  assert(text("draft-chat"):find("0644", 1, true))
+  assert(text("draft-chat-input") == "First explicit question.")
+  assert(#audit == 0 and #processes == 0, "Send must recheck permissions before launch")
+  assert(bit.band(vim.uv.fs_stat(source_path).mode, 4095) == 384)
+  assert(vim.uv.fs_chmod(source_path, 420))
   vim.cmd("NvimAIChatSend")
   vim.api.nvim_set_current_win(source_win)
   wait_for(function()
