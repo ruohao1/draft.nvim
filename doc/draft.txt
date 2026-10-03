@@ -237,6 +237,19 @@ fall back, submit or create a replacement session. Follow the recovery reason:
 Retry is available only when proved safe; otherwise Close and explicitly start
 a new conversation with fresh context.
 
+gr or :NvimAIChatRetry sends the current draft when nonempty; otherwise it retries
+the failed prompt. It rechecks selected files and never submits automatically.
+A refused retry preserves the draft. Restore credentials at the configured path
+before retrying; changing the configured path or model requires Close and setup
+for a new conversation.
+
+gc or :NvimAIChatCancel stops work. Startup cancellation can require Close when
+completed cancellation was not confirmed. Cancel and Close preserve accepted
+files, unsaved source edits and the composer draft. Confirmed Close ends the
+backend session; New starts fresh context without automatically sending anything.
+If the controller disconnects, Close cannot confirm cleanup. Preserve unsaved
+source edits and the draft, inspect uncertain writes, then restart Neovim.
+
 Hide/window closure preserves the owner and draft. Reopen with :NvimAIChat;
 there is no implicit send. An idle/hidden owner excludes native and standalone
 staged work. ChatClose releases this exclusion only after confirmed cleanup;
@@ -340,6 +353,8 @@ under /tmp/draft-conversation-config-*. Interrupted compatibility-cache writes c
 leave untrusted .receipt-* files; no automatic aggregate retention limit exists.
 Close after a blocked/uncertain publication preserves recovery and file outcomes.
 It never retries writes, clears uncertainty or implies rollback.
+Current shutdown/restart evidence and retained-artifact limits are recorded in
+docs/validation/2026-10-03-chat-recovery.md.
 
 Conversations retain OpenCode context across explicit turns with fresh isolated
 workers. Ordinary staged follow-ups still use fresh generations. Linux fixtures

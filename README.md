@@ -161,6 +161,19 @@ no fallback model or replacement session. Follow the displayed recovery reason:
 Retry is available only when proved safe; otherwise Close and explicitly start
 a new conversation, which starts fresh context.
 
+`gr` or `:NvimAIChatRetry` sends the current draft when it is nonempty; otherwise
+it retries the failed prompt. It rechecks the selected files and never submits
+automatically. A refused retry preserves the draft. Fix missing credentials at
+the configured path before retrying; changing the configured path or model
+requires Close and setup for a new conversation.
+
+Use `gc` or `:NvimAIChatCancel` to stop work. Startup cancellation can require
+Close because no completed cancellation was confirmed. Cancel and Close preserve
+accepted files, unsaved source edits and the composer draft. A confirmed Close
+ends the backend session; New starts fresh context and sends nothing by itself.
+If the controller disconnects, Close cannot confirm cleanup. Preserve unsaved
+source edits and your draft, inspect any uncertain writes, then restart Neovim.
+
 ![Next-turn model with the previous reply and unsent draft intact](docs/images/conversation-model.png)
 
 The [model-selection validation record](docs/validation/2026-09-20-conversation-model.md)
@@ -396,6 +409,9 @@ automatic retention limit is provided for these remnants. Confirm their users
 have stopped before exact-path cleanup. Closing after a blocked or uncertain
 publication preserves the recovery reason and file outcomes; it does not retry
 writes, clear uncertainty or imply rollback.
+
+The [recovery validation](docs/validation/2026-10-03-chat-recovery.md) records
+bounded shutdown checks, restart behavior and retained-artifact limits.
 
 ## Validation
 

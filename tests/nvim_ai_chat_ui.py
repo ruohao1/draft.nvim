@@ -206,6 +206,27 @@ class ChatStartupUITest(ChatTerminal):
         self.command("NvimAIChatClose")
         self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().phase") == "closed", "closed startup")
 
+    def test_safe_retry_key_starts_one_new_attempt_after_credentials_are_restored(self):
+        self.keys("i")
+        self.literal("Retry this explicit question.")
+        self.keys("C-s", "Escape")
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().retry_safe") == "true",
+                  "safe pre-submission failure")
+        auth = self.root / "fixture-auth.json"
+        auth.write_text(json.dumps({"fixture": {"type": "api", "key": "synthetic-fixture-only"}}))
+        auth.chmod(0o600)
+        self.keys("g", "r")
+        self.wait(lambda: "Checking OpenCode compatibility" in self.capture("chat-recovery-retry"),
+                  "explicit retry starts a new worker")
+        self.assertEqual(self.evaluate("chat_approval_fixture.snapshot().turn_id"), "2")
+        self.assertEqual(self.evaluate("chat_approval_fixture.snapshot().turns[2].prompt"),
+                         "Retry this explicit question.")
+        self.keys("g", "c")
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().phase") == "failed",
+                  "cancelled startup requires recovery")
+        self.command("NvimAIChatClose")
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().phase") == "closed", "closed retry")
+
 
 class ChatApprovalUITest(ChatTerminal):
     fixture_script = "chat_approval_ui.lua"

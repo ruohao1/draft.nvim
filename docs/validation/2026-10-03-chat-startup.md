@@ -69,11 +69,11 @@ The final log set is retained locally under
 `.test-results/chat-startup-2026-10-03/runs/run-k96cps6r/`, alongside earlier
 diagnostic runs and raw terminal captures. No user's editor session was changed.
 
-Known lifecycle follow-up for ISQ-351: the production controller already fences
+Lifecycle follow-up identified here for ISQ-351: the production controller fenced
 all failed owners, including failures whose semantic owner advertises safe Retry.
-That older mismatch is unchanged here. If Retry is refused, use Close, correct
-the displayed configuration problem and explicitly start a new conversation.
-The new credential guidance already directs users through Close and setup.
+The subsequent [recovery validation](2026-10-03-chat-recovery.md) records its fix
+and the remaining cleanup/restart boundaries. This startup change itself did not
+alter retry authority.
 
 ![Startup progress and explicit cancellation hint](../images/chat-startup-progress.png)
 

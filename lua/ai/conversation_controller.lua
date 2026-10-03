@@ -383,10 +383,10 @@ function M.new(options)
         handle:close()
         handle, binding = nil, nil
       end
-      if view.phase == "failed" then
+      if view.phase == "failed" and not view.retry_safe then
         fenced = true
-        -- Ingested guard failure retains a cleanup-only route. No generation
-        -- or publication can pass wrapper.send until close proves retirement.
+        -- Only the owner's positive pre-submission/cleanup proofs permit Retry.
+        -- Guard failures retain a cleanup-only route until proven Close.
         return true
       end
       if accepted and event.kind == "closed" and owner:snapshot().phase == "closed" then

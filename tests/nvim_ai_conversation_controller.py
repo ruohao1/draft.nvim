@@ -471,7 +471,7 @@ class EngineTest(unittest.TestCase):
     def test_public_chat_editor_eof_closes_controller_and_worker(self):
         self.check_editor_eof("chat_production_editor.lua")
 
-    def test_public_chat_editor_sigkill_retains_only_private_launch_configuration(self):
+    def test_public_chat_editor_sigkill_retains_launch_config_but_restart_is_fresh(self):
         self.check_editor_eof("chat_production_editor.lua", abrupt=True)
 
     def check_editor_eof(self, fixture, *, abrupt=False):
@@ -520,6 +520,14 @@ class EngineTest(unittest.TestCase):
             if abrupt:
                 # The killed editor cannot run its Lua-owned exit callback.
                 # The controller owns the stopped worker/store, not this path.
+                restarted = subprocess.run([nvim, "--clean", "--headless", "-u", "NONE", "-i", "NONE",
+                    "--cmd", "lua vim.opt.rtp:prepend(vim.env.DRAFT_TEST_ROOT)", "-l",
+                    str(ROOT / "tests/fixtures/ai/chat_restarted_editor.lua")],
+                    env=env, capture_output=True, timeout=12, umask=0o077)
+                self.assertEqual(restarted.returncode, 0, restarted.stdout + restarted.stderr)
+                self.assertEqual(sum(item.get("method") == "session/prompt" for item in self.audit), 1)
+                self.assertEqual(sum(item.get("method") == "session/new" for item in self.audit), 1)
+                self.assertEqual(self.source.read_bytes(), b"original text\n")
                 self.assertEqual(list(launch.parent.iterdir()), [launch])
                 node = launch.lstat()
                 self.assertEqual((node.st_dev, node.st_ino),

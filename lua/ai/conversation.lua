@@ -155,6 +155,8 @@ local DIAGNOSTICS = {
   cleanup = "OpenCode shutdown did not confirm a safe result. Close chat and inspect :checkhealth draft.",
   review = "The generated proposal could not be validated. Inspect the selected files before starting a new conversation.",
 }
+local DISCONNECTED_REASON =
+  "Conversation controller disconnected; cleanup is unconfirmed. Preserve unsaved source edits and your draft, inspect any uncertain writes, then restart Neovim."
 for _, fields in pairs(EVENTS) do
   for _, key in ipairs({
     "kind",
@@ -435,9 +437,7 @@ function M.new(options)
       return
     end
     disconnect_reported = true
-    fail(
-      "Conversation controller disconnected; run :checkhealth draft, then :NvimAIChatClose before starting a new conversation"
-    )
+    fail(DISCONNECTED_REASON)
   end
 
   local function on_disconnect()
@@ -1127,7 +1127,7 @@ function M.new(options)
       report_disconnect()
       -- A later explicit close cannot silently reopen a permanently lost owner.
       if state.phase ~= "failed" then
-        fail("Conversation controller disconnected; explicit recovery required")
+        fail(DISCONNECTED_REASON)
       end
     elseif not ok or accepted ~= true then
       queue, queue_bytes = {}, 0

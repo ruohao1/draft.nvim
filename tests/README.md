@@ -70,6 +70,15 @@ Controller tests also cover malformed credentials and response deadlines.
 The TUI suite captures startup progress and actionable credential failures with
 actual keys; see the [startup record and timing measurements](../docs/validation/2026-10-03-chat-startup.md).
 
+`ai_chat_recovery` checks public safe Retry after initial and later credential
+failures, retained-session resume, revised drafts, dirty-source and stale-action
+refusal, unsafe retry exclusion and fresh New without replay. The TUI suite uses
+actual `gr` keys after restoring synthetic credentials. Approval cases check that
+Cancel/Close retain both accepted disk contents and later unsaved source edits.
+The editor-SIGKILL case starts another Neovim with the same isolated configuration
+and checks no old transcript, approval authority, worker launch or prompt replay.
+See the [current recovery validation](../docs/validation/2026-10-03-chat-recovery.md).
+
 `nvim_ai_chat_ui` uses actual keys in a private tmux server and Neovim TUI. Its
 basic input/layout case uses deterministic in-process provider events. Its
 model case uses `gm`, cancellation, hide/reopen and explicit Send to verify

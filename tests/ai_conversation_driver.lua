@@ -60,9 +60,17 @@ scenario("controller death during a turn or idle requires recovery without relau
     phase(owner, "failed")
     eq(owner:snapshot().retry_safe, false)
     eq(owner:snapshot().recovery_required, true)
+    assert(
+      owner:snapshot().reason:find("restart Neovim", 1, true),
+      "A disconnected controller needs a reachable recovery action"
+    )
     assert(not act(owner, { kind = "retry", text = "do not replay" }))
     assert(act(owner, { kind = "close" }))
     phase(owner, "failed")
+    assert(
+      owner:snapshot().reason:find("restart Neovim", 1, true),
+      "An unconfirmed Close must preserve the restart guidance"
+    )
   end
 end)
 
