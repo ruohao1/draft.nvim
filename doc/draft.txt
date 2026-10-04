@@ -34,8 +34,8 @@ Linux, Neovim 0.12+ with LuaJIT, Python 3, Git, a POSIX shell, and working Bubbl
 user/PID namespaces. The tested versions are Neovim 0.12.4 and Python 3.14.4.
 Python helpers use only the standard library. Staged file discovery requires rg.
 Tmux is optional; its full integration recommends 3.7+, with 3.7c tested for the
-beta candidate. Native terminals are
-used outside tmux. macOS and Windows launch are disabled.
+beta candidate. Native terminals are used outside tmux. macOS and Windows launch
+are disabled.
 
 Install/authenticate your chosen CLI separately. Managed OpenCode and staging
 require exactly OpenCode 1.18.34 / ACP 1. Other releases fail closed.
