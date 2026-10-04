@@ -33,6 +33,7 @@
 **Files:**
 - Modify: `tests/nvim_ai_install.py`, `tests/README.md`, `README.md`.
 - Create: `docs/validation/linux-beta-checklist.md` and `docs/validation/2026-10-04-linux-beta.md`.
+- Capture: `docs/images/linux-beta-review.png` and `docs/images/linux-beta-review-narrow.png`.
 - Reuse: `tests/ai_chat_approval.lua`, `tests/ai_chat_recovery.lua`, `tests/nvim_ai_chat_ui.py`, controller/interop/lifetime suites and their fixtures.
 
 **Interfaces:** `InstallTest.run_editor(script)` runs clean headless Neovim against a copied plugin in a path with spaces from an unrelated cwd. `test_relocated_core_chat_without_tmux(self)` supplies a private executable directory without tmux and runs the existing approval/recovery scripts. The checklist consumes existing public commands and fixture prompts; no production API is introduced.
@@ -40,13 +41,22 @@
 - [x] Add the no-tmux assertion and reuse the two existing journeys. Run the new test before filtering PATH; expect failure because tmux is visible in the normal test environment.
 - [x] Build the private PATH from symlinks to required installed commands, excluding tmux. Run `python3 -I -B tests/run.py nvim_ai_install`; expect all three installation tests to pass with real writes, conflicts, recovery and cleanup intact.
 - [x] Write the reusable checklist, exact fresh-editor fixture launcher, coverage matrix, current automatic-review actions, failure/restart checks and separately scoped provider gates. Link it from both testing and usage documentation.
-- [ ] Commit the test and checklist checkpoint so acceptance runs identify an exact candidate.
-- [ ] Run `python3 -I -B tests/run.py`, `stylua --check lua tests`, and `git diff --check`. Expect all suites and checks to pass. Run the scoped installed audit and five lifecycle cases in the documented private environment.
-- [ ] Capture the existing real-key TUI suite and inspect its wide/narrow review output. Record exact versions, commit, results, evidence locations, ownership for any failures and remaining release gates in the dated record.
-- [ ] Obtain one independent review. Resolve material findings with focused verification, commit the completed evidence, then fast-forward local main and archive logs before removing this worktree.
+- [x] Commit the test and checklist checkpoint so acceptance runs identify an exact candidate.
+- [x] Run `python3 -I -B tests/run.py`, `stylua --check lua tests`, and `git diff --check`. Expect all suites and checks to pass. Run the scoped installed audit and five lifecycle cases in the documented private environment.
+- [x] Capture the existing real-key TUI suite and inspect its wide/narrow review output. Record exact versions, commit, results, evidence locations, ownership for any failures and remaining release gates in the dated record.
+- [x] Obtain one independent review and resolve material findings with focused verification.
+
+Delivery follows the established local integration flow: commit the completed
+evidence, fast-forward main, and archive logs before removing this worktree.
 
 ## Execution notes
 
 The relocated-install baseline passed both existing tests in `run-nrku8sd8`.
-The current default suite already passed 63/63 at the runtime handoff; the final
-acceptance run will identify the new test/checklist checkpoint explicitly.
+The default suite had already passed 63/63 at the runtime handoff.
+
+Checkpoint `3f2d67a` passed 63/63 default suites, the installed artifact audit and
+five installed-runtime lifecycle cases. Nine maintained TUI cases and the
+five-turn agent-operated checklist passed. The [dated record](../../validation/2026-10-04-linux-beta.md)
+classifies that evidence and the remaining release gates. Independent review
+found no correctness or safety issue; archive replay instructions resolve its
+minor reproducibility observation.

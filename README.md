@@ -418,7 +418,8 @@ bounded shutdown checks, restart behavior and retained-artifact limits.
 The [Linux beta acceptance checklist](docs/validation/linux-beta-checklist.md)
 provides repeatable installation, chat, review and recovery checks for a named
 candidate. It distinguishes local fixtures, installed-OpenCode checks and
-live-provider acceptance.
+live-provider acceptance. The [current local record](docs/validation/2026-10-04-linux-beta.md)
+includes installation without tmux, keyboard evidence and the remaining release gates.
 
 The [OpenCode onboarding record](docs/validation/2026-10-03-opencode-onboarding.md)
 covers the documented setup, discussion, frozen review and approval flow with a
