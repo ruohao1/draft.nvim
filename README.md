@@ -25,7 +25,7 @@ has **after-write review**: the agent writes first, then you inspect its changes
   other OpenCode versions are refused.
 - `rg` (ripgrep) for the staged file picker.
 - Optional tmux. Health recommends **3.7+** for the full tmux integration;
-  the beta candidate is tested with **3.7c**. Without tmux, the native
+  the beta release is tested with **3.7c**. Without tmux, the native
   companion uses a Neovim terminal split.
 
 macOS and Windows launches are not supported. Linux fixture results do not
@@ -38,16 +38,18 @@ creating a fresh profile for 1.18.34.
 
 ## Install
 
-The proposed `v0.1.0-beta.1` is currently a local candidate, not a published tag.
-See the [candidate release notes](docs/releases/v0.1.0-beta.1.md) and
+Install the published [v0.1.0-beta.1 Linux/OpenCode beta](https://github.com/ruohao1/draft.nvim/releases/tag/v0.1.0-beta.1).
+Pin the release tag to use the tested version. See the
+[release notes](docs/releases/v0.1.0-beta.1.md) and
 [installation, upgrade and rollback guide](docs/releases/install-upgrade-rollback.md)
-for version selection, local-checkout testing and the published alpha baseline.
+for the matching OpenCode version and how to change an existing installation.
 
 With lazy.nvim:
 
 ```lua
 {
   "ruohao1/draft.nvim",
+  tag = "v0.1.0-beta.1",
   config = function()
     require("draft").setup()
   end,
@@ -424,7 +426,10 @@ The [Linux beta acceptance checklist](docs/validation/linux-beta-checklist.md)
 provides repeatable installation, chat, review and recovery checks for a named
 candidate. It distinguishes local fixtures, installed-OpenCode checks and
 live-provider acceptance. The [current local record](docs/validation/2026-10-04-linux-beta.md)
-includes installation without tmux, keyboard evidence and the remaining release gates.
+includes installation without tmux and keyboard evidence. The
+[beta publication record](docs/validation/2026-10-04-linux-beta-publication.md)
+records the completed hosted CI, current-version live check, user-reported UI
+acceptance and verified release downloads.
 
 The [OpenCode onboarding record](docs/validation/2026-10-03-opencode-onboarding.md)
 covers the documented setup, discussion, frozen review and approval flow with a

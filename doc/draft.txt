@@ -20,13 +20,16 @@ plugin.
 
 RELEASE SELECTION                                              *draft-releases*
 
-The proposed v0.1.0-beta.1 is a local candidate, not a published tag. Do not ask
-your plugin manager to fetch that tag yet. Use the available local checkout or
-an exact published revision, and restart Neovim after changing plugin code.
-See docs/releases/v0.1.0-beta.1.md for candidate notes and remaining gates, and
-docs/releases/install-upgrade-rollback.md for version selection, fresh install,
-upgrade and rollback. Published alpha.1 requires OpenCode 1.18.30; the candidate
-requires 1.18.34. These checks do not prove OpenCode database downgrade safety.
+v0.1.0-beta.1 is the published Linux/OpenCode beta. Pin your plugin manager to
+that tag, or to commit c3c5d5168eae3f4b48faff0831d564afa652b47d. With lazy.nvim,
+set tag = "v0.1.0-beta.1" in the plugin spec. Replace any previous version pin
+and restart Neovim after changing plugin code.
+See docs/releases/v0.1.0-beta.1.md for release notes, and
+docs/releases/install-upgrade-rollback.md for fresh install, upgrade and rollback.
+The beta requires exactly OpenCode 1.18.34; the earlier alpha.1 requires 1.18.30.
+The completed release checks are in
+docs/validation/2026-10-04-linux-beta-publication.md. Version-transition checks
+do not prove OpenCode database downgrade safety.
 
 REQUIREMENTS                                                *draft-requirements*
 
@@ -34,7 +37,7 @@ Linux, Neovim 0.12+ with LuaJIT, Python 3, Git, a POSIX shell, and working Bubbl
 user/PID namespaces. The tested versions are Neovim 0.12.4 and Python 3.14.4.
 Python helpers use only the standard library. Staged file discovery requires rg.
 Tmux is optional; its full integration recommends 3.7+, with 3.7c tested for the
-beta candidate. Native terminals are used outside tmux. macOS and Windows launch
+beta release. Native terminals are used outside tmux. macOS and Windows launch
 are disabled.
 
 Install/authenticate your chosen CLI separately. Managed OpenCode and staging

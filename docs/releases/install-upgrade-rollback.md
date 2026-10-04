@@ -8,32 +8,34 @@ Remove an old embedded `lua/ai` copy from the runtime path before using the plug
 
 | Version | Availability | Matching managed OpenCode |
 | --- | --- | --- |
-| `v0.1.0-alpha.1` (`514d9460cf09e970ba325c29fd7aadc5e2e15ba3`) | Published baseline | 1.18.30 |
-| Proposed `v0.1.0-beta.1` | Local candidate; exact tested checkpoint in the [validation record](../validation/2026-10-04-linux-beta-release.md) | 1.18.34 / ACP 1 |
+| `v0.1.0-beta.1` (`c3c5d5168eae3f4b48faff0831d564afa652b47d`) | [Published Linux beta](https://github.com/ruohao1/draft.nvim/releases/tag/v0.1.0-beta.1) | 1.18.34 / ACP 1 |
+| `v0.1.0-alpha.1` (`514d9460cf09e970ba325c29fd7aadc5e2e15ba3`) | Earlier published preview | 1.18.30 |
 
-The candidate tag does not exist yet, and its local commit may not be fetchable
-from GitHub. Test an available local checkout. Once a reviewed candidate commit
-is pushed, pin that exact published commit; do not substitute an unrelated
-branch tip. Keep your plugin-manager lockfile with your Neovim configuration.
+Pin a released tag or its exact commit to use a tested version. The `main` branch
+can include later development and documentation changes. Keep your plugin-manager
+lockfile with your Neovim configuration. The
+[publication record](../validation/2026-10-04-linux-beta-publication.md) identifies
+the beta's completed checks and verified source archive.
 
-For the published alpha baseline, a lazy.nvim spec can pin the exact commit:
+For the published beta, use this lazy.nvim spec:
 
 ```lua
 {
   "ruohao1/draft.nvim",
-  commit = "514d9460cf09e970ba325c29fd7aadc5e2e15ba3",
+  tag = "v0.1.0-beta.1",
   config = function()
     require("draft").setup()
   end,
 }
 ```
 
-For a candidate that is only available locally, replace that spec with:
+Replace any previous `tag`, `commit` or `version` pin when changing versions.
+For local development instead, replace the release spec with:
 
 ```lua
 {
   name = "draft.nvim",
-  dir = vim.fn.expand("~/src/draft.nvim"), -- your actual candidate checkout
+  dir = vim.fn.expand("~/src/draft.nvim"), -- your actual local checkout
   config = function()
     require("draft").setup()
   end,
@@ -76,8 +78,9 @@ Do not treat a health pass or idle chat as a successful provider request.
    recovery instructions and inspect uncertain files first.
 2. Quit the old editor before replacing plugin/helper code. For a Git checkout,
    select the desired available revision while Neovim is closed. For lazy.nvim,
-   change the `commit` pin and run `:Lazy update draft.nvim` in a maintenance
-   editor without starting Draft work; quit when the update finishes. Restart
+   replace the old `tag` or `commit` pin with the desired release and run
+   `:Lazy update draft.nvim` in a maintenance editor without starting Draft work;
+   quit when the update finishes. Restart
    again before using Draft. Do not hot-reload its Lua modules.
 3. Install the matching OpenCode version separately, then run `:checkhealth draft`
    in a fresh editor. Confirm the module path and saved model with
@@ -98,8 +101,9 @@ remain for inspection. They do not grant a new conversation permission to write.
 ## Roll back
 
 Use the same close, preserve and restart sequence, selecting your previously
-recorded plugin commit. With lazy.nvim, restore the previous `commit` pin and run
-`:Lazy update draft.nvim`, then restart. Keep the spec and lockfile consistent;
+recorded plugin version. With lazy.nvim, restore the previous `tag` or `commit`
+pin, replacing the current pin, and run `:Lazy update draft.nvim`, then restart.
+Keep the spec and lockfile consistent;
 restoring the lockfile alone while retaining a new explicit pin is insufficient.
 
 Rolling back to alpha.1 also requires its matching OpenCode 1.18.30. Do not
