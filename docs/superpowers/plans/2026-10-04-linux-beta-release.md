@@ -37,11 +37,11 @@
 
 **Interfaces:** Existing setup, StageSetup, Chat, Close, status and settings interfaces only. No production API or new runner. Disposable archived alpha/candidate checkouts and fresh Neovim processes establish the documented installation boundaries.
 
-- [ ] Verify the official tmux asset bytes/digest and update the existing CI version pin. Check YAML structure and embedded shell syntax.
-- [ ] Write the release notes and installation/upgrade/rollback guide. Link both usage documents and align current testing-stack text while preserving dated historical evidence.
-- [ ] Exercise fresh installation and passive alpha → candidate → alpha preference/source preservation with fresh editors. Run the existing optional native version-upgrade fixture separately. Record exact scope and limits.
-- [ ] Commit a checkpoint and run the complete default suite, formatting and local link/help checks. Reuse explicitly identified installed-provider evidence only after proving runtime/test sources are unchanged from its validated checkpoint.
-- [ ] Obtain one independent review and resolve material findings. Record the exact local candidate and remaining hosted-CI/publication gates; archive evidence and integrate locally under the established authorization.
+- [x] Verify the official tmux asset bytes/digest and update the existing CI version pin. Check YAML structure and embedded shell syntax.
+- [x] Write the release notes and installation/upgrade/rollback guide. Link both usage documents and align current testing-stack text while preserving dated historical evidence.
+- [x] Exercise fresh installation and passive alpha → candidate → alpha preference/source preservation with fresh editors. Run the existing optional native version-upgrade fixture separately. Record exact scope and limits.
+- [x] Commit a checkpoint and run the complete default suite, formatting and local link/help checks. Reuse explicitly identified installed-provider evidence only after proving runtime/test sources are unchanged from its validated checkpoint.
+- [x] Obtain one independent review and resolve material findings. Record the exact local candidate and remaining hosted-CI/publication gates; archive evidence and integrate locally under the established authorization.
 
 ## Initial evidence and constraints
 

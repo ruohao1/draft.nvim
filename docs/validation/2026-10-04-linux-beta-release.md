@@ -103,6 +103,12 @@ for the recorded path). The baseline run is `run-v6osrvz5`. Formatting,
 links passed. Help tags resolved from the selected checkout in all three
 cross-version smoke editors.
 
+Independent review of `e62427f..54332e7` found no Critical, Important or Minor
+issues and approved local integration. The reviewer independently checked the
+archive digest, runtime/test equivalence and the documentation-only changes
+after the tested checkpoint. This review note and plan completion marks are the
+only subsequent changes; the verdict does not establish publication readiness.
+
 ## CI artifact and remaining gates
 
 The official [tmux 3.7c archive](https://github.com/tmux/tmux/releases/tag/3.7c)
