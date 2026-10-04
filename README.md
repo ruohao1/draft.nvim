@@ -25,7 +25,7 @@ has **after-write review**: the agent writes first, then you inspect its changes
   other OpenCode versions are refused.
 - `rg` (ripgrep) for the staged file picker.
 - Optional tmux. Health recommends **3.7+** for the full tmux integration;
-  isolated transport fixtures also pass on **3.6**. Without tmux, the native
+  the beta candidate is tested with **3.7c**. Without tmux, the native
   companion uses a Neovim terminal split.
 
 macOS and Windows launches are not supported. Linux fixture results do not
@@ -37,6 +37,11 @@ then `:NvimAIOpen`. Draft preserves saved session and review references while
 creating a fresh profile for 1.18.34.
 
 ## Install
+
+The proposed `v0.1.0-beta.1` is currently a local candidate, not a published tag.
+See the [candidate release notes](docs/releases/v0.1.0-beta.1.md) and
+[installation, upgrade and rollback guide](docs/releases/install-upgrade-rollback.md)
+for version selection, local-checkout testing and the published alpha baseline.
 
 With lazy.nvim:
 

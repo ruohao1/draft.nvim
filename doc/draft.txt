@@ -18,12 +18,23 @@ If migrating from an embedded lua/ai copy, move that copy out of your Neovim
 configuration before loading Draft so its internal modules resolve from the
 plugin.
 
+RELEASE SELECTION                                              *draft-releases*
+
+The proposed v0.1.0-beta.1 is a local candidate, not a published tag. Do not ask
+your plugin manager to fetch that tag yet. Use the available local checkout or
+an exact published revision, and restart Neovim after changing plugin code.
+See docs/releases/v0.1.0-beta.1.md for candidate notes and remaining gates, and
+docs/releases/install-upgrade-rollback.md for version selection, fresh install,
+upgrade and rollback. Published alpha.1 requires OpenCode 1.18.30; the candidate
+requires 1.18.34. These checks do not prove OpenCode database downgrade safety.
+
 REQUIREMENTS                                                *draft-requirements*
 
 Linux, Neovim 0.12+ with LuaJIT, Python 3, Git, a POSIX shell, and working Bubblewrap
 user/PID namespaces. The tested versions are Neovim 0.12.4 and Python 3.14.4.
 Python helpers use only the standard library. Staged file discovery requires rg.
-Tmux is optional; its full integration recommends 3.7+. Native terminals are
+Tmux is optional; its full integration recommends 3.7+, with 3.7c tested for the
+beta candidate. Native terminals are
 used outside tmux. macOS and Windows launch are disabled.
 
 Install/authenticate your chosen CLI separately. Managed OpenCode and staging

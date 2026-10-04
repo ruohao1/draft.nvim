@@ -46,17 +46,17 @@ jobs:
           PROFILE
           sudo apparmor_parser --replace /etc/apparmor.d/draft-ci-bwrap
 
-      - name: Install tmux 3.6
+      - name: Install tmux 3.7c
         run: |
-          archive="$RUNNER_TEMP/tmux-3.6.tar.gz"
+          archive="$RUNNER_TEMP/tmux-3.7c.tar.gz"
           curl --fail --location --retry 3 \
-            https://github.com/tmux/tmux/releases/download/3.6/tmux-3.6.tar.gz \
+            https://github.com/tmux/tmux/releases/download/3.7c/tmux-3.7c.tar.gz \
             --output "$archive"
           printf '%s  %s\n' \
-            136db80cfbfba617a103401f52874e7c64927986b65b1b700350b6058ad69607 \
+            7c60cae9a0e25288e2e24750aafc9e8800fc7fd4555e447e1b29ee4201cfb3bf \
             "$archive" | sha256sum --check --strict
           tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP"
-          cd "$RUNNER_TEMP/tmux-3.6"
+          cd "$RUNNER_TEMP/tmux-3.7c"
           ./configure --prefix=/usr
           make --jobs=2
           # Nested fixtures deliberately restrict PATH to system directories.

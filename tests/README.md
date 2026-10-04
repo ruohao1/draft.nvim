@@ -10,7 +10,7 @@ Run from any directory, passing the path to the runner:
 python3 -I -B tests/run.py
 ```
 
-Dependencies are Linux, Neovim, Python 3, Git, tmux 3.6, Bubblewrap and a POSIX shell.
+Dependencies are Linux, Neovim, Python 3, Git, tmux 3.7c, Bubblewrap and a POSIX shell.
 `setfacl` enables an extra inherited-ACL publication test. The runner builds an
 allowlisted child environment, supplies a disposable HOME and XDG directories,
 sets a private umask, and applies a per-suite deadline. It does not inherit
@@ -136,12 +136,14 @@ failures without losing publication recovery evidence.
 
 [Linux tests](../.github/workflows/linux-tests.yml) runs the complete default
 suite on pull requests and pushes, and supports manual dispatch. It uses the
-GitHub-hosted Ubuntu 24.04 image, its system Python 3, Neovim 0.12.4, and tmux 3.6.
+GitHub-hosted Ubuntu 24.04 image, its system Python 3, Neovim 0.12.4, and tmux 3.7c.
 Both release archives have pinned SHA-256 checksums, and both GitHub actions are
 pinned to commits. Git, Bubblewrap, ripgrep, ACL tools and tmux build dependencies
 come from Ubuntu's configured package repositories; runtime versions are printed
 in each run. Ubuntu's tmux 3.4 has a percentage-split regression, so CI builds the
-same tmux 3.6 version used in the local transport validation.
+same tmux 3.7c version used in local beta acceptance. The
+[release preparation record](../docs/validation/2026-10-04-linux-beta-release.md)
+distinguishes current local results from hosted CI on the published alpha.
 
 CI uses `/usr/bin/python3` consistently with the nested confinement fixtures.
 The job loads an AppArmor user-namespace profile attached to `/usr/bin/bwrap`
