@@ -18,7 +18,7 @@ local function eq(actual, expected, label)
 end
 
 local function disk()
-  return table.concat(vim.fn.readfile(file), "\n") .. "\n"
+  return table.concat(vim.fn.readfile(file, "b"), "\n")
 end
 
 local function wait_done()
@@ -98,6 +98,46 @@ local ok, err = xpcall(function()
     vim.cmd("NvimAIStageApprove")
     eq(disk(), "later user edit\n", "replayed approval cannot overwrite")
   end)
+
+  for _, case in ipairs({
+    { name = "empty", before = "original text\n", after = "", lines = { "" } },
+    { name = "newline", before = "", after = "\n", lines = { "" } },
+    {
+      name = "trailing",
+      before = "original text\n\n",
+      after = "approved edit\n\n\n",
+      lines = { "approved edit", "", "" },
+    },
+  }) do
+    scenario("frozen " .. case.name .. " bytes survive display and publication", function()
+      vim.fn.writefile(vim.split(case.before, "\n", { plain = true }), file, "b")
+      vim.cmd("edit!")
+      vim.cmd("NvimAIStage TEST:bytes-" .. case.name)
+      local status = wait_done()
+      eq(status.phase, "review_ready", vim.inspect(status))
+      eq(disk(), case.before, "review must not publish")
+      local task = vim.fs.dirname(status.proposal)
+      local function frozen(name)
+        return table.concat(vim.fn.readfile(task .. "/" .. name, "b"), "\n")
+      end
+      eq(frozen("before"), case.before)
+      eq(frozen("after"), case.after)
+      local panel = vim.api.nvim_get_current_buf()
+      eq(vim.api.nvim_buf_get_lines(panel, 0, -1, false), case.lines)
+      local columns = vim.o.columns
+      vim.o.columns = 80
+      vim.cmd("wincmd =")
+      vim.cmd("diffupdate")
+      vim.wo.wrap = not vim.wo.wrap
+      vim.o.columns = columns
+      eq(vim.api.nvim_buf_get_lines(panel, 0, -1, false), case.lines)
+      eq(frozen("after"), case.after, "display cannot reconstruct frozen bytes")
+      vim.cmd("NvimAIStageApprove")
+      eq(staged.status().phase, "applied")
+      eq(disk(), case.after, "published bytes must exactly match the proposal")
+      eq(vim.bo[source].modified, false)
+    end)
+  end
 
   scenario("reject discards frozen proposal", function()
     start()

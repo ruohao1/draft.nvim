@@ -186,9 +186,18 @@ class StagedTest(unittest.TestCase):
         self.assertEqual(self.decide(proposal, "reject")["phase"], "rejected")
 
     def test_unsupported_staging_refuses_the_entire_turn(self):
-        for case in ("extra", "symlink", "delete", "mode", "binary", "bad-json"):
+        for case in ("extra", "symlink", "delete", "mode", "binary", "bad-json", "bytes-noeol"):
             with self.subTest(case=case):
                 self.assertEqual(self.prepare(case)["phase"], "blocked")
+
+    def test_nonempty_source_without_final_newline_is_refused_without_rewriting(self):
+        before = b"no final newline"
+        self.file.write_bytes(before)
+        result = self.receive(self.spawn(self.request(
+            snapshot_sha256=hashlib.sha256(before).hexdigest())))
+        self.assertEqual(result["phase"], "blocked", result)
+        self.assertIn("newline", result["reason"])
+        self.assertEqual(self.file.read_bytes(), before)
 
     def test_agent_cannot_reach_real_file_or_client_writer(self):
         proposal = self.ready("direct", prompt="TEST:direct OUTSIDE:" + str(self.file))
