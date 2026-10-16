@@ -446,6 +446,20 @@ function M.new(options)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(value, "\n", { plain = true }))
   end
 
+  function view:append_draft(value)
+    local text, reason = self:draft()
+    if not text then
+      return nil, reason
+    end
+    local combined = text == "" and value or text .. "\n\n" .. value
+    if #combined > MAX_DRAFT then
+      return nil,
+        "Context would exceed the 32 KiB draft limit; select less text or shorten the draft"
+    end
+    self:set_draft(combined)
+    return true
+  end
+
   function view:notice(reason)
     message = reason and prefix(tostring(reason), 1000) or nil
     schedule()

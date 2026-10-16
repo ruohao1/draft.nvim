@@ -135,6 +135,7 @@ Ctrl-S, press Escape and run `:NvimAIChatSend`.
 | --- | --- |
 | `:NvimAIChat [files...]` | Open or focus the current conversation |
 | `:NvimAIChatNew [files...]` | Start after confirmed close; confirm discarding an unsent draft |
+| `:[range]NvimAIChatAttach` | Append saved selected lines to the composer without sending |
 | `:NvimAIChatSend` | Submit the composer once, when the owner permits |
 | `:NvimAIChatHide` | Hide without stopping or submitting |
 | `:NvimAIChatCancel` | Cancel generation; confirm discarding a pending review |
@@ -226,6 +227,19 @@ at most 1 MiB combined, with the same file requirements as staging. New without
 paths reuses the closed conversation's selection. Save dirty selected buffers
 before sending. A refused send preserves your draft. Native and standalone staged
 work remain excluded even while chat is hidden or idle, until close is confirmed.
+
+To include a passage in your next message, return to a selected source file and
+run `:12,20NvimAIChatAttach`. With `keymaps = true`, select text using `v`, `V` or
+Ctrl-V and press `<leader>at` to capture the exact selection, including partial
+lines or a rectangular block. The range command attaches whole lines; a visual
+`:'<,'>NvimAIChatAttach` command also uses whole lines.
+
+The composer retains your existing text and appends the passage, its relative
+path and line range. Edit, delete or undo that text normally; only Ctrl-S or
+`:NvimAIChatSend` submits it. It is a snapshot at attachment time, so attach it
+again if the source changes. Attachments use the existing 32 KiB message limit.
+Dirty buffers, stale disk contents and files outside the conversation's scope
+are refused. Attaching never saves a source file or changes the editable scope.
 
 The default right column becomes a bottom layout below 100 columns. Editors
 smaller than 40 columns or 12 rows hide chat; resize and reopen explicitly.
@@ -350,7 +364,7 @@ require("draft").setup({
 | `<leader>ae` | `NvimAIStage` |
 | `<leader>ac` | `NvimAIStageSetup` |
 | `<leader>af` | `NvimAIStageFiles` |
-| `<leader>at` | `NvimAIChat` |
+| `<leader>at` | `NvimAIChat`; in Visual mode, attach the selection to existing chat |
 
 Staging can also be configured for the current editor:
 

@@ -38,6 +38,7 @@ for _, name in ipairs({
   "NvimAIStageSetup",
   "NvimAIChat",
   "NvimAIChatNew",
+  "NvimAIChatAttach",
   "NvimAIChatSend",
   "NvimAIChatHide",
   "NvimAIChatCancel",
@@ -60,6 +61,7 @@ local function unmapped()
     )
   end
   assert(vim.fn.maparg(" ap", "x") == "", "default setup must not map visual prompts")
+  assert(vim.fn.maparg(" at", "x") == "", "default setup must not map visual chat context")
 end
 unmapped()
 require("ai.staged").setup({ enabled = false })
@@ -83,6 +85,7 @@ for _, key in ipairs(keys) do
   )
 end
 assert(type(vim.fn.maparg(" ap", "x", false, true).callback) == "function")
+assert(type(vim.fn.maparg(" at", "x", false, true).callback) == "function")
 assert(runtime:shutdown())
 
 -- Observe the real redraw command while making personal integration observable.

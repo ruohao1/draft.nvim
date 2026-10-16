@@ -161,6 +161,8 @@ COMMANDS                                                        *draft-commands*
 :NvimAIChat [files...] Open/focus a conversation with a fixed saved-file scope.
 :NvimAIChatNew [files...]
                         Start a new conversation after confirmed close.
+:[range]NvimAIChatAttach
+                        Append saved selected lines to the composer, without sending.
 :NvimAIChatSend        Explicitly submit the composer.
 :NvimAIChatHide        Hide without cancelling, closing or sending.
 :NvimAIChatCancel      Cancel generation or confirm discarding pending review.
@@ -180,6 +182,19 @@ file and run :NvimAIChat. Opening is passive: no provider launch, authentication
 model discovery or submission. Explicit paths select 1-16 saved files, at most
 1 MiB combined, under the same file requirements as |draft-staged-review|.
 Selection and root stay fixed until close; arguments cannot silently rebind them.
+
+To include context, return to a selected source file and run
+:12,20NvimAIChatAttach. With keymaps=true, select text using v, V or Ctrl-V and
+press <leader>at to attach the exact selection. The range command always uses
+whole lines, including :'<,'>NvimAIChatAttach after a character/block selection.
+
+The composer keeps its existing text and appends the passage, relative path and
+line range. Edit, delete or undo it normally; only Ctrl-S or :NvimAIChatSend
+submits it. Context is a snapshot at attachment time; attach again if the source
+changes. The combined draft must fit the existing 32 KiB limit. Dirty buffers,
+stale disk contents and files outside the conversation's scope are refused.
+Attaching does not save source files or change the editable scope. Open a
+conversation first; attachment does not create one or start a provider.
 
 Chat checks file permissions when opening and before each Send. Unsupported
 modes, such as 0600, identify the file and supported modes before submission.
@@ -339,7 +354,7 @@ Off by default. Set mapleader before setup({ keymaps = true }) to enable:
     <leader>ag  grants                 <leader>as  status
     <leader>ax  close                  <leader>ae  staged edit
     <leader>ac  staging setup          <leader>af  staged file picker
-    <leader>at  conversation
+    <leader>at  conversation; Visual mode attaches selection to existing chat
 
 STATE AND LIMITS                                                    *draft-state*
 

@@ -135,6 +135,36 @@ class ChatUITest(ChatTerminal):
         self.assertEqual(self.evaluate("vim.g.chat_fixture_prompts"), "2")
         self.assertIn("local function parse", (self.root / "parser.lua").read_text())
 
+    def test_visual_context_preserves_draft_until_explicit_send(self):
+        original = (self.root / "parser.lua").read_text()
+        self.keys("i")
+        self.literal("Explain this declaration.")
+        self.keys("Escape", "q")
+        self.wait(lambda: self.evaluate("#vim.api.nvim_list_wins()") == "1", "source after hide")
+        self.keys("g", "g", "V", "\\", "a", "t")
+        self.wait(lambda: self.evaluate("vim.bo.filetype") == "draft-chat-input", "selection composer")
+        expected = ('Explain this declaration.\n\nSelection from "parser.lua" (lines 1-1):\n'
+                    '```\nlocal function parse(text)\n```')
+        read_draft = "table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\\n')"
+        self.assertEqual(json.loads(self.evaluate("vim.json.encode(" + read_draft + ")")), expected)
+        self.assertEqual(self.evaluate("vim.api.nvim_get_mode().mode"), "n")
+        self.assertEqual(self.evaluate("vim.g.chat_fixture_prompts"), "0")
+        self.keys("u")
+        self.wait(lambda: self.evaluate("vim.api.nvim_get_current_line()") == "Explain this declaration.",
+                  "undo attachment preserves previous draft")
+        self.keys("C-r")
+        self.wait(lambda: "Selection from" in self.evaluate(read_draft), "redo attachment")
+        self.wait(lambda: "Selection attached." in self.capture("chat-selection-context"),
+                  "attachment preview")
+        self.keys("q")
+        self.command("NvimAIChat")
+        self.assertEqual(json.loads(self.evaluate("vim.json.encode(" + read_draft + ")")), expected)
+        self.keys("C-s")
+        self.wait(lambda: self.evaluate("vim.g.chat_fixture_prompts") == "1", "explicit context send")
+        self.assertEqual(json.loads(self.evaluate("vim.json.encode(vim.g.chat_fixture_message)")), expected)
+        self.assertEqual((self.root / "parser.lua").read_text(), original)
+        self.command("NvimAIChatClose")
+
     def test_model_picker_keys_are_passive_and_preserve_history(self):
         self.keys("i")
         self.literal("Explain the current parser.")

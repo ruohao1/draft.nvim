@@ -65,6 +65,7 @@ require("ai.conversation_controller").new = function(config)
   return owner
 end
 require("draft").setup({
+  keymaps = true,
   staged = { enabled = true, model = "fixture/model", root = vim.env.DRAFT_CHAT_UI_ROOT },
 })
 vim.cmd("NvimAIChat")

@@ -12,6 +12,7 @@ local bindings = {
   { "NvimAIClose", "ax", "close", "AI: close companion" },
   { "NvimAIChat", "at", "chat_open", "Draft: OpenCode chat (review before write)" },
   { "NvimAIChatNew", false, "chat_new", "Draft: start a new conversation after close" },
+  { "NvimAIChatAttach", false, "chat_attach", "Draft: attach selected saved lines to composer" },
   { "NvimAIChatSend", false, "chat_send", "Draft: explicitly send composer" },
   { "NvimAIChatHide", false, "chat_hide", "Draft: hide conversation without stopping it" },
   { "NvimAIChatCancel", false, "chat_cancel", "Draft: cancel turn or pending review" },
@@ -151,6 +152,7 @@ function M.setup(options)
   for _, method in ipairs({
     "open",
     "new",
+    "attach",
     "send",
     "hide",
     "cancel",
@@ -906,7 +908,7 @@ function M.setup(options)
     if method == "review" then
       command_options.bang = true
     end
-    if method == "prompt" or method == "native_prompt" then
+    if method == "prompt" or method == "native_prompt" or method == "chat_attach" then
       command_options.range = true
     end
     if method == "backend" or method == "grants" then
@@ -926,6 +928,8 @@ function M.setup(options)
         argument = { bang = args.bang }
       elseif method == "prompt" or method == "native_prompt" then
         argument = args.range > 0 and "x" or "n"
+      elseif method == "chat_attach" then
+        argument = args.range > 0 and { line1 = args.line1, line2 = args.line2 } or nil
       elseif method == "chat_open" or method == "chat_new" then
         argument = #args.fargs > 0 and args.fargs or nil
       elseif args.args ~= "" then
@@ -965,6 +969,9 @@ function M.setup(options)
     desc = "AI: choose and save prompt review mode (no prompt sent)",
   })
   if options.keymaps ~= false then
+    vim.keymap.set("x", "<leader>at", function()
+      dispatch("chat_attach", "x")
+    end, { silent = true, desc = "Draft: attach selection to chat (no prompt sent)" })
     vim.keymap.set("x", "<leader>ap", function()
       dispatch("prompt", "x")
     end, { silent = true, desc = "AI: selection prompt (native review mode only)" })
