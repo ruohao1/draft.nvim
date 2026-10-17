@@ -166,6 +166,7 @@ function M.open(path, text, on_actions)
     end
   end
 
+  local group = vim.api.nvim_create_augroup("draft_correction_" .. buf, { clear = true })
   function draft:discard(stamp)
     self:hide()
     -- Window-leave callbacks may have added text after the caller's check.
@@ -174,12 +175,18 @@ function M.open(path, text, on_actions)
       return false
     end
     if loaded() then
-      vim.api.nvim_buf_delete(buf, { force = true })
+      -- Teardown callbacks must not add unseen edits after the final stamp check.
+      vim.api.nvim_cmd({
+        cmd = "bwipeout",
+        args = { tostring(buf) },
+        bang = true,
+        mods = { noautocmd = true },
+      }, {})
+      vim.api.nvim_del_augroup_by_id(group)
     end
     return true
   end
 
-  local group = vim.api.nvim_create_augroup("draft_correction_" .. buf, { clear = true })
   vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "BufEnter", "BufWinEnter" }, {
     group = group,
     buffer = buf,

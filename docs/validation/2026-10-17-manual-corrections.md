@@ -121,5 +121,41 @@ passed. The refreshed editable/frozen captures were visually inspected.
 
 Delivered in [PR #11](https://github.com/ruohao1/draft.nvim/pull/11), open and
 unmerged. ISQ-461 is In Review, with the results also recorded in the original
-Linear study and design document. The tested feature/fix code is committed
-through `923a6d2`; subsequent delivery notes do not change runtime behavior.
+Linear study and design document. The original delivery tested feature/fix code
+through `923a6d2`; the follow-up review and verification below cover later changes.
+
+## Follow-up review: final draft cleanup
+
+A user-requested review found one further P2 data-loss case. With a correction
+open in two split windows, hiding its original window leaves another view open.
+The final buffer deletion can then run `BufWinLeave` after the last draft stamp
+check. Text added by that callback was silently deleted. `BufUnload`, `BufDelete`
+and `BufWipeout` callbacks had the same gap, including without a second view.
+
+The shared draft cleanup now uses Neovim's `noautocmd` modifier only for final
+buffer deletion, after the existing hide-and-recheck step. It removes its own
+augroup explicitly because its `BufWipeout` cleanup is also suppressed. Earlier
+window-leave edits still detach into editable scratch; final teardown cannot
+introduce unseen edits after validation. Normal editor event settings are retained.
+
+All eight new public-command cases (four events through both Freeze and Discard)
+failed with `newer teardown edits were deleted` before the fix
+(`.test-results/run-n5lb0g9g`). The three focused suites then passed, including
+all fifteen correction-edge scenarios (`.test-results/run-gxpgrdaa`). They check
+retained text or safe disposal, removal of draft event handlers, unchanged project
+bytes until approval, and publication of exactly the intended proposal.
+
+The first full run passed 66/67 suites (`.test-results/run-mlg0z9bb`), with
+`EngineTest.test_answer_finishes_without_proposal` failing because the threaded
+audit collector recorded `session/new` before `initialize`. A deterministic
+localhost probe reproduced the reversal despite correctly ordered sends. The
+fixture now numbers requests as received; the test asserts method order using
+those sequence numbers rather than collector thread completion. The assertion still
+checks the complete method sequence from the peer's actual receive order.
+
+The controller suite passed all 37 tests after that fixture correction
+(`.test-results/run-49_00f8v`). The final complete default run passed **67/67
+suites**, including all 11 terminal UI cases (`.test-results/run-qvjghft6`).
+`stylua --check lua tests` and `git diff --check` passed. Live-provider and
+installed-OpenCode checks remain opt-in and were not performed; daily-use benefit
+and crash recovery remain outside this validation.

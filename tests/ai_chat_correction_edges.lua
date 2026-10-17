@@ -83,6 +83,51 @@ local ok, reason = xpcall(function()
       vim.api.nvim_buf_delete(draft, { force = true })
     end)
   end
+  for _, operation in ipairs({ "FreezeProposal", "DiscardCorrection" }) do
+    for _, event in ipairs({ "BufWinLeave", "BufUnload", "BufDelete", "BufWipeout" }) do
+      scenario(event .. " cannot lose text during final " .. operation, function()
+        local draft, changed = edit(), false
+        if event == "BufWinLeave" then
+          vim.cmd("vsplit")
+        end
+        vim.api.nvim_create_autocmd(event, {
+          buffer = draft,
+          once = true,
+          callback = function()
+            vim.bo[draft].modifiable = true
+            vim.api.nvim_buf_set_lines(draft, 0, -1, false, { "newer teardown edits" })
+            changed = true
+          end,
+        })
+        local ignored = vim.o.eventignore
+        vim.cmd("NvimAIChat" .. operation)
+        if operation == "DiscardCorrection" then
+          choose()
+        end
+        f.phase("review")
+        assert(vim.o.eventignore == ignored, "cleanup left editor events disabled")
+        if changed then
+          assert(vim.api.nvim_buf_is_loaded(draft), "newer teardown edits were deleted")
+          assert(vim.api.nvim_buf_get_lines(draft, 0, -1, false)[1] == "newer teardown edits")
+          assert(vim.bo[draft].modifiable and not f.runtime:chat_freeze_proposal())
+        else
+          assert(not vim.api.nvim_buf_is_valid(draft), "consumed draft was not cleaned up")
+          assert(vim.fn.exists("#draft_correction_" .. draft) == 0, "draft event handlers leaked")
+        end
+        assert(f.disk(1) == "original text")
+        vim.cmd("NvimAIChatReview")
+        dialogs[#dialogs].callback(dialogs[#dialogs].items[1])
+        vim.cmd("NvimAIChatApprove")
+        f.phase("review")
+        assert(
+          f.disk(1) == (operation == "FreezeProposal" and "submitted correction" or "proposed edit")
+        )
+        if vim.api.nvim_buf_is_valid(draft) then
+          vim.api.nvim_buf_delete(draft, { force = true })
+        end
+      end)
+    end
+  end
   for _, operation in ipairs({ "Cancel", "Close" }) do
     scenario("fresh cleanup after deleted draft: " .. operation, function()
       local draft = edit()

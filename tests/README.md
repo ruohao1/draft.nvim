@@ -136,7 +136,8 @@ failures without losing publication recovery evidence.
 buffers. `ai_chat_correction` runs the real owner/controller/publisher through
 correction, no-op, baseline reversion, stale dialogs, cancellation in flight,
 Close and controller loss. `ai_chat_correction_edges` covers window-leave edits,
-cleanup after buffer deletion, menu access and preserved source-turn attribution.
+split-window and buffer-teardown callbacks during Freeze/Discard, cleanup after
+buffer deletion, menu access and preserved source-turn attribution.
 Registry/owner suites inject retirement and adoption faults. The TUI correction case edits with real keys, captures both editable and
 frozen views, and compares disk bytes before and after explicit acceptance.
 
