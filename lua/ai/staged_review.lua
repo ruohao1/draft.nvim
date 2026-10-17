@@ -631,6 +631,16 @@ function M.open(frozen, captured, options)
       return state.files[state.index].path
     end
   end
+  function handle:proposal()
+    if not self:current() or not self:intact() then
+      return nil, "Open an intact pending frozen file before editing"
+    end
+    local item = state.files[state.index]
+    if item.decision ~= "pending" then
+      return nil, "Only pending proposals can be corrected"
+    end
+    return { path = item.path, text = item.newText }
+  end
   function handle:move(delta)
     if not self:current() or (delta ~= 1 and delta ~= -1) then
       return nil, "Open the frozen review before navigating its files"

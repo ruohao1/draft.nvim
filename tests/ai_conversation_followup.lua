@@ -699,4 +699,213 @@ scenario(
   end
 )
 
+local function edit(owner, seed)
+  local round = owner:snapshot().review
+  return act(owner, {
+    kind = "edit-proposal",
+    path = "pending.txt",
+    seed_sha256 = vim.fn.sha256(seed or "proposed edit\n"),
+    round_id = round.id,
+    proposal_revision = round.revision,
+    proposal_token = round.token,
+  })
+end
+local function correct(owner, text)
+  local round = owner:snapshot().review
+  return act(owner, {
+    kind = "correct",
+    path = "pending.txt",
+    replacement = text,
+    round_id = round.id,
+    proposal_revision = round.revision,
+    proposal_token = round.token,
+  })
+end
+local function correction_fixture()
+  local owner, driver = fixture()
+  driver.preflight = function()
+    return true
+  end
+  assert(edit(owner))
+  return owner, driver
+end
+scenario("editing fences every decision without creating a provider turn", function()
+  local owner, driver = correction_fixture()
+  eq(owner:snapshot().phase, "editing")
+  eq(#driver.commands, 3)
+  local round = owner:snapshot().review
+  assert(
+    not act(
+      owner,
+      {
+        kind = "decide",
+        choice = "approve",
+        path = "pending.txt",
+        round_id = round.id,
+        proposal_revision = round.revision,
+        proposal_token = round.token,
+      }
+    )
+  )
+  assert(not revise(owner) and not edit(owner))
+  assert(not act(owner, { kind = "submit", text = "bypass editing" }))
+  assert(correct(owner, "manual\n"))
+  local pending = owner:snapshot()
+  eq(pending.phase, "freezing")
+  eq(pending.turn_id, 1)
+  eq(pending.worker_generation, 1)
+  eq(#pending.turns, 1)
+  eq(driver.commands[4].kind, "correct")
+  eq(driver.commands[4].replacement, "manual\n")
+  eq(driver.commands[4].context, bound(pending))
+  assert(not correct(owner, "overlap\n"))
+  assert(
+    driver:emit({
+      kind = "corrected",
+      outcome = "review",
+      prior_review = prior(pending, "retired"),
+      proposal = proposal("manual-1", 1, { "unchanged", "unchanged", "unchanged", "pending" }),
+    })
+  )
+  local after = owner:snapshot()
+  eq(after.phase, "review")
+  eq(after.review.revision, 2)
+  eq(after.review.origin, "manual")
+  eq(after.review.files, files({ "accepted", "rejected", "unchanged", "pending" }))
+  eq(after.review.history[1].token, "proposal-1")
+  eq(#after.turns, 1)
+  eq(after.turns[1].status, "completed")
+end)
+scenario("manual unchanged or refused outcomes need positive predecessor proof", function()
+  for _, outcome in ipairs({ "unchanged", "refused" }) do
+    local owner, driver = correction_fixture()
+    assert(correct(owner, "manual\n"))
+    local before = owner:snapshot()
+    assert(
+      driver:emit({
+        kind = "corrected",
+        outcome = outcome,
+        prior_review = prior(before, "active"),
+        candidates_retired = true,
+      })
+    )
+    eq(owner:snapshot().phase, outcome == "unchanged" and "review" or "editing")
+    eq(owner:snapshot().review.token, "proposal-1")
+    if outcome == "refused" then
+      assert(act(owner, { kind = "discard-correction" }))
+    end
+    eq(owner:snapshot().phase, "review")
+    eq(#owner:snapshot().turns, 1)
+  end
+  local owner, driver = correction_fixture()
+  assert(correct(owner, "manual\n"))
+  assert(
+    not driver:emit({
+      kind = "corrected",
+      outcome = "unchanged",
+      prior_review = prior(owner:snapshot(), "active"),
+    })
+  )
+  eq(owner:snapshot().recovery_required, true)
+end)
+scenario("invalid bytes and encoded preflight refusal preserve the editable operation", function()
+  local owner, driver = correction_fixture()
+  for _, text in ipairs({
+    "no newline",
+    "\255\n",
+    "\192\128\n",
+    "\0\n",
+    "\239\187\191x\n",
+    "\r\n",
+    string.rep("\n", 20001),
+  }) do
+    assert(not correct(owner, text))
+    eq(owner:snapshot().phase, "editing")
+    eq(#driver.commands, 3)
+  end
+  driver.preflight = function()
+    return nil, "encoded command budget"
+  end
+  local revision = owner:snapshot().view_revision
+  assert(not correct(owner, "valid\n"))
+  eq(owner:snapshot().view_revision, revision)
+  eq(owner:snapshot().phase, "editing")
+  eq(#driver.commands, 3)
+end)
+scenario("cancellation fences a late corrected callback and keeps prior decisions", function()
+  for _, kind in ipairs({ "cancel", "close" }) do
+    local owner, driver = correction_fixture()
+    assert(correct(owner, "manual\n"))
+    local pending = owner:snapshot()
+    assert(act(owner, { kind = kind }))
+    assert(
+      not driver:emit(
+        {
+          kind = "corrected",
+          outcome = "review",
+          prior_review = prior(pending, "retired"),
+          proposal = proposal("too-late", 1, { "unchanged", "unchanged", "unchanged", "pending" }),
+        },
+        4
+      )
+    )
+    assert(
+      driver:emit({
+        kind = kind == "cancel" and "cancelled" or "closed",
+        stopped = true,
+        graceful = kind == "cancel" and true or nil,
+        store_valid = kind == "cancel" and true or nil,
+        writer_stopped = kind == "close" and true or nil,
+        cleaned = kind == "close" and true or nil,
+        tokens_retired = true,
+        candidates_retired = true,
+        receipt = retirement(pending),
+      })
+    )
+    eq(owner:snapshot().phase, kind == "cancel" and "idle" or "closed")
+    eq(
+      owner:snapshot().rounds[1].files,
+      files({ "accepted", "rejected", "unchanged", "cancelled" })
+    )
+  end
+end)
+scenario("manual replacements are bounded independently of model turns", function()
+  local owner, driver = fixture()
+  driver.preflight = function()
+    return true
+  end
+  local seed = "proposed edit\n"
+  for index = 1, 64 do
+    assert(edit(owner, seed))
+    seed = "manual " .. index .. "\n"
+    assert(correct(owner, seed))
+    assert(
+      driver:emit({
+        kind = "corrected",
+        outcome = "review",
+        prior_review = prior(owner:snapshot(), "retired"),
+        proposal = proposal(
+          "manual-" .. index,
+          1,
+          { "unchanged", "unchanged", "unchanged", "pending" }
+        ),
+      })
+    )
+  end
+  eq(#owner:snapshot().turns, 1)
+  assert(edit(owner, seed))
+  assert(not correct(owner, "over budget\n"))
+  assert(correct(owner, seed))
+  assert(
+    driver:emit({
+      kind = "corrected",
+      outcome = "unchanged",
+      candidates_retired = true,
+      prior_review = prior(owner:snapshot(), "active"),
+    })
+  )
+  eq(owner:snapshot().review.revision, 65)
+  assert(act(owner, { kind = "close" }))
+end)
+
 print("ai_conversation_followup: " .. count .. " scenarios passed")

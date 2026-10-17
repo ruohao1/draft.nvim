@@ -317,7 +317,12 @@ function M.new(options)
     if not ok or accepted ~= true then
       return fault()
     end
-    if event.kind == "settled" or event.kind == "cancelled" or event.kind == "decided" then
+    if
+      event.kind == "settled"
+      or event.kind == "cancelled"
+      or event.kind == "decided"
+      or event.kind == "corrected"
+    then
       clear_timer()
     end
   end
@@ -427,6 +432,20 @@ function M.new(options)
     return true
   end
 
+  local function encode_next(command)
+    local ok, payload =
+      pcall(vim.json.encode, { version = 1, serial = serial + 1, command = command })
+    if not ok or #payload > 1024 * 1024 or pending_bytes + #payload + 1 > 2 * 1024 * 1024 then
+      return nil, "Correction exceeds the encoded controller command budget; draft retained"
+    end
+    return payload
+  end
+
+  function driver:preflight(command)
+    local payload, reason = encode_next(command)
+    return payload and true or nil, reason
+  end
+
   function driver:send(command, receive, on_disconnect)
     if dead or input_closed or type(receive) ~= "function" or type(on_disconnect) ~= "function" then
       return false
@@ -437,17 +456,16 @@ function M.new(options)
     then
       return false -- A process can never be rebound to a different editor owner.
     end
+    local payload = encode_next(command)
+    if not payload then
+      return false
+    end
     binding = binding or { id = command.conversation_id, generation = command.owner_generation }
     disconnected = on_disconnect
     if not process and not start() then
       return false
     end
     serial = serial + 1
-    local ok, payload = pcall(vim.json.encode, { version = 1, serial = serial, command = command })
-    if not ok or #payload > 1024 * 1024 or pending_bytes + #payload + 1 > 2 * 1024 * 1024 then
-      fault()
-      return false
-    end
     payload = payload .. "\n"
     current = { receive = receive, command = vim.deepcopy(command), sequence = 0 }
     wire_bytes, frames = 0, 0

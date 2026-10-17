@@ -80,6 +80,23 @@ local ACTIONS = {
     proposal_revision = true,
     proposal_token = true,
   },
+  ["edit-proposal"] = {
+    kind = true,
+    path = true,
+    seed_sha256 = true,
+    round_id = true,
+    proposal_revision = true,
+    proposal_token = true,
+  },
+  ["discard-correction"] = { kind = true },
+  correct = {
+    kind = true,
+    path = true,
+    replacement = true,
+    round_id = true,
+    proposal_revision = true,
+    proposal_token = true,
+  },
   cancel = { kind = true },
   close = { kind = true },
   ["choose-model"] = { kind = true, model = true },
@@ -129,6 +146,7 @@ local EVENTS = {
     receipt = true,
   },
   decided = { receipt = true, sources_valid = true },
+  corrected = { outcome = true, proposal = true, prior_review = true, candidates_retired = true },
 }
 local STARTUP = {
   sources = "Preparing saved file copies",
@@ -291,6 +309,15 @@ local function review_context(round)
     files = vim.deepcopy(round.files),
   }
 end
+local function active_review(round)
+  return round
+    and (
+      round.status == "pending"
+      or round.status == "revising"
+      or round.status == "editing"
+      or round.status == "freezing"
+    )
+end
 local function prior_review_bytes(value, scope)
   if
     not keys(value, {
@@ -357,6 +384,7 @@ function M.new(options)
     available_models = { options.model },
     turns = {},
     rounds = {},
+    manual_revisions = 0,
     retry_safe = false,
     recovery_required = false,
   }
@@ -423,6 +451,7 @@ function M.new(options)
     end
     state.phase, state.retry_safe, state.recovery_required = "failed", false, true
     state.startup = nil
+    state.correction = nil
     state.reason = reason
     local turn = state.turns[#state.turns]
     if turn and turn.status == "running" then
@@ -529,17 +558,17 @@ function M.new(options)
     -- context_valid is the trusted adapter's post-worker source/buffer/frozen
     -- revalidation result. It is never accepted from ACP or inferred from text.
     local round, turn = state.review, state.turns[#state.turns]
+    local correction = state.correction
     if
       not round
-      or not turn.followup
-      or round.status ~= "revising"
+      or not (correction and round.status == "freezing" or turn.followup and round.status == "revising")
       or not prior_review_bytes(evidence, state.selection)
       or evidence.status ~= status
     then
       return false
     end
     local context = review_context(round)
-    return vim.deep_equal(turn.context, context)
+    return vim.deep_equal(correction and correction.context or turn.context, context)
       and evidence.round_id == context.round_id
       and evidence.proposal_revision == context.proposal_revision
       and evidence.proposal_token == context.proposal_token
@@ -547,7 +576,7 @@ function M.new(options)
       and vim.deep_equal(evidence.files, context.files)
   end
 
-  local function replace_review(event)
+  local function replace_review(event, manual)
     if not prior_matches(event.prior_review, "retired") or seen_tokens[event.proposal.token] then
       return nil
     end
@@ -571,6 +600,7 @@ function M.new(options)
       source_generation = round.source_generation,
       turn_id = round.turn_id,
       model = round.model,
+      origin = round.origin,
       receipt_sequence = round.receipt_sequence,
       files = vim.deepcopy(round.files),
       status = "superseded",
@@ -579,11 +609,16 @@ function M.new(options)
     -- The replacement has a fresh writer journal; the token/revision fences old receipts.
     round.token, round.revision, round.receipt_sequence =
       event.proposal.token, round.revision + 1, 0
-    round.source_generation, round.turn_id, round.model =
-      event.proposal.source_generation, turn.id, turn.model
+    round.source_generation, round.turn_id = event.proposal.source_generation, turn.id
+    round.origin = manual and "manual" or nil
+    if manual then
+      round.model = nil
+    else
+      round.model = turn.model
+      turn.proposal_revision = round.revision
+    end
     round.files, round.current_index, round.status =
       candidate, first, first and "pending" or "settled"
-    turn.proposal_revision = round.revision
     state.phase = first and "review" or "idle"
     if not first then
       state.review = nil
@@ -624,10 +659,44 @@ function M.new(options)
     then
       return fail("Contradictory candidate retirement evidence")
     end
-    if event.prior_review ~= nil and not (turn and turn.followup and state.review) then
+    if
+      event.prior_review ~= nil
+      and not (state.review and (state.correction or turn and turn.followup))
+    then
       return fail("Unexpected predecessor review evidence")
     end
-    if event.kind == "decided" and state.phase == "publishing" then
+    if event.kind == "corrected" and state.phase == "freezing" and state.correction then
+      if event.outcome == "review" then
+        if
+          not proposal_bytes(event.proposal, state.selection)
+          or event.proposal.source_generation ~= state.turn_id
+          or event.candidates_retired ~= nil
+          or state.manual_revisions >= 64
+          or not replace_review(event, true)
+        then
+          return fail("Manual replacement handoff is unproven; explicit recovery required")
+        end
+        state.manual_revisions = state.manual_revisions + 1
+        state.correction, state.reason = nil, nil
+      elseif
+        (event.outcome == "unchanged" or event.outcome == "refused")
+        and event.proposal == nil
+        and event.candidates_retired == true
+        and prior_matches(event.prior_review, "active")
+      then
+        if event.outcome == "unchanged" then
+          state.phase, state.review.status, state.correction = "review", "pending", nil
+          state.reason = "Correction is unchanged; the original frozen review remains available"
+        else
+          state.phase, state.review.status = "editing", "editing"
+          state.reason =
+            "Correction could not be frozen; draft retained. Check text and proposal limits."
+        end
+      else
+        return fail("Correction eligibility or cleanup is unproven; explicit recovery required")
+      end
+      lease = lease + 1
+    elseif event.kind == "decided" and state.phase == "publishing" then
       if event.sources_valid ~= nil and type(event.sources_valid) ~= "boolean" then
         return fail("Invalid editor source validation")
       end
@@ -818,6 +887,7 @@ function M.new(options)
       and (event.cancel_confirmed == nil or event.cancel_confirmed == true)
       and (event.candidates_retired == nil or event.candidates_retired == true)
       and (not (turn and turn.followup) or event.candidates_retired == true)
+      and (not state.correction or event.candidates_retired == true)
     then
       if state.review then
         local valid, failed = decision_result(event.receipt)
@@ -828,6 +898,7 @@ function M.new(options)
         return fail("Unexpected review retirement receipt")
       end
       state.phase = "idle"
+      state.correction = nil
       if turn and turn.status == "running" then
         turn.status = "cancelled"
       end
@@ -842,10 +913,9 @@ function M.new(options)
       and (not (state.review or state.publication_recovery) or event.writer_stopped == true)
       and (event.candidates_retired == nil or event.candidates_retired == true)
       and (not (turn and turn.followup) or event.candidates_retired == true)
+      and (not state.correction or event.candidates_retired == true)
     then
-      if
-        state.review and (state.review.status == "pending" or state.review.status == "revising")
-      then
+      if active_review(state.review) then
         local valid, failed = decision_result(event.receipt)
         if not valid or failed then
           return fail("Close did not prove pending review retirement")
@@ -854,6 +924,7 @@ function M.new(options)
         return fail("Unexpected close decision receipt")
       end
       state.phase = "closed"
+      state.correction = nil
       state.retry_safe, state.recovery_required = false, state.publication_recovery == true
       state.reason = state.publication_recovery
           and "Backend closed; publication evidence still requires recovery"
@@ -982,6 +1053,26 @@ function M.new(options)
     end
   end
 
+  local function review_matches(action)
+    return state.review
+      and action.round_id == state.review.id
+      and action.proposal_revision == state.review.revision
+      and action.proposal_token == state.review.token
+  end
+
+  local function command_binding(kind)
+    return {
+      kind = kind,
+      conversation_id = state.conversation_id,
+      owner_generation = state.owner_generation,
+      turn_id = state.turn_id,
+      worker_generation = state.worker_generation,
+      root = state.root,
+      selection = vim.deepcopy(state.selection),
+      model = state.desired_model,
+    }
+  end
+
   function owner:dispatch(action, revision)
     if notifying or dispatching then
       return nil, "Conversation is handling a callback"
@@ -1000,6 +1091,71 @@ function M.new(options)
       changed()
       return true
     end
+    if action.kind == "edit-proposal" then
+      local pending = false
+      if
+        state.phase == "review"
+        and review_matches(action)
+        and state.review.status == "pending"
+        and #(state.review.cleanup_pending or {}) == 0
+        and type(action.seed_sha256) == "string"
+        and #action.seed_sha256 == 64
+        and action.seed_sha256:match("^[a-f0-9]+$")
+      then
+        for _, file in ipairs(state.review.files) do
+          pending = pending or file.path == action.path and file.state == "pending"
+        end
+      end
+      if not pending then
+        return nil, "Only a current pending proposal can be edited"
+      end
+      state.correction = {
+        path = action.path,
+        seed_sha256 = action.seed_sha256,
+        context = review_context(state.review),
+      }
+      state.phase, state.review.status, state.reason = "editing", "editing", nil
+      changed()
+      return true
+    elseif action.kind == "discard-correction" then
+      if state.phase ~= "editing" or not state.correction then
+        return nil, "No editable correction can be discarded"
+      end
+      state.phase, state.review.status, state.correction, state.reason =
+        "review", "pending", nil, nil
+      changed()
+      return true
+    end
+    local correction = action.kind == "correct"
+      and state.phase == "editing"
+      and state.correction
+      and review_matches(action)
+      and action.path == state.correction.path
+      and require("ai.staged_sources").valid_text(action.replacement)
+    local correction_command
+    if correction then
+      if
+        state.manual_revisions >= 64
+        and vim.fn.sha256(action.replacement) ~= state.correction.seed_sha256
+      then
+        return nil, "Manual revision limit reached; discard or freeze an unchanged draft"
+      end
+      correction_command = command_binding("correct")
+      for key, value in pairs(state.correction.context) do
+        if key ~= "files" then
+          correction_command[key] = value
+        end
+      end
+      correction_command.context = vim.deepcopy(state.correction.context)
+      correction_command.path, correction_command.replacement = action.path, action.replacement
+      if type(driver.preflight) ~= "function" then
+        return nil, "Correction preflight is unavailable"
+      end
+      local ready, reason = driver:preflight(correction_command)
+      if not ready then
+        return nil, reason
+      end
+    end
     local followup = action.kind == "revise"
       and state.phase == "review"
       and action.round_id == state.review.id
@@ -1013,7 +1169,13 @@ function M.new(options)
       or followup
     ) and message(action.text)
     local cancel = action.kind == "cancel"
-      and (state.phase == "starting" or state.phase == "generating" or state.phase == "review")
+      and (
+        state.phase == "starting"
+        or state.phase == "generating"
+        or state.phase == "review"
+        or state.phase == "editing"
+        or state.phase == "freezing"
+      )
     local close = action.kind == "close"
       and state.phase ~= "closed"
       and state.phase ~= "closing"
@@ -1022,6 +1184,7 @@ function M.new(options)
     if
       action.kind == "decide"
       and state.phase == "review"
+      and state.review.status == "pending"
       and action.round_id == state.review.id
       and action.proposal_revision == state.review.revision
       and action.proposal_token == state.review.token
@@ -1041,7 +1204,7 @@ function M.new(options)
         end
       end
     end
-    if not submit and not cancel and not close and not target then
+    if not submit and not cancel and not close and not target and not correction then
       return nil, "Unsupported conversation action"
     end
     if submit and #state.turns >= 64 then
@@ -1072,6 +1235,8 @@ function M.new(options)
           true, state.review.id, review_context(state.review)
         state.review.status = "revising"
       end
+    elseif correction then
+      state.phase, state.review.status, state.reason = "freezing", "freezing", nil
     elseif target then
       state.phase, state.review.current_index = "publishing", target
       state.pending_decision =
@@ -1079,9 +1244,7 @@ function M.new(options)
     else
       state.phase = close and "closing" or "cancelling"
       state.startup = nil
-      if
-        state.review and (state.review.status == "pending" or state.review.status == "revising")
-      then
+      if active_review(state.review) then
         state.pending_decision = { choice = "cancel" }
       end
     end
@@ -1089,21 +1252,15 @@ function M.new(options)
     -- A high-water mark or exhausted turn budget must not block cleanup proof.
     sequence, event_count, event_bytes = 0, 0, 0
     local current = lease
-    local command = {
-      kind = followup and "revise"
-        or submit and "start"
-        or target and "decide"
-        or close and "close"
-        or "cancel",
-      conversation_id = state.conversation_id,
-      owner_generation = state.owner_generation,
-      turn_id = state.turn_id,
-      worker_generation = state.worker_generation,
-      root = state.root,
-      selection = vim.deepcopy(state.selection),
-      model = state.desired_model,
-      message = action.text,
-    }
+    local command = correction_command
+      or command_binding(
+        followup and "revise"
+          or submit and "start"
+          or target and "decide"
+          or close and "close"
+          or "cancel"
+      )
+    command.message = action.text
     if followup then
       command.context = vim.deepcopy(state.turns[#state.turns].context)
     end

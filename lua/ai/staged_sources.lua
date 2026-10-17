@@ -1,5 +1,20 @@
 -- Shared saved-source and alias guards; capturing never publishes or saves.
 local M = {}
+
+function M.valid_text(text)
+  if
+    type(text) ~= "string"
+    or #text > 1024 * 1024
+    or (text ~= "" and text:sub(-1) ~= "\n")
+    or text:find("\r", 1, true)
+    or text:sub(1, 3) == "\239\187\191"
+    or not require("ai.review.reducer").is_text(text)
+  then
+    return false
+  end
+  local _, count = text:gsub("\n", "")
+  return count <= 20000
+end
 local function lines(text)
   local result = vim.split(text, "\n", { plain = true })
   if result[#result] == "" then

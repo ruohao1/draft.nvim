@@ -50,21 +50,21 @@
 
 ### Task 2: Semantic owner and trusted editor admission
 
-**Files:** Modify lua/ai/conversation.lua, lua/ai/conversation_controller.lua, lua/ai/conversation_driver.lua, lua/ai/staged_review.lua; tests/ai_conversation_followup.lua, tests/ai_conversation_driver.lua, tests/ai_conversation_controller.lua, tests/ai_staged_shared.lua.
+**Files:** Modify lua/ai/conversation.lua, lua/ai/conversation_controller.lua, lua/ai/conversation_driver.lua, lua/ai/staged_review.lua, lua/ai/staged_sources.lua; tests/ai_conversation_followup.lua, tests/ai_conversation_driver.lua, tests/ai_conversation_controller.lua, tests/ai_staged_shared.lua.
 
 **Interfaces:**
 - Consumes correct/corrected from Task 1; proposal fields and writer receipts remain unchanged.
-- Produces owner actions edit-proposal(path + review identity), discard-correction, correct(replacement + review identity/path); owner phases editing/freezing with bound correction context. No raw draft bytes retained in semantic history.
+- Produces owner actions edit-proposal(path + seed_sha256 + review identity), discard-correction, correct(replacement + review identity/path); owner phases editing/freezing with bound correction context. No raw draft bytes retained in semantic history; seed_sha256 permits the owner to distinguish no-op from changed correction at its cap. Reuse ai.review.reducer.is_text in staged_sources.valid_text(text) for strict UTF-8 checks.
 - Produces driver:preflight(command) -> true or nil, reason; trusted wrapper adds captured sources before exact size preflight.
 - Produces narrow review handle:proposal() -> {path, text} for the current eligible pending file; immutable panels retain their existing API.
 
-- [ ] Add owner tests for all action gates, no extra model turn, active/retired evidence, mixed decisions, no-op, fresh revision/history, budget, cancellation and stale callbacks.
-- [ ] Add driver tests proving oversize/escaped commands are refused before serial/send/fault; valid command following refusal retains serial continuity.
-- [ ] Add trusted admission tests for source/frozen drift and unavailable correction targets.
-- [ ] Run `python3 -I -B tests/run.py ai_conversation_followup ai_conversation_driver ai_conversation_controller ai_staged_shared`. Expected: new actions/interface assertions fail.
-- [ ] Implement owner states and shared predecessor checks without forging model events. Prepare correction command and preflight before mutating state. Extend trusted result admission and timer recognition; preserve disconnect handling during local editing.
-- [ ] Run the same command plus `ai_conversation ai_conversation_review`. Expected: all pass.
-- [ ] Commit: `feat: guard manual correction state and revision adoption`.
+- [x] Add owner tests for all action gates, no extra model turn, active/retired evidence, mixed decisions, no-op, fresh revision/history, budget, cancellation and stale callbacks.
+- [x] Add driver tests proving oversize/escaped commands are refused before serial/send/fault; valid command following refusal retains serial continuity.
+- [x] Add trusted admission tests for source/frozen drift and unavailable correction targets.
+- [x] Run `python3 -I -B tests/run.py ai_conversation_followup ai_conversation_driver ai_conversation_controller ai_staged_shared`. Expected: new actions/interface assertions fail.
+- [x] Implement owner states and shared predecessor checks without forging model events. Prepare correction command and preflight before mutating state. Extend trusted result admission and timer recognition; preserve disconnect handling during local editing.
+- [x] Run the same command plus `ai_conversation ai_conversation_review`. Expected: all pass.
+- [x] Commit: `feat: guard manual correction state and revision adoption`.
 
 ### Task 3: Editable draft and public workflow
 
@@ -72,7 +72,7 @@
 
 **Interfaces:**
 - Consumes Task 2 owner actions and narrow read-only proposal material.
-- Produces proposal_correction.open(path, text) -> draft handle with show(), snapshot() -> text/stamp or nil/reason, lock(), unchanged(stamp), release(), discard() and detach(). No project writes, no owned publisher.
+- Produces proposal_correction.open(path, text) -> draft handle with show(), hide(), stamp(), snapshot() -> text/stamp or nil/reason, lock(), unchanged(stamp), modified(), release(), discard() and detach(). No project writes, no owned publisher.
 - Produces chat:edit_proposal(), freeze_proposal(), discard_correction() and public NvimAIChatEditProposal/NvimAIChatFreezeProposal/NvimAIChatDiscardCorrection. Existing actions menu exposes the same operations.
 - Draft ownership must survive chat hide; source of truth is the current correction and its owner, not transient window callbacks.
 
