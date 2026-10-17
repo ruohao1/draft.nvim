@@ -76,12 +76,12 @@
 - Produces chat:edit_proposal(), freeze_proposal(), discard_correction() and public NvimAIChatEditProposal/NvimAIChatFreezeProposal/NvimAIChatDiscardCorrection. Existing actions menu exposes the same operations.
 - Draft ownership must survive chat hide; source of truth is the current correction and its owner, not transient window callbacks.
 
-- [ ] Add draft tests for exact bytes including empty/newline/trailing blanks, undo, metadata/NUL/CR refusal, no approval mappings, hide/reopen, unchanged-stamp checks, locking and detached text preservation.
-- [ ] Add public-action tests: edit visible pending file; decisions/follow-up blocked; freeze creates new review; unchanged freeze returns original; modified text survives refusal/cancel/close/controller loss; stale dialogs and callbacks cannot erase edits.
-- [ ] Run `python3 -I -B tests/run.py ai_proposal_correction ai_chat_correction ai_chat_approval ai_runtime`. Expected: new draft/workflow assertions fail.
-- [ ] Implement separate scratch buffers and explicit EOF metadata; preserve ordinary editing. Wire commands/runtime/menu and update chat rendering with truthful manual provenance and editing/freezing status.
-- [ ] Run the same command plus `ai_chat ai_chat_view ai_chat_controller ai_chat_auto_review ai_chat_recovery`. Expected: all pass.
-- [ ] Commit: `feat: edit and freeze proposal corrections in chat`.
+- [x] Add draft tests for exact bytes including empty/newline/trailing blanks, undo, metadata/NUL/CR refusal, no approval mappings, hide/reopen, unchanged-stamp checks, locking and detached text preservation.
+- [x] Add public-action tests: edit visible pending file; decisions/follow-up blocked; freeze creates new review; unchanged freeze returns original; modified text survives refusal/cancel/close/controller loss; stale dialogs and callbacks cannot erase edits.
+- [x] Run `python3 -I -B tests/run.py ai_proposal_correction ai_chat_correction ai_chat_approval ai_runtime`. Expected: new draft/workflow assertions fail.
+- [x] Implement separate scratch buffers and explicit EOF metadata; preserve ordinary editing. Wire commands/runtime/menu and update chat rendering with truthful manual provenance and editing/freezing status.
+- [x] Run the same command plus `ai_chat ai_chat_view ai_chat_controller ai_chat_auto_review ai_chat_recovery`. Expected: all pass.
+- [x] Commit: `feat: edit and freeze proposal corrections in chat`.
 
 ### Task 4: End-to-end evidence and delivery
 
@@ -89,9 +89,9 @@
 
 **Interfaces:** Exercise the real public commands, controller registry and guarded writer from Tasks 1–3; no provider credentials.
 
-- [ ] Add an actual-key/UI or production-editor path that corrects frozen bytes, proves disk unchanged before approval, then verifies exact publication, replacement visits and prior accepted files. Run it red if it exposes an integration gap; fix the shared cause.
-- [ ] Document commands, explicit final-newline behavior, in-memory draft recovery and encoded-size limitation in both usage documents.
-- [ ] Run `python3 -I -B tests/run.py`, `stylua --check lua tests`, and `git diff --check`. Expected: all suites and checks pass. Capture and visually inspect the draft and resulting frozen review.
-- [ ] Record evidence and commit: `test: validate manual correction workflow and document limits`.
+- [x] Add an actual-key/UI or production-editor path that corrects frozen bytes, proves disk unchanged before approval, then verifies exact publication, replacement visits and prior accepted files. Run it red if it exposes an integration gap; fix the shared cause.
+- [x] Document commands, explicit final-newline behavior, in-memory draft recovery and encoded-size limitation in both usage documents.
+- [x] Run `python3 -I -B tests/run.py`, `stylua --check lua tests`, and `git diff --check`. Expected: all suites and checks pass. Capture and visually inspect the draft and resulting frozen review.
+- [x] Record evidence and commit: `test: validate manual correction workflow and document limits`.
 - [ ] Request one fresh whole-branch review against the spec and this plan. Address substantive findings with regressions, rerun affected checks and the full suite after fixes.
 - [ ] Push the feature branch and open an implementation PR including this plan, issue/spec links, validation and screenshots. Update Linear with verified delivery state; do not mark untested daily-use benefit complete or merge without authorization.

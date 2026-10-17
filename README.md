@@ -142,6 +142,9 @@ Ctrl-S, press Escape and run `:NvimAIChatSend`.
 | `:NvimAIChatRetry` | Retry only a failure proven safe to retry |
 | `:NvimAIChatClose` | Close the owner; confirm discarding a pending review |
 | `:NvimAIChatReview` | Choose another frozen proposal file or reopen its diff |
+| `:NvimAIChatEditProposal` | Copy the visible pending proposal into an editable scratch buffer |
+| `:NvimAIChatFreezeProposal` | Freeze the active correction as a new review revision |
+| `:NvimAIChatDiscardCorrection` | Discard the correction; confirm when edited |
 | `:NvimAIChatModel` | Choose an advertised model for the next turn while idle |
 | `:NvimAIChatApprove` | Accept the visible pending file and advance after confirmation from the writer |
 | `:NvimAIChatReject` | Reject the visible pending file, leaving it on screen |
@@ -209,6 +212,42 @@ A replacement automatically opens its first pending diff and requires fresh revi
 previously accepted/rejected files remain confirmed context. Chat reports file
 outcomes from the writer's receipts, including pending, accepted, rejected,
 cancelled, blocked and uncertain states.
+
+To correct a pending file yourself, run `:NvimAIChatEditProposal` from its visible
+diff (or choose **Edit proposal** in chat's actions menu while that diff is visible).
+Edit the separate scratch buffer normally, including undo/redo. Its label says
+**not published**; the frozen panels stay read-only. Only one correction can be
+active. Approval and follow-up Send wait until you freeze or discard it.
+
+Run `:NvimAIChatFreezeProposal` from that buffer to create a fresh frozen revision,
+then review and accept it normally. Freeze sends no model prompt and saves no
+project file. Earlier accepted/rejected files remain confirmed; every remaining
+pending file needs a fresh visit before batch approval. Identical bytes keep the
+original review; reverting to the saved baseline makes that file unchanged.
+Changed manual revisions have a separate limit of 64 per conversation. At that
+limit you can still freeze identical bytes, discard, approve or close.
+
+The label distinguishes **0 bytes** from **final newline**. Deleting all visible
+text with the newline flag on means one newline. For a zero-byte file use
+`:setlocal noendofline`; use `:setlocal endofline` to restore the flag. Trailing
+blank lines are preserved. Nonempty text must end in LF; UTF-8 text without BOM,
+NUL or CR is required. Existing limits still apply: 20,000 newlines per file and
+1 MiB combined proposal bytes. The 1 MiB encoded command limit includes JSON
+escaping and metadata, so some otherwise valid large corrections are refused
+without losing the draft.
+
+`:NvimAIChatHide` retains the correction; Edit reopens it. Cancel, Close and
+controller loss keep its text as a listed **Detached correction** buffer with
+Freeze disabled; use `:ls` and `:buffer` to find it and copy text you need.
+`:NvimAIChatDiscardCorrection` explicitly discards an active draft and resumes
+the original eligible review. These buffers have no swap/undo persistence or
+crash recovery: forced deletion or editor exit can lose unsaved text.
+
+![Editable proposal correction before freezing](docs/images/chat-correction-draft.png)
+![Fresh frozen correction awaiting approval](docs/images/chat-correction-review.png)
+
+The [manual-correction validation record](docs/validation/2026-10-17-manual-corrections.md)
+covers exact bytes, interruption and real editor keys.
 
 ![Automatically opened frozen conversational review](docs/images/chat-auto-review.png)
 ![Confirmed file outcomes in chat](docs/images/conversation-decisions.png)

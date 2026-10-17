@@ -169,6 +169,12 @@ COMMANDS                                                        *draft-commands*
 :NvimAIChatRetry       Explicitly retry a failure proven safe to retry.
 :NvimAIChatClose       Close the owner and release its scope after cleanup.
 :NvimAIChatReview      Choose another frozen proposal file or reopen its diff.
+:NvimAIChatEditProposal
+                      Copy the visible pending proposal into an editable scratch.
+:NvimAIChatFreezeProposal
+                      Freeze the active correction as a fresh review revision.
+:NvimAIChatDiscardCorrection
+                      Discard the correction, confirming when edited.
 :NvimAIChatModel       Choose an advertised next-turn model while idle.
 :NvimAIChatApprove     Accept the visible pending file and advance after receipt.
 :NvimAIChatReject      Reject the visible pending file and stay on it.
@@ -245,6 +251,36 @@ outcomes from writer receipts, separately from the assistant's text, including
 pending, accepted, rejected, cancelled, blocked and uncertain states.
 
 Return to chat with f or :NvimAIChat. Closing only the diff tab makes no decision.
+
+MANUAL CORRECTIONS                                      *draft-chat-corrections*
+
+From a visible pending diff, use :NvimAIChatEditProposal (or Edit proposal in the
+actions menu). Edit the separate scratch with normal undo/redo. Frozen panels
+stay read-only. One correction can be active; approval and follow-up Send wait
+until it is frozen or discarded. :NvimAIChatFreezeProposal from the correction
+buffer creates a fresh frozen revision, without a provider prompt or project
+write. Review and accept it normally. Earlier accepted/rejected files remain
+confirmed, and every pending file needs a fresh visit before batch approval.
+Identical bytes keep the original review. Reverting to the saved baseline marks
+that file unchanged. There are at most 64 changed manual revisions per
+conversation, separate from model turns; unchanged Freeze, Discard and cleanup
+remain available at the cap.
+
+The label shows 0 bytes or final newline. An empty visible line with endofline
+on means one newline. Use :setlocal noendofline for zero bytes, or
+:setlocal endofline to restore the flag. Trailing blank lines stay exact.
+Nonempty text must end in LF. UTF-8 without BOM/NUL/CR, 20,000 newlines per file,
+and 1 MiB combined proposal bytes are the existing supported limits. The 1 MiB
+encoded command also includes JSON escaping and metadata, so some otherwise
+supported large corrections are refused without discarding text.
+
+:NvimAIChatHide retains the scratch; Edit reopens it. Cancel, Close or controller
+loss preserves it as a listed Detached correction buffer with Freeze disabled.
+Use :ls and :buffer to find it and copy text you need. Explicitly discarding an
+active correction uses :NvimAIChatDiscardCorrection, with confirmation when
+edited, and resumes the original review only while its guards remain valid.
+Scratch buffers have no swap/undo persistence or crash recovery. Forced buffer
+deletion or editor exit can lose unsaved text.
 Changed source/alias buffers or frozen panels prevent approval. Close the
 conversation, inspect/save your edits and start a new one. Inspect disk before
 further work if publication is uncertain.

@@ -132,6 +132,21 @@ checklists, and unperformed user/live-account acceptance. It also records abrupt
 editor shutdown, retained launch/cache artifacts, and Close after terminal writer
 failures without losing publication recovery evidence.
 
+`ai_proposal_correction` covers exact draft bytes, undo, metadata and detached
+buffers. `ai_chat_correction` runs the real owner/controller/publisher through
+correction, no-op, baseline reversion, stale dialogs, cancellation in flight,
+Close and controller loss. Registry/owner suites inject retirement and adoption
+faults. The TUI correction case edits with real keys, captures both editable and
+frozen views, and compares disk bytes before and after explicit acceptance.
+
+```sh
+DRAFT_CHAT_CAPTURE_DIR=/tmp/draft-chat-captures \
+  python3 -I -B tests/nvim_ai_chat_ui.py \
+  ChatApprovalUITest.test_manual_correction_freezes_then_publishes_only_after_review -q
+```
+
+See the [manual-correction evidence and limitations](../docs/validation/2026-10-17-manual-corrections.md).
+
 ## Linux CI
 
 [Linux tests](../.github/workflows/linux-tests.yml) runs the complete default
