@@ -224,6 +224,8 @@ class ReviewRegistry:
                                         ('round_id', 'proposal_revision', 'receipt_sequence'))):
                     raise ValueError('Unknown review retirement request')
                 paths = [item['path'] for item in entry['files'] if item['state'] == 'pending']
+                if not paths:
+                    return result  # Terminal writer evidence already consumed this authority.
                 # Cancel can overtake adoption. Confirm the requested parent's real
                 # cancellation only after retiring every replacement we own.
                 value = decisions.read_receipt(entry['manifest'], entry['token'])

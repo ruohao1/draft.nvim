@@ -734,19 +734,14 @@ scenario("editing fences every decision without creating a provider turn", funct
   eq(owner:snapshot().phase, "editing")
   eq(#driver.commands, 3)
   local round = owner:snapshot().review
-  assert(
-    not act(
-      owner,
-      {
-        kind = "decide",
-        choice = "approve",
-        path = "pending.txt",
-        round_id = round.id,
-        proposal_revision = round.revision,
-        proposal_token = round.token,
-      }
-    )
-  )
+  assert(not act(owner, {
+    kind = "decide",
+    choice = "approve",
+    path = "pending.txt",
+    round_id = round.id,
+    proposal_revision = round.revision,
+    proposal_token = round.token,
+  }))
   assert(not revise(owner) and not edit(owner))
   assert(not act(owner, { kind = "submit", text = "bypass editing" }))
   assert(correct(owner, "manual\n"))
@@ -759,14 +754,12 @@ scenario("editing fences every decision without creating a provider turn", funct
   eq(driver.commands[4].replacement, "manual\n")
   eq(driver.commands[4].context, bound(pending))
   assert(not correct(owner, "overlap\n"))
-  assert(
-    driver:emit({
-      kind = "corrected",
-      outcome = "review",
-      prior_review = prior(pending, "retired"),
-      proposal = proposal("manual-1", 1, { "unchanged", "unchanged", "unchanged", "pending" }),
-    })
-  )
+  assert(driver:emit({
+    kind = "corrected",
+    outcome = "review",
+    prior_review = prior(pending, "retired"),
+    proposal = proposal("manual-1", 1, { "unchanged", "unchanged", "unchanged", "pending" }),
+  }))
   local after = owner:snapshot()
   eq(after.phase, "review")
   eq(after.review.revision, 2)
@@ -781,14 +774,12 @@ scenario("manual unchanged or refused outcomes need positive predecessor proof",
     local owner, driver = correction_fixture()
     assert(correct(owner, "manual\n"))
     local before = owner:snapshot()
-    assert(
-      driver:emit({
-        kind = "corrected",
-        outcome = outcome,
-        prior_review = prior(before, "active"),
-        candidates_retired = true,
-      })
-    )
+    assert(driver:emit({
+      kind = "corrected",
+      outcome = outcome,
+      prior_review = prior(before, "active"),
+      candidates_retired = true,
+    }))
     eq(owner:snapshot().phase, outcome == "unchanged" and "review" or "editing")
     eq(owner:snapshot().review.token, "proposal-1")
     if outcome == "refused" then
@@ -799,13 +790,11 @@ scenario("manual unchanged or refused outcomes need positive predecessor proof",
   end
   local owner, driver = correction_fixture()
   assert(correct(owner, "manual\n"))
-  assert(
-    not driver:emit({
-      kind = "corrected",
-      outcome = "unchanged",
-      prior_review = prior(owner:snapshot(), "active"),
-    })
-  )
+  assert(not driver:emit({
+    kind = "corrected",
+    outcome = "unchanged",
+    prior_review = prior(owner:snapshot(), "active"),
+  }))
   eq(owner:snapshot().recovery_required, true)
 end)
 scenario("invalid bytes and encoded preflight refusal preserve the editable operation", function()
@@ -838,30 +827,23 @@ scenario("cancellation fences a late corrected callback and keeps prior decision
     assert(correct(owner, "manual\n"))
     local pending = owner:snapshot()
     assert(act(owner, { kind = kind }))
-    assert(
-      not driver:emit(
-        {
-          kind = "corrected",
-          outcome = "review",
-          prior_review = prior(pending, "retired"),
-          proposal = proposal("too-late", 1, { "unchanged", "unchanged", "unchanged", "pending" }),
-        },
-        4
-      )
-    )
-    assert(
-      driver:emit({
-        kind = kind == "cancel" and "cancelled" or "closed",
-        stopped = true,
-        graceful = kind == "cancel" and true or nil,
-        store_valid = kind == "cancel" and true or nil,
-        writer_stopped = kind == "close" and true or nil,
-        cleaned = kind == "close" and true or nil,
-        tokens_retired = true,
-        candidates_retired = true,
-        receipt = retirement(pending),
-      })
-    )
+    assert(not driver:emit({
+      kind = "corrected",
+      outcome = "review",
+      prior_review = prior(pending, "retired"),
+      proposal = proposal("too-late", 1, { "unchanged", "unchanged", "unchanged", "pending" }),
+    }, 4))
+    assert(driver:emit({
+      kind = kind == "cancel" and "cancelled" or "closed",
+      stopped = true,
+      graceful = kind == "cancel" and true or nil,
+      store_valid = kind == "cancel" and true or nil,
+      writer_stopped = kind == "close" and true or nil,
+      cleaned = kind == "close" and true or nil,
+      tokens_retired = true,
+      candidates_retired = true,
+      receipt = retirement(pending),
+    }))
     eq(owner:snapshot().phase, kind == "cancel" and "idle" or "closed")
     eq(
       owner:snapshot().rounds[1].files,
@@ -879,31 +861,27 @@ scenario("manual replacements are bounded independently of model turns", functio
     assert(edit(owner, seed))
     seed = "manual " .. index .. "\n"
     assert(correct(owner, seed))
-    assert(
-      driver:emit({
-        kind = "corrected",
-        outcome = "review",
-        prior_review = prior(owner:snapshot(), "retired"),
-        proposal = proposal(
-          "manual-" .. index,
-          1,
-          { "unchanged", "unchanged", "unchanged", "pending" }
-        ),
-      })
-    )
+    assert(driver:emit({
+      kind = "corrected",
+      outcome = "review",
+      prior_review = prior(owner:snapshot(), "retired"),
+      proposal = proposal(
+        "manual-" .. index,
+        1,
+        { "unchanged", "unchanged", "unchanged", "pending" }
+      ),
+    }))
   end
   eq(#owner:snapshot().turns, 1)
   assert(edit(owner, seed))
   assert(not correct(owner, "over budget\n"))
   assert(correct(owner, seed))
-  assert(
-    driver:emit({
-      kind = "corrected",
-      outcome = "unchanged",
-      candidates_retired = true,
-      prior_review = prior(owner:snapshot(), "active"),
-    })
-  )
+  assert(driver:emit({
+    kind = "corrected",
+    outcome = "unchanged",
+    candidates_retired = true,
+    prior_review = prior(owner:snapshot(), "active"),
+  }))
   eq(owner:snapshot().review.revision, 65)
   assert(act(owner, { kind = "close" }))
 end)

@@ -6,6 +6,7 @@ function M.new(options)
   local chat = {}
   local owner, view, unsubscribe, frozen, return_tab, navigation, normal_mode
   local epoch, opening = 0, false
+  local correction
 
   local function detach()
     if unsubscribe then
@@ -93,11 +94,14 @@ function M.new(options)
     local current_view = view
     local tab = vim.api.nvim_get_current_tabpage()
     local _, _, stamp = view:draft()
+    local draft, draft_stamp = correction, correction and correction.draft:stamp()
     return function()
       if
         view ~= current_view
         or owner ~= current
         or epoch ~= token
+        or correction ~= draft
+        or (draft and not draft.draft:unchanged(draft_stamp))
         or vim.api.nvim_get_current_tabpage() ~= tab
       then
         return false
@@ -428,9 +432,127 @@ function M.new(options)
     return submit("retry")
   end
 
+  local function release_correction(record, consume)
+    if correction ~= record then
+      return
+    end
+    correction = nil
+    if record.unsubscribe then
+      record.unsubscribe()
+    end
+    if consume and record.draft:unchanged(record.submitted) then
+      record.draft:discard()
+    else
+      record.draft:detach()
+    end
+  end
+
+  function chat:edit_proposal()
+    if correction and owner:snapshot().phase == "editing" then
+      local ok, reason = correction.draft:show()
+      return ok or refusal(reason)
+    end
+    local binding, state = current_review()
+    if not binding then
+      return refusal(state)
+    end
+    local material, reason = binding.handle:proposal()
+    if not material then
+      return refusal(reason)
+    end
+    local identity = {
+      round_id = state.review.id,
+      proposal_revision = state.review.revision,
+      proposal_token = state.review.token,
+      path = material.path,
+    }
+    if
+      not dispatch(vim.tbl_extend("force", identity, {
+        kind = "edit-proposal",
+        seed_sha256 = vim.fn.sha256(material.text),
+      }))
+    then
+      return nil
+    end
+    local ran, draft, why =
+      pcall(require("ai.proposal_correction").open, material.path, material.text)
+    if not ran or not draft then
+      dispatch({ kind = "discard-correction" })
+      return refusal(ran and why or "Cannot open correction buffer")
+    end
+    local record = { draft = draft, identity = identity }
+    correction = record
+    -- This subscription survives hiding the chat view and its windows.
+    record.unsubscribe = owner:subscribe(function(updated)
+      if correction ~= record then
+        return
+      end
+      if updated.phase == "editing" then
+        record.draft:release()
+        record.submitted = nil
+      elseif (updated.phase == "review" or updated.phase == "idle") and not updated.correction then
+        release_correction(record, true)
+      elseif updated.phase ~= "freezing" then
+        release_correction(record, false)
+      end
+    end)
+    return true
+  end
+
+  function chat:freeze_proposal()
+    local record = correction
+    if
+      not record
+      or owner:snapshot().phase ~= "editing"
+      or vim.api.nvim_get_current_buf() ~= record.draft.buf
+    then
+      return refusal("Open the active correction with :NvimAIChatEditProposal before freezing")
+    end
+    local text, stamp = record.draft:snapshot()
+    if not text then
+      return refusal(stamp)
+    end
+    local locked, reason = record.draft:lock(stamp)
+    if not locked then
+      return refusal(reason)
+    end
+    record.submitted = stamp
+    local ok, why = dispatch(vim.tbl_extend("force", record.identity, {
+      kind = "correct",
+      replacement = text,
+    }))
+    if not ok and correction == record then
+      record.draft:release()
+      record.submitted = nil
+    end
+    return ok, why
+  end
+
+  function chat:discard_correction()
+    local record = correction
+    if not record or owner:snapshot().phase ~= "editing" then
+      return refusal("No editable correction can be discarded")
+    end
+    local function discard()
+      record.submitted = record.draft:stamp()
+      local ok, reason = dispatch({ kind = "discard-correction" })
+      if not ok and correction == record then
+        record.submitted = nil
+      end
+      return ok, reason
+    end
+    if record.draft:modified() then
+      return confirm("Discard the edited correction?", "Discard correction", discard)
+    end
+    return discard()
+  end
+
   function chat:hide()
     epoch = epoch + 1
     detach()
+    if correction then
+      correction.draft:hide()
+    end
     return not view or view:hide()
   end
 
@@ -439,10 +561,18 @@ function M.new(options)
     if not state then
       return refusal(reason)
     end
-    if state.review and (state.review.status == "pending" or state.review.status == "revising") then
-      return confirm("Discard the pending frozen review?", "Discard and " .. kind, function()
-        dispatch({ kind = kind })
-      end)
+    if
+      state.review
+      and vim.list_contains({ "pending", "revising", "editing", "freezing" }, state.review.status)
+    then
+      return confirm(
+        correction and "Discard the review? Correction text stays in an editable scratch buffer."
+          or "Discard the pending frozen review?",
+        "Discard and " .. kind,
+        function()
+          dispatch({ kind = kind })
+        end
+      )
     end
     return dispatch({ kind = kind })
   end
@@ -590,13 +720,23 @@ function M.new(options)
     if state.retry_safe then
       add("Retry failed turn", "retry")
     end
-    if state.phase == "starting" or state.phase == "generating" or state.phase == "review" then
+    if
+      vim.list_contains({ "starting", "generating", "review", "editing", "freezing" }, state.phase)
+    then
       add("Cancel turn / discard review", "cancel")
+    end
+    if state.phase == "editing" then
+      add("Edit proposal", "edit_proposal")
+      if correction and vim.api.nvim_get_current_buf() == correction.draft.buf then
+        add("Freeze proposal", "freeze_proposal")
+      end
+      add("Discard correction", "discard_correction")
     end
     if state.phase == "review" then
       add("Send follow-up", "send")
       add("Open frozen preview", "review")
       if frozen and frozen.handle:current() then
+        add("Edit proposal", "edit_proposal")
         add("Accept current file", "approve")
         add("Reject current file", "reject")
         add("Accept remaining files", "approve_all")

@@ -68,7 +68,7 @@
 
 ### Task 3: Editable draft and public workflow
 
-**Files:** Create lua/ai/proposal_correction.lua and tests/ai_proposal_correction.lua. Modify lua/ai/chat.lua, lua/ai/chat_view.lua, lua/ai/init.lua, tests/ai_chat_approval.lua, tests/ai_runtime.lua and tests/fixtures/ai/chat_approval.lua as needed.
+**Files:** Create lua/ai/proposal_correction.lua, tests/ai_proposal_correction.lua and tests/ai_chat_correction.lua. Modify lua/ai/chat.lua, lua/ai/chat_view.lua, lua/ai/init.lua, tests/ai_chat_approval.lua, tests/ai_runtime.lua and tests/fixtures/ai/chat_approval.lua as needed.
 
 **Interfaces:**
 - Consumes Task 2 owner actions and narrow read-only proposal material.
@@ -78,7 +78,7 @@
 
 - [ ] Add draft tests for exact bytes including empty/newline/trailing blanks, undo, metadata/NUL/CR refusal, no approval mappings, hide/reopen, unchanged-stamp checks, locking and detached text preservation.
 - [ ] Add public-action tests: edit visible pending file; decisions/follow-up blocked; freeze creates new review; unchanged freeze returns original; modified text survives refusal/cancel/close/controller loss; stale dialogs and callbacks cannot erase edits.
-- [ ] Run `python3 -I -B tests/run.py ai_proposal_correction ai_chat_approval ai_runtime`. Expected: new draft/workflow assertions fail.
+- [ ] Run `python3 -I -B tests/run.py ai_proposal_correction ai_chat_correction ai_chat_approval ai_runtime`. Expected: new draft/workflow assertions fail.
 - [ ] Implement separate scratch buffers and explicit EOF metadata; preserve ordinary editing. Wire commands/runtime/menu and update chat rendering with truthful manual provenance and editing/freezing status.
 - [ ] Run the same command plus `ai_chat ai_chat_view ai_chat_controller ai_chat_auto_review ai_chat_recovery`. Expected: all pass.
 - [ ] Commit: `feat: edit and freeze proposal corrections in chat`.
