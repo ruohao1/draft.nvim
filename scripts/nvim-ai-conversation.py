@@ -110,11 +110,11 @@ class Controller:
         event["sequence"] = self.sequence
         self.pipe.enqueue(self.active["serial"], event)
 
-    def cleanup(self):
+    def cleanup(self, command=None):
         if self.turn is not None and (not self.turn.done or self.turn.task is not None):
             self.turn.fail()
         try:
-            retirement = self.reviews.retire_all() if self.reviews is not None else {}
+            retirement = self.reviews.retire_all(command) if self.reviews is not None else {}
         finally:
             if self.store is not None:
                 self.store.close()
@@ -125,7 +125,7 @@ class Controller:
             raise protocol.Refused("Command follows controller close")
         command = frame["command"]
         if command["kind"] == "close":
-            retirement = self.cleanup()
+            retirement = self.cleanup(command)
             self.active = frame
             self.emit(dict(kind="closed", stopped=True, cleaned=True, tokens_retired=True,
                            **({'writer_stopped': True, 'candidates_retired': True, **retirement} if self.turn else {})))
@@ -149,15 +149,21 @@ class Controller:
             self.turn.on_write_wait = self.write_wait
             try:
                 selected = self.reviews.begin_revision(command) if command["kind"] == "revise" else None
-                self.turn.start(command, selected=selected, context=self.reviews.context)
+                self.turn.start(command, selected=selected, context=self.reviews.context,
+                                manual_corrections=self.reviews.manual_revisions > 0)
             except FAILURES:
                 self.failed()
+        elif command['kind'] == 'correct':
+            if self.turn is None or not self.turn.done or not self.turn.store_valid:
+                raise protocol.Refused('Correction requires a stopped resumable turn')
+            self.active = frame
+            self.emit(dict(kind='corrected', **self.reviews.correct(command)))
         elif command["kind"] == "cancel":
             if self.turn is None:
                 raise protocol.Refused("No turn can be cancelled")
             self.active = frame
-            if self.turn.done and self.reviews.current is not None:
-                retirement = self.reviews.retire_all()
+            if self.turn.done and (self.reviews.current is not None or 'proposal_token' in command):
+                retirement = self.reviews.retire_all(command)
                 self.emit(dict(kind="cancelled", stopped=True, graceful=True, store_valid=self.turn.store_valid,
                                tokens_retired=True, candidates_retired=True, **retirement))
                 return

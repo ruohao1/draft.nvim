@@ -61,6 +61,164 @@ class RegistryTest(unittest.TestCase):
         context = self.command(files=copy.deepcopy(self.registry.current['files']))
         return self.registry.begin_revision(self.command(context=context, sources=self.sources()))
 
+    def correct(self, text, path='first.txt'):
+        self.assertTrue(callable(getattr(self.registry, 'correct', None)),
+                        'Manual corrections must use the real review registry')
+        context = self.command(files=copy.deepcopy(self.registry.current['files']))
+        command = self.command(context=context, sources=self.sources(), path=path,
+                               replacement=text, turn_id=1)
+        prepare = staging.prepare_workspace
+
+        def observed_prepare(*args, **kwargs):
+            task = prepare(*args, **kwargs)
+            self.tasks.append(task)
+            return task
+
+        with patch.object(staging, 'prepare_workspace', side_effect=observed_prepare):
+            return self.registry.correct(command)
+
+    def test_manual_correction_freezes_without_publishing_and_retires_parent(self):
+        result = self.correct('corrected text\n\n')
+        self.assertEqual(result['outcome'], 'review')
+        self.assertEqual(result['prior_review']['status'], 'retired')
+        self.assertFalse(result['prior_review']['context_valid'])
+        self.assertNotEqual(result['proposal']['token'], self.first['id'])
+        self.assertEqual(result['proposal']['source_generation'], 1)
+        self.assertEqual(self.registry.current['proposal_revision'], 2)
+        self.assertEqual((self.root / 'first.txt').read_bytes(), b'original text\n')
+        self.assertNotEqual(staging.decide(self.first['proposal'], self.first['id'],
+                                          'approve', 'first.txt')['phase'], 'applied')
+        ref = result['review_ref']
+        staging.decide(ref['manifest'], ref['token'], 'approve', remaining=True)
+        self.assertEqual(self.registry.receipt(self.command(choice='approve', remaining=True))['phase'], 'applied')
+        self.assertEqual((self.root / 'first.txt').read_bytes(), b'corrected text\n\n')
+        self.assertEqual((self.root / 'second.txt').read_bytes(), b'proposed edit\n')
+
+    def test_manual_correction_preserves_accepted_context(self):
+        intent = self.command(choice='approve', path='first.txt')
+        staging.decide(self.first['proposal'], self.first['id'], 'approve', 'first.txt')
+        self.registry.receipt(intent)
+        result = self.correct('corrected second\n', 'second.txt')
+        self.assertEqual([f['state'] for f in self.registry.current['files']], ['accepted', 'pending'])
+        self.assertEqual((self.root / 'first.txt').read_bytes(), b'proposed edit\n')
+        self.assertEqual(self.correct('cannot reopen\n')['outcome'], 'refused')
+        self.assertEqual(self.registry.current['token'], result['proposal']['token'])
+
+    def test_manual_noop_keeps_identity_and_baseline_reversion_is_unchanged(self):
+        result = self.correct('proposed edit\n')
+        self.assertEqual(result['outcome'], 'unchanged')
+        self.assertTrue(result['candidates_retired'])
+        self.assertEqual(result['prior_review']['status'], 'active')
+        self.assertEqual(self.registry.current['token'], self.first['id'])
+        result = self.correct('original text\n')
+        self.assertEqual(result['proposal']['files'][0]['state'], 'unchanged')
+        result = self.correct('original text\n', 'second.txt')
+        self.assertEqual([f['state'] for f in result['proposal']['files']], ['unchanged', 'unchanged'])
+        self.assertIsNone(self.registry.current)
+
+    def test_manual_invalid_bytes_refuse_without_losing_parent(self):
+        for text in ('no final newline', '\ufeffbom\n', 'cr\r\n', 'nul\0\n', '\n' * 20001):
+            with self.subTest(text=text[:20]):
+                result = self.correct(text)
+                self.assertEqual(result['outcome'], 'refused')
+                self.assertEqual(result['prior_review']['status'], 'active')
+                self.assertTrue(result['candidates_retired'])
+                self.assertEqual(self.registry.current['token'], self.first['id'])
+        self.assertEqual(self.correct('valid\n', 'outside.txt')['outcome'], 'refused')
+
+    def test_manual_limit_leaves_noop_and_cleanup_available(self):
+        for index in range(64):
+            self.assertEqual(self.correct('revision %d\n' % index)['outcome'], 'review')
+        token = self.registry.current['token']
+        self.assertEqual(self.correct('one too many\n')['outcome'], 'refused')
+        self.assertEqual(self.registry.current['token'], token)
+        self.assertEqual(self.correct('revision 63\n')['outcome'], 'unchanged')
+        self.assertEqual(self.registry.retire_all()['receipt']['phase'], 'cancelled')
+
+    def test_manual_failure_before_fence_restores_only_after_candidate_cleanup(self):
+        with patch.object(module.decisions.PendingReview, 'retire', side_effect=OSError('before fence')):
+            result = self.correct('corrected\n')
+        self.assertEqual(result['outcome'], 'refused')
+        self.assertEqual(result['prior_review']['status'], 'active')
+        self.assertTrue(result['candidates_retired'])
+        self.assertFalse(self.tasks[-1].exists())
+
+    def test_manual_failure_after_fence_never_restores_parent(self):
+        retire = module.decisions.PendingReview.retire
+
+        def lost_reply(pending, *args):
+            retire(pending, *args)
+            raise OSError('lost retirement reply')
+
+        with patch.object(module.decisions.PendingReview, 'retire', new=lost_reply):
+            with self.assertRaises((OSError, ValueError)):
+                self.correct('corrected\n')
+        self.registry.retire_all()
+        self.assertNotEqual(staging.decide(self.first['proposal'], self.first['id'],
+                                          'approve', 'first.txt')['phase'], 'applied')
+        self.assertEqual((self.root / 'first.txt').read_bytes(), b'original text\n')
+
+    def test_manual_cleanup_failure_retains_ownership_until_close(self):
+        with patch.object(staging, 'freeze_workspace', side_effect=OSError('freeze failed')):
+            with patch.object(staging, 'discard_workspace', side_effect=OSError('cleanup failed')):
+                with self.assertRaises(OSError):
+                    self.correct('corrected\n')
+        task = self.tasks[-1]
+        self.assertTrue(task.exists())
+        self.registry.retire_all()
+        self.assertFalse(task.exists())
+        self.assertEqual((self.root / 'first.txt').read_bytes(), b'original text\n')
+
+    def test_manual_source_drift_cannot_restore_parent_eligibility(self):
+        freeze = staging.freeze_workspace
+
+        def drift(*args, **kwargs):
+            frozen = freeze(*args, **kwargs)
+            (self.root / 'second.txt').write_bytes(b'user edit\n')
+            return frozen
+
+        with patch.object(staging, 'freeze_workspace', side_effect=drift):
+            with self.assertRaises(ValueError):
+                self.correct('corrected\n')
+        self.registry.retire_all()
+        self.assertEqual((self.root / 'second.txt').read_bytes(), b'user edit\n')
+        self.assertNotEqual(staging.decide(self.first['proposal'], self.first['id'],
+                                          'approve', 'first.txt')['phase'], 'applied')
+
+    def test_manual_install_lost_reply_still_owns_replacement_for_close(self):
+        install = self.registry.install
+        ref = {}
+
+        def lost_reply(*args, **kwargs):
+            result = install(*args, **kwargs)
+            ref.update(result['review_ref'])
+            raise OSError('install reply lost')
+
+        intent = self.command()
+        with patch.object(self.registry, 'install', side_effect=lost_reply):
+            with self.assertRaises((OSError, ValueError)):
+                self.correct('corrected\n')
+        self.assertTrue(Path(ref['manifest']).is_file())
+        result = self.registry.retire_all(intent)
+        self.assertEqual(result['receipt']['proposal_token'], self.first['id'])
+        self.assertEqual(result['receipt']['phase'], 'cancelled')
+        self.assertNotEqual(staging.decide(ref['manifest'], ref['token'],
+                                          'approve', 'first.txt')['phase'], 'applied')
+
+    def test_manual_install_lost_reply_after_reverting_every_file_can_close(self):
+        self.correct('original text\n')
+        intent = self.command()
+        install = self.registry.install
+
+        def lost_reply(*args, **kwargs):
+            install(*args, **kwargs)
+            raise OSError('install reply lost')
+
+        with patch.object(self.registry, 'install', side_effect=lost_reply):
+            with self.assertRaises((OSError, ValueError)):
+                self.correct('original text\n', 'second.txt')
+        self.assertEqual(self.registry.retire_all(intent)['receipt']['phase'], 'cancelled')
+
     def test_unpublished_intent_and_stale_token_cannot_manufacture_a_receipt(self):
         command = self.command(choice='approve', path='first.txt')
         with self.assertRaises(ValueError):
