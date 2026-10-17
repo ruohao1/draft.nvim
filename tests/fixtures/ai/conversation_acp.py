@@ -55,10 +55,10 @@ assert Path('/tmp/backend-state').is_dir()
 assert not Path('/tmp/backend-state/../proposal.json').exists()
 audit({'profile_inode': os.stat('/tmp/agent').st_ino,
        'listener_key_hash': hashlib.sha256(os.environ['OPENCODE_SERVER_PASSWORD'].encode()).hexdigest()})
-for raw in sys.stdin:
+for sequence, raw in enumerate(sys.stdin, 1):
     message = json.loads(raw)
     method, identifier = message.get('method'), message.get('id')
-    audit({'method': method, 'params': message.get('params')})
+    audit({'sequence': sequence, 'method': method, 'params': message.get('params')})
     if method == 'initialize':
         if case == 'startup-cancel':
             audit({'ready': 'startup-cancel'})

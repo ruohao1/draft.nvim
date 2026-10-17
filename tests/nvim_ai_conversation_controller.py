@@ -243,7 +243,9 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([event["status"] for event in self.events if event["kind"] == "progress"], ["completed"])
         self.assertEqual([event["stage"] for event in self.events if event["kind"] == "startup"],
                          ["sources", "credentials", "launch", "initialize", "session", "model", "mode"])
-        self.assertEqual([item["method"] for item in self.audit if "method" in item], ["initialize", "session/new",
+        # Audit connection threads can finish out of the peer's receive order.
+        requests = sorted((item for item in self.audit if "method" in item), key=lambda item: item["sequence"])
+        self.assertEqual([item["method"] for item in requests], ["initialize", "session/new",
             "session/set_config_option", "session/set_config_option", "session/prompt"])
         self.assertIn({"exiting": True}, self.audit)
         self.assertEqual(Path(f"/proc/{self.child.pid}/task/{self.child.pid}/children").read_text().strip(), "")
