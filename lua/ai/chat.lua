@@ -130,7 +130,7 @@ function M.new(options)
     return true
   end
 
-  local function show()
+  local function show(keep_composer)
     if not navigation then
       navigation = vim.api.nvim_create_autocmd("TabLeave", {
         callback = function()
@@ -181,7 +181,9 @@ function M.new(options)
         end
       end)
     end
-    open_pending_review()
+    if not keep_composer then
+      open_pending_review()
+    end
     return true
   end
 
@@ -288,6 +290,106 @@ function M.new(options)
       end
     end
     return construct(files)
+  end
+
+  function chat:attach(selection)
+    local state, reason = snapshot()
+    if not state then
+      return refusal(reason)
+    end
+    if state.phase == "closed" or state.phase == "closing" or state.recovery_required then
+      return refusal("Open an eligible conversation with :NvimAIChatNew before attaching context")
+    end
+    local buf, marks = vim.api.nvim_get_current_buf()
+    if selection == "x" then
+      local mode = vim.api.nvim_get_mode().mode
+      if mode ~= "v" and mode ~= "V" and mode ~= "\22" then
+        return refusal("Select text in Visual mode before attaching context")
+      end
+      marks = {
+        mode = mode,
+        first = vim.fn.getpos("v"),
+        last = vim.fn.getpos("."),
+        inclusive = vim.o.selection ~= "exclusive",
+      }
+    elseif type(selection) == "table" then
+      marks = {
+        mode = "V",
+        first = { buf, selection.line1, 1, 0 },
+        last = { buf, selection.line2, 2147483647, 0 },
+      }
+    else
+      return refusal("Select text with Visual <leader>at or use :[range]NvimAIChatAttach")
+    end
+    local file = vim.api.nvim_buf_get_name(buf)
+    if
+      file:sub(1, #state.root + 1) ~= state.root .. "/"
+      or not vim.list_contains(state.selection, file:sub(#state.root + 2))
+    then
+      return refusal("Context must come from a file already selected for this conversation")
+    end
+    local captured, why = sources.capture({ file }, state.root)
+    if not captured then
+      return refusal(why)
+    end
+    local item = captured.files[1]
+    local function saved()
+      local fd = vim.uv.fs_open(item.file, "r", 0)
+      if not fd then
+        return false
+      end
+      local bytes = vim.uv.fs_read(fd, 1024 * 1024 + 1, 0)
+      vim.uv.fs_close(fd)
+      return bytes == item.oldText and sources.unchanged(captured)
+    end
+    if not saved() then
+      return refusal("Source changed on disk or in a buffer; reload or save it, then select again")
+    end
+    local region, region_reason = require("ai.context").selection(buf, marks)
+    if not region then
+      return refusal(region_reason)
+    end
+    if region.bytes:find("\0", 1, true) then
+      return refusal("Select text without NUL bytes for the composer")
+    end
+    local fence_size = 3
+    for run in region.bytes:gmatch("`+") do
+      fence_size = math.max(fence_size, #run + 1)
+    end
+    local fence_text = string.rep("`", fence_size)
+    local context = string.format(
+      "Selection from %s (lines %d-%d):\n%s\n",
+      vim.json.encode(item.path),
+      region.first,
+      region.last,
+      fence_text
+    ) .. region.bytes .. (region.bytes:sub(-1) == "\n" and "" or "\n") .. fence_text
+    local current = owner
+    local _, _, stamp = view:draft()
+    if frozen then
+      frozen.waiting_for_normal = nil
+    end
+    if selection == "x" then
+      vim.cmd("normal! \27")
+    end
+    if not show(true) then
+      return nil
+    end
+    local _, _, now = view:draft()
+    if
+      owner ~= current
+      or owner:snapshot().view_revision ~= state.view_revision
+      or now ~= stamp
+      or not saved()
+    then
+      return refusal("Conversation, draft or source changed while attaching; select again")
+    end
+    local appended, append_reason = view:append_draft(context)
+    if not appended then
+      return refusal(append_reason)
+    end
+    view:notice("Selection attached. Edit or remove it in the composer; Ctrl-S sends.")
+    return true
   end
 
   local function submit(kind)

@@ -165,6 +165,8 @@ local ok, reason = xpcall(function()
     files = { { path = "example.txt", state = "pending" } },
   })
   local previews, eligible = 0, true
+  vim.api.nvim_set_current_buf(source)
+  vim.cmd("normal! V")
   last().config.on_review({
     show = function(_, selected)
       assert(selected == "example.txt")
@@ -186,7 +188,15 @@ local ok, reason = xpcall(function()
     end,
   })
   assert(last().config.defer_review == true)
-  assert(previews == 1, "accepted proposal must open its first pending diff automatically")
+  assert(previews == 0, "Visual selection must defer the pending diff")
+  assert(chat:attach("x"))
+  vim.wait(50)
+  assert(previews == 0, "Attachment must keep composer focus after ModeChanged callbacks")
+  assert(vim.bo.filetype == "draft-chat-input" and vim.api.nvim_get_mode().mode == "n")
+  assert(draft():find("Selection from", 1, true))
+  assert(#last().driver.requests == 1, "Attachment must not dispatch a review decision")
+  assert(chat:open())
+  assert(previews == 1, "Explicit reopening must still present the deferred diff")
   assert(chat:review())
   local stale_review = #pending
   compose("changed before preview choice")

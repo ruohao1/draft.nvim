@@ -191,6 +191,17 @@ local function selected_region(deps, bufnr, marks)
   return { bytes = bytes, first = first, last = last }
 end
 
+function M.selection(bufnr, marks)
+  if not valid_buffer(bufnr) then
+    return nil, "AI context buffer is invalid"
+  end
+  return selected_region(
+    { getregion = vim.fn.getregion, getregionpos = vim.fn.getregionpos },
+    bufnr,
+    marks
+  )
+end
+
 local function new(deps)
   local context = {}
   local current, pending, uncertain, transaction

@@ -157,6 +157,12 @@ local ok, reason = xpcall(function()
   vim.cmd("NvimAIChatModel")
   assert(#audit == 0 and #processes == 0, "Initial model refusal must remain passive")
   compose("First explicit question.")
+  vim.api.nvim_set_current_win(source_win)
+  vim.cmd("1NvimAIChatAttach")
+  local first_prompt =
+    'First explicit question.\n\nSelection from "example.txt" (lines 1-1):\n```\noriginal text\n```'
+  assert(text("draft-chat-input") == first_prompt)
+  assert(#audit == 0 and #processes == 0, "Attaching context must not start the controller")
   assert(vim.uv.fs_chmod(source_path, 384))
   vim.cmd("NvimAIChatSend")
   wait_for(function()
@@ -164,7 +170,7 @@ local ok, reason = xpcall(function()
   end, "Send did not display the source permission refusal")
   phase("idle")
   assert(text("draft-chat"):find("0644", 1, true))
-  assert(text("draft-chat-input") == "First explicit question.")
+  assert(text("draft-chat-input") == first_prompt)
   assert(#audit == 0 and #processes == 0, "Send must recheck permissions before launch")
   assert(bit.band(vim.uv.fs_stat(source_path).mode, 4095) == 384)
   assert(vim.uv.fs_chmod(source_path, 420))
@@ -174,6 +180,13 @@ local ok, reason = xpcall(function()
     return #waiting == 1
   end, "Stream fixture did not reach its gate")
   phase("generating")
+  local delivered
+  for _, event in ipairs(audit) do
+    if event.method == "session/prompt" then
+      delivered = event.params.prompt[#event.params.prompt].text
+    end
+  end
+  assert(delivered == first_prompt, "The real controller must deliver the explicit context prompt")
   status = assert(runtime:show_status())
   assert(status.state == "generating" and status.model == "fixture/model")
   assert(require("draft").compact() == "AI:O generating")
