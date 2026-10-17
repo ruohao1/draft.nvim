@@ -609,7 +609,8 @@ function M.new(options)
     -- The replacement has a fresh writer journal; the token/revision fences old receipts.
     round.token, round.revision, round.receipt_sequence =
       event.proposal.token, round.revision + 1, 0
-    round.source_generation, round.turn_id = event.proposal.source_generation, turn.id
+    round.source_generation = event.proposal.source_generation
+    round.turn_id = manual and round.turn_id or turn.id
     round.origin = manual and "manual" or nil
     if manual then
       round.model = nil
@@ -669,7 +670,7 @@ function M.new(options)
       if event.outcome == "review" then
         if
           not proposal_bytes(event.proposal, state.selection)
-          or event.proposal.source_generation ~= state.turn_id
+          or event.proposal.source_generation ~= state.review.source_generation
           or event.candidates_retired ~= nil
           or state.manual_revisions >= 64
           or not replace_review(event, true)

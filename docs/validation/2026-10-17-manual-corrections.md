@@ -17,10 +17,12 @@ confirmed context, and a replacement requires fresh visits to every pending file
 
 1. Send a request for three selected saved files. Accept the first proposal with
    `a`, leaving the second and third files pending.
-2. From the second frozen diff, run `:NvimAIChatEditProposal`. Replace the text
+2. From the second frozen diff, press `g?` and choose **Edit proposal** (also
+   available as `:NvimAIChatEditProposal`). Replace the text
    using ordinary keys and add a trailing blank line. Undo and redo the edit.
    The buffer says **Editable correction**, **final newline**, and **not published**.
-3. Run `:NvimAIChatFreezeProposal`. The token changes, revision becomes 2, the
+3. Press `g?` and choose **Freeze proposal** (or use
+   `:NvimAIChatFreezeProposal`). The token changes, revision becomes 2, the
    first file stays accepted, and the second project's saved file is unchanged.
    The new frozen second-file diff opens. Batch acceptance still refuses because
    the third file has not been visited in this revision.
@@ -85,3 +87,34 @@ benefit assessment was performed. User selection authorized implementation; it
 is not evidence of reduced daily friction. Drafts live only in editor memory:
 forced deletion or editor exit can lose unsaved text. Existing text/aggregate
 limits and the encoded 1 MiB command limit deliberately remain in place.
+
+## Independent review and regression fixes
+
+A fresh whole-branch review found four substantive issues. Each was reproduced
+before its fix; all seven scenarios in `ai_chat_correction_edges` failed for the
+reported reasons, as did the owner and registry attribution checks
+(`.test-results/run-29aq1m15`). The focused fix run passed **7/7 suites**, including
+23 registry tests (`.test-results/run-2ipjvq1o`).
+
+- A `BufWinLeave` callback could add newer text after the pre-delete stamp check.
+  Discard now rechecks after hiding, detaches newer text, and leaves the submitted
+  frozen bytes separate. Regression coverage exercises both Freeze and Discard.
+- A missing draft had no stamp, which made every new Cancel/Close confirmation
+  stale. Dialogs now compare absence consistently; deletion after opening still
+  invalidates the older confirmation, while a fresh confirmation permits cleanup.
+- Edit/Freeze menu entries could not be reached from their eligible buffers.
+  `g?` now opens the existing actions menu in frozen and editable correction
+  buffers. Editable text has no approval keys, and detaching removes the menu
+  mapping. The terminal walkthrough exercises the actual menu keys.
+- A discussion-only or safely refused follow-up could become a correction's
+  false model source. The registry retains the predecessor source generation;
+  the owner preserves the original round turn while the current operation
+  envelope and manual provenance remain separate.
+
+No minor findings were deferred. The reviewer declined to assess actual daily-use
+benefit without user evidence. Implementation was explicitly selected, so that
+acceptance item remains open; the risk is delivering a workflow users do not need.
+
+After the review fixes, the full default suite passed **67/67 suites**, including
+all 11 TUI cases (`.test-results/run-j5crf_om`). Formatting and whitespace checks
+passed. The refreshed editable/frozen captures were visually inspected.

@@ -769,6 +769,42 @@ scenario("editing fences every decision without creating a provider turn", funct
   eq(#after.turns, 1)
   eq(after.turns[1].status, "completed")
 end)
+scenario("manual correction preserves the original proposal source after discussion", function()
+  for _, outcome in ipairs({ "answer", "failed" }) do
+    local owner, driver = fixture()
+    driver.preflight = function()
+      return true
+    end
+    local before = owner:snapshot()
+    assert(revise(owner))
+    driver:progress()
+    assert(driver:finish(outcome, {
+      prior_review = prior(before, "active"),
+      candidates_retired = true,
+      submission = outcome == "failed" and "submitted" or nil,
+    }))
+    assert(edit(owner) and correct(owner, "manual after discussion\n"))
+    assert(
+      driver:emit({
+        kind = "corrected",
+        outcome = "review",
+        prior_review = prior(owner:snapshot(), "retired"),
+        proposal = proposal(
+          "manual-after-discussion",
+          1,
+          { "unchanged", "unchanged", "unchanged", "pending" }
+        ),
+      }),
+      "manual correction must retain the predecessor source generation"
+    )
+    local after = owner:snapshot()
+    eq(after.review.source_generation, 1)
+    eq(after.review.turn_id, 1)
+    eq(after.turn_id, 2)
+    eq(#after.turns, 2)
+    eq(after.review.origin, "manual")
+  end
+end)
 scenario("manual unchanged or refused outcomes need positive predecessor proof", function()
   for _, outcome in ipairs({ "unchanged", "refused" }) do
     local owner, driver = correction_fixture()

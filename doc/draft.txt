@@ -255,9 +255,10 @@ Return to chat with f or :NvimAIChat. Closing only the diff tab makes no decisio
 MANUAL CORRECTIONS                                      *draft-chat-corrections*
 
 From a visible pending diff, use :NvimAIChatEditProposal (or Edit proposal in the
-actions menu). Edit the separate scratch with normal undo/redo. Frozen panels
+g? actions menu). Edit the separate scratch with normal undo/redo. Frozen panels
 stay read-only. One correction can be active; approval and follow-up Send wait
-until it is frozen or discarded. :NvimAIChatFreezeProposal from the correction
+until it is frozen or discarded. g? also opens actions in the editable scratch.
+:NvimAIChatFreezeProposal from the correction
 buffer creates a fresh frozen revision, without a provider prompt or project
 write. Review and accept it normally. Earlier accepted/rejected files remain
 confirmed, and every pending file needs a fresh visit before batch approval.

@@ -72,7 +72,7 @@
 
 **Interfaces:**
 - Consumes Task 2 owner actions and narrow read-only proposal material.
-- Produces proposal_correction.open(path, text) -> draft handle with show(), hide(), stamp(), snapshot() -> text/stamp or nil/reason, lock(), unchanged(stamp), modified(), release(), discard() and detach(). No project writes, no owned publisher.
+- Produces proposal_correction.open(path, text, on_actions?) -> draft handle with show(), hide(), stamp(), snapshot() -> text/stamp or nil/reason, lock(), unchanged(stamp), modified(), release(), discard(stamp?) and detach(). No project writes, no owned publisher.
 - Produces chat:edit_proposal(), freeze_proposal(), discard_correction() and public NvimAIChatEditProposal/NvimAIChatFreezeProposal/NvimAIChatDiscardCorrection. Existing actions menu exposes the same operations.
 - Draft ownership must survive chat hide; source of truth is the current correction and its owner, not transient window callbacks.
 
@@ -93,5 +93,5 @@
 - [x] Document commands, explicit final-newline behavior, in-memory draft recovery and encoded-size limitation in both usage documents.
 - [x] Run `python3 -I -B tests/run.py`, `stylua --check lua tests`, and `git diff --check`. Expected: all suites and checks pass. Capture and visually inspect the draft and resulting frozen review.
 - [x] Record evidence and commit: `test: validate manual correction workflow and document limits`.
-- [ ] Request one fresh whole-branch review against the spec and this plan. Address substantive findings with regressions, rerun affected checks and the full suite after fixes.
+- [x] Request one fresh whole-branch review against the spec and this plan. Address substantive findings with regressions, rerun affected checks and the full suite after fixes.
 - [ ] Push the feature branch and open an implementation PR including this plan, issue/spec links, validation and screenshots. Update Linear with verified delivery state; do not mark untested daily-use benefit complete or merge without authorization.

@@ -15,7 +15,7 @@ local safe = {
   fixendofline = false,
 }
 
-function M.open(path, text)
+function M.open(path, text, on_actions)
   if not sources.valid_text(text) then
     return nil, "Proposal is not supported UTF-8 text"
   end
@@ -33,6 +33,9 @@ function M.open(path, text)
   vim.bo[buf].undolevels = levels
   vim.bo[buf].endofline = text:sub(-1) == "\n"
   vim.bo[buf].modified = false
+  if on_actions then
+    vim.keymap.set("n", "g?", on_actions, { buffer = buf, silent = true, desc = "Draft: actions" })
+  end
 
   local function loaded()
     return vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf)
@@ -106,6 +109,7 @@ function M.open(path, text)
       .. eof
       .. " · not published"
       .. (detached and "" or " · :NvimAIChatFreezeProposal")
+      .. (not detached and on_actions and " · g? actions" or "")
     for _, visible in ipairs(vim.fn.win_findbuf(buf)) do
       vim.wo[visible].winbar = (" " .. title):gsub("%%", "%%%%")
     end
@@ -154,16 +158,25 @@ function M.open(path, text)
     self:release()
     detached = true
     if loaded() then
+      if on_actions then
+        pcall(vim.keymap.del, "n", "g?", { buffer = buf })
+      end
       vim.bo[buf].modifiable = true
       label()
     end
   end
 
-  function draft:discard()
+  function draft:discard(stamp)
     self:hide()
+    -- Window-leave callbacks may have added text after the caller's check.
+    if stamp and not self:unchanged(stamp) then
+      self:detach()
+      return false
+    end
     if loaded() then
       vim.api.nvim_buf_delete(buf, { force = true })
     end
+    return true
   end
 
   local group = vim.api.nvim_create_augroup("draft_correction_" .. buf, { clear = true })

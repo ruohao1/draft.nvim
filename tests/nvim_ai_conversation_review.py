@@ -61,12 +61,12 @@ class RegistryTest(unittest.TestCase):
         context = self.command(files=copy.deepcopy(self.registry.current['files']))
         return self.registry.begin_revision(self.command(context=context, sources=self.sources()))
 
-    def correct(self, text, path='first.txt'):
+    def correct(self, text, path='first.txt', turn_id=1):
         self.assertTrue(callable(getattr(self.registry, 'correct', None)),
                         'Manual corrections must use the real review registry')
         context = self.command(files=copy.deepcopy(self.registry.current['files']))
         command = self.command(context=context, sources=self.sources(), path=path,
-                               replacement=text, turn_id=1)
+                               replacement=text, turn_id=turn_id)
         prepare = staging.prepare_workspace
 
         def observed_prepare(*args, **kwargs):
@@ -93,6 +93,13 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(self.registry.receipt(self.command(choice='approve', remaining=True))['phase'], 'applied')
         self.assertEqual((self.root / 'first.txt').read_bytes(), b'corrected text\n\n')
         self.assertEqual((self.root / 'second.txt').read_bytes(), b'proposed edit\n')
+
+    def test_manual_correction_after_discussion_keeps_proposal_source_generation(self):
+        selected = self.revision()
+        discussion = self.registry.finish_revision(self.freeze([b'proposed edit\n'] * 2, selected), 2)
+        self.assertEqual(discussion['outcome'], 'answer')
+        result = self.correct('manual after discussion\n', turn_id=2)
+        self.assertEqual(result['proposal']['source_generation'], 1)
 
     def test_manual_correction_preserves_accepted_context(self):
         intent = self.command(choice='approve', path='first.txt')

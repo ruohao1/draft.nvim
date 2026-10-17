@@ -214,10 +214,11 @@ outcomes from the writer's receipts, including pending, accepted, rejected,
 cancelled, blocked and uncertain states.
 
 To correct a pending file yourself, run `:NvimAIChatEditProposal` from its visible
-diff (or choose **Edit proposal** in chat's actions menu while that diff is visible).
+diff (or press `g?` there and choose **Edit proposal**).
 Edit the separate scratch buffer normally, including undo/redo. Its label says
 **not published**; the frozen panels stay read-only. Only one correction can be
-active. Approval and follow-up Send wait until you freeze or discard it.
+active. `g?` opens the same actions menu in this buffer. Approval and follow-up
+Send wait until you freeze or discard it.
 
 Run `:NvimAIChatFreezeProposal` from that buffer to create a fresh frozen revision,
 then review and accept it normally. Freeze sends no model prompt and saves no

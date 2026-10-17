@@ -51,7 +51,7 @@ class ReviewRegistry:
         entry = dict(manifest=manifest, token=token,
                      round_id=previous['round_id'] if previous else self.rounds,
                      proposal_revision=previous['proposal_revision'] + 1 if previous else 1,
-                     receipt_sequence=0, files=merged, inherited=inherited,
+                     receipt_sequence=0, source_generation=turn_id, files=merged, inherited=inherited,
                      journal_files=copy.deepcopy(value['decisions']))
         self.entries[token] = entry
         self.current = entry if any(item['state'] == 'pending' for item in merged) else None
@@ -203,7 +203,7 @@ class ReviewRegistry:
             (self.candidate / 'staging' / target['path']).write_bytes(replacement)
             frozen = staging.freeze_workspace(self.candidate, self.root, selected,
                                               multi=True, force_review=True)
-            result = self.finish_revision(frozen, command['turn_id'])
+            result = self.finish_revision(frozen, self.revision['entry']['source_generation'])
             self.manual_revisions += 1
             return result
         except (OSError, ValueError, staging.Refused):

@@ -448,6 +448,14 @@ local function create_panels(state)
     vim.bo[buf].modified, vim.bo[buf].modifiable, vim.bo[buf].readonly = false, false, true
     if state.actions then
       local actions = state.actions
+      if actions.actions then
+        vim.keymap.set(
+          "n",
+          "g?",
+          actions.actions,
+          { buffer = buf, silent = true, desc = "Draft: actions" }
+        )
+      end
       vim.keymap.set("n", "a", actions.approve, { buffer = buf, silent = true })
       vim.keymap.set("n", "r", actions.reject, { buffer = buf, silent = true })
       vim.keymap.set("n", "A", actions.approve_all, { buffer = buf, silent = true })

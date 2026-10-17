@@ -101,7 +101,7 @@ function M.new(options)
         or owner ~= current
         or epoch ~= token
         or correction ~= draft
-        or (draft and not draft.draft:unchanged(draft_stamp))
+        or (draft and not vim.deep_equal(draft.draft:stamp(), draft_stamp))
         or vim.api.nvim_get_current_tabpage() ~= tab
       then
         return false
@@ -441,7 +441,7 @@ function M.new(options)
       record.unsubscribe()
     end
     if consume and record.draft:unchanged(record.submitted) then
-      record.draft:discard()
+      record.draft:discard(record.submitted)
     else
       record.draft:detach()
     end
@@ -474,8 +474,14 @@ function M.new(options)
     then
       return nil
     end
-    local ran, draft, why =
-      pcall(require("ai.proposal_correction").open, material.path, material.text)
+    local ran, draft, why = pcall(
+      require("ai.proposal_correction").open,
+      material.path,
+      material.text,
+      function()
+        chat:actions()
+      end
+    )
     if not ran or not draft then
       dispatch({ kind = "discard-correction" })
       return refusal(ran and why or "Cannot open correction buffer")
