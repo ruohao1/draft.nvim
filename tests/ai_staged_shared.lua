@@ -26,6 +26,52 @@ local ok, reason = xpcall(function()
   assert(vim.uv.fs_chmod(files[2], 420))
   print("ok - passive source capture explains unsupported permissions without changing files")
 
+  for _, case in ipairs({
+    { before = "", after = "\n", lines = { "" } },
+    { before = "original text\n", after = "", lines = { "" } },
+    { before = "original text\n\n", after = "tail\n\n\n", lines = { "tail", "", "" } },
+  }) do
+    vim.fn.writefile(vim.split(case.before, "\n", { plain = true }), files[1], "b")
+    vim.cmd.edit(vim.fn.fnameescape(files[1]))
+    vim.cmd("edit!")
+    local captured = assert(sources.capture(files, root))
+    local bytes = {
+      root = root,
+      id = string.rep("b", 32),
+      proposal = root .. "/unpublished.json",
+      files = {
+        { path = "first.txt", oldText = case.before, newText = case.after },
+        { path = "second.txt", oldText = "original text\n", newText = "original text\n" },
+      },
+    }
+    handle = assert(review.open(bytes, captured, { defer = true }))
+    assert(handle:show("first.txt"))
+    local panel = vim.api.nvim_get_current_buf()
+    assert(vim.deep_equal(vim.api.nvim_buf_get_lines(panel, 0, -1, false), case.lines))
+    local confirmation = assert(handle:prepare("approve", false))
+    vim.cmd("tabclose")
+    assert(not confirmation.valid(), "closing review invalidates its decision confirmation")
+    assert(handle:show("first.txt"))
+    assert(not confirmation.valid(), "reopening cannot revive an old decision confirmation")
+    assert(vim.api.nvim_get_current_buf() == panel, "reopen must retain the frozen panel")
+    assert(vim.deep_equal(vim.api.nvim_buf_get_lines(panel, 0, -1, false), case.lines))
+    assert(handle:intact() and handle:prepare("approve", false).valid())
+    assert(bytes.files[1].newText == case.after)
+    assert(table.concat(vim.fn.readfile(files[1], "b"), "\n") == case.before)
+    handle:retire()
+  end
+  vim.fn.writefile({ "missing final newline" }, files[1], "b")
+  vim.cmd.edit(vim.fn.fnameescape(files[1]))
+  vim.cmd("edit!")
+  local missing_eol, why = sources.capture(files, root)
+  assert(not missing_eol and why:find("final newline", 1, true))
+  assert(table.concat(vim.fn.readfile(files[1], "b"), "\n") == "missing final newline")
+  vim.fn.writefile({ "original text" }, files[1])
+  vim.cmd("edit!")
+  print(
+    "ok - empty and trailing blank review bytes survive reopening; missing final newline refuses"
+  )
+
   local staged = require("ai.staged")
   staged.setup({
     enabled = true,

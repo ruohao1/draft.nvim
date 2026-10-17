@@ -60,6 +60,10 @@ for line in sys.stdin:
                 assert [p for p in Path("/tmp/project").rglob("*") if p.is_file()] == paths
         after = {target: target.read_text() + "refined\n" if case.startswith("refine")
                  else "approved edit\n" for target in edited}
+        byte_cases = {"bytes-empty": "", "bytes-newline": "\n",
+                      "bytes-trailing": "approved edit\n\n\n", "bytes-noeol": "no final newline"}
+        if case in byte_cases:
+            after = {target: byte_cases[case] for target in edited}
         if case == "refine-revert":
             after = {target: {"first.txt": "first original\n", "second.txt": "second original\n"}.get(
                 target.name, "original text\n") for target in edited}

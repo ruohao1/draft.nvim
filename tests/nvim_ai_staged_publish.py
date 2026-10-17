@@ -125,6 +125,27 @@ class PublicationTest(unittest.TestCase):
         for name in ("publication.json", "attempting-0.json", "applied-0.json", "applied-1.json", "result.json"):
             self.assertEqual((self.task / name).stat().st_mode & 0o777, 0o600)
 
+    def test_empty_and_trailing_blank_bytes_match_frozen_material_and_receipts(self):
+        self.before = [b"", b"second original\n", b"third original\n\n"]
+        self.after = [b"\n", b"", b"tail\n\n\n"]
+        for index, file in enumerate(self.files):
+            file.write_bytes(self.before[index])
+            data, mode, identity = controller.snapshot(str(self.root), self.paths[index])
+            self.proposal["files"][index].update(
+                identity=identity, expected=controller.fingerprint(data, mode),
+                desired=controller.fingerprint(self.after[index], mode))
+            self.private("before-" + str(index), self.before[index])
+            self.private("after-" + str(index), self.after[index])
+        result = self.run_publish()
+        self.assertEqual(result["phase"], "applied", result)
+        self.assertEqual(result["applied"], self.paths)
+        self.assertEqual(result["uncertain"], [])
+        self.assertEqual([file.read_bytes() for file in self.files], self.after)
+        self.assertEqual(json.loads((self.task / "result.json").read_bytes()),
+                         dict(result, id=self.proposal["id"]))
+        self.assert_evidence()
+        self.assert_clean()
+
     def test_consumption_and_manifest_are_required_before_writes(self):
         cases = []
         for change in ({"schema": True}, {"extra": True}, {"id": "bad"}, {"files": []},
