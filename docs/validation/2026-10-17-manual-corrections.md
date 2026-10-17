@@ -118,3 +118,8 @@ acceptance item remains open; the risk is delivering a workflow users do not nee
 After the review fixes, the full default suite passed **67/67 suites**, including
 all 11 TUI cases (`.test-results/run-j5crf_om`). Formatting and whitespace checks
 passed. The refreshed editable/frozen captures were visually inspected.
+
+Delivered in [PR #11](https://github.com/ruohao1/draft.nvim/pull/11), open and
+unmerged. ISQ-461 is In Review, with the results also recorded in the original
+Linear study and design document. The tested feature/fix code is committed
+through `923a6d2`; subsequent delivery notes do not change runtime behavior.

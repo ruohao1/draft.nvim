@@ -94,4 +94,8 @@
 - [x] Run `python3 -I -B tests/run.py`, `stylua --check lua tests`, and `git diff --check`. Expected: all suites and checks pass. Capture and visually inspect the draft and resulting frozen review.
 - [x] Record evidence and commit: `test: validate manual correction workflow and document limits`.
 - [x] Request one fresh whole-branch review against the spec and this plan. Address substantive findings with regressions, rerun affected checks and the full suite after fixes.
-- [ ] Push the feature branch and open an implementation PR including this plan, issue/spec links, validation and screenshots. Update Linear with verified delivery state; do not mark untested daily-use benefit complete or merge without authorization.
+- [x] Push the feature branch and open an implementation PR including this plan, issue/spec links, validation and screenshots. Update Linear with verified delivery state; do not mark untested daily-use benefit complete or merge without authorization.
+
+Delivered for review in [PR #11](https://github.com/ruohao1/draft.nvim/pull/11);
+[ISQ-461](https://linear.app/isqrd/issue/ISQ-461) and the Linear design/study records
+contain the verified results. The PR is unmerged; daily-use benefit remains open.
