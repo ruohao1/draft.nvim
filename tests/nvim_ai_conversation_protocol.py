@@ -120,6 +120,28 @@ class ProtocolTest(unittest.TestCase):
             with self.assertRaisesRegex(self.protocol.Refused, "budget"):
                 self.protocol.decode_command(raw)
 
+    def test_correction_uses_exact_context_without_starting_a_model_turn(self):
+        value = frame('start', 2)
+        command = value['command']
+        command.pop('message')
+        command.update(kind='correct', round_id=1, proposal_revision=1,
+                       proposal_token='token_1', receipt_sequence=0,
+                       path='example.txt', replacement='corrected\n')
+        command['context'] = {key: command[key] for key in
+                              ('round_id', 'proposal_revision', 'proposal_token', 'receipt_sequence')}
+        command['context']['files'] = [{'path': 'example.txt', 'state': 'pending'}]
+        self.assertEqual(self.decode(value), value)
+        binding = self.protocol.Binding()
+        self.assertTrue(binding.accept(self.decode(frame('start'))))
+        self.assertTrue(binding.accept(self.decode(value)))
+        self.assertFalse(binding.accept(self.decode(value)), 'Duplicate correction cannot replay')
+        for fields in ({'path': 'other.txt'}, {'replacement': None}, {'message': 'not a model turn'},
+                       {'review_ref': {'manifest': '/tmp/untrusted'}}, {'context': {}}, {'sources': []}):
+            invalid = copy.deepcopy(value)
+            invalid['command'].update(fields)
+            with self.subTest(fields=fields), self.assertRaises(self.protocol.Refused):
+                self.decode(invalid)
+
     def test_batch_decisions_have_one_explicit_target_form(self):
         value = frame()
         command = value['command']

@@ -47,7 +47,15 @@ local function projection(snapshot, notice)
         local file = round.files[index]
         prepend(file.path .. " · " .. file.state)
       end
-      prepend("Review " .. round.id .. " · revision " .. round.revision .. " · " .. round.status)
+      prepend(
+        "Review "
+          .. round.id
+          .. " · revision "
+          .. round.revision
+          .. " · "
+          .. round.status
+          .. (round.origin == "manual" and " · manual correction" or "")
+      )
       prepend("")
     end
     if turn.progress then
@@ -73,6 +81,12 @@ local function projection(snapshot, notice)
   if snapshot.review and snapshot.review.status == "pending" then
     header[#header + 1] =
       "Send follows up on the pending proposal. Open its diff to accept or reject."
+  end
+  if snapshot.phase == "editing" then
+    header[#header + 1] =
+      "Correction open. :NvimAIChatFreezeProposal creates a fresh review; it does not publish."
+  elseif snapshot.phase == "freezing" then
+    header[#header + 1] = "Freezing correction. Review the replacement before accepting."
   end
   if snapshot.reason then
     header[#header + 1] = tostring(snapshot.reason)

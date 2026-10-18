@@ -129,7 +129,7 @@ def validate_command(command):
     if not isinstance(command, dict) or not COMMON <= command.keys():
         raise Refused("Incomplete editor command")
     kind, selected = command["kind"], command["selection"]
-    if (kind not in ("start", "revise", "decide", "cancel", "close")
+    if (kind not in ("start", "revise", "correct", "decide", "cancel", "close")
             or not isinstance(command["conversation_id"], str)
             or re.fullmatch(r"[a-f0-9]{32}", command["conversation_id"]) is None
             or not integer(command["owner_generation"], 1)
@@ -140,18 +140,22 @@ def validate_command(command):
         raise Refused("Invalid editor command binding")
     allowed = set(COMMON)
     has_review = bool(REVIEW & command.keys())
-    if kind in ("decide", "revise") or has_review:
+    if kind in ("decide", "revise", "correct") or has_review:
         if not _review(command):
             raise Refused("Invalid editor review identity")
         allowed |= REVIEW
     if kind in ("start", "revise"):
-        allowed |= {"message", "sources"}
-        message, sources = command.get("message"), command.get("sources")
+        allowed.add("message")
+        message = command.get("message")
         if (not isinstance(message, str) or not 0 < len(message.encode()) <= 32768
                 or not message.strip() or any(ord(char) < 32 and char not in "\n\t"
-                                              or ord(char) == 127 for char in message)
-                or not isinstance(sources, list) or len(sources) != len(selected)):
+                                              or ord(char) == 127 for char in message)):
             raise Refused("Invalid editor submission")
+    if kind in ("start", "revise", "correct"):
+        allowed.add("sources")
+        sources = command.get("sources")
+        if not isinstance(sources, list) or len(sources) != len(selected):
+            raise Refused("Invalid captured sources")
         for name, item in zip(selected, sources):
             if (not isinstance(item, dict) or set(item) != {"path", "snapshot_sha256"}
                     or item["path"] != name or not isinstance(item["snapshot_sha256"], str)
@@ -159,7 +163,7 @@ def validate_command(command):
                 raise Refused("Invalid captured source binding")
     if kind == "start" and has_review:
         raise Refused("Independent start cannot carry review authority")
-    if kind == "revise":
+    if kind in ("revise", "correct"):
         allowed.add("context")
         context = command.get("context")
         if (not isinstance(context, dict) or set(context) != REVIEW | {"files"}
@@ -171,6 +175,11 @@ def validate_command(command):
                     or item["path"] != name or item["state"] not in
                     ("pending", "accepted", "rejected", "unchanged", "cancelled")):
                 raise Refused("Invalid review file context")
+    if kind == "correct":
+        allowed |= {"path", "replacement"}
+        if (command.get("path") not in selected or not isinstance(command.get("replacement"), str)
+                or len(command["replacement"].encode()) > MAX_COMMAND):
+            raise Refused("Invalid correction target or text")
     if kind == "decide":
         allowed |= {"choice", "path", "remaining"}
         single = command.get("path") in selected and "remaining" not in command

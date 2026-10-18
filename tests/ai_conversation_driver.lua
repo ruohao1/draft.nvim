@@ -53,6 +53,59 @@ scenario("a real controller pipe carries explicit sequential turns and confirmed
   eq(owner:snapshot().recovery_required, false)
 end)
 
+scenario("encoded preflight rejects overhead and escaping without consuming serials", function()
+  local owner, driver = create("serial")
+  assert(type(driver.preflight) == "function")
+  local command = { kind = "correct", replacement = "" }
+  local overhead = #vim.json.encode({ version = 1, serial = 1, command = command })
+  command.replacement = string.rep("x", 1024 * 1024 - overhead)
+  assert(driver:preflight(command))
+  command.replacement = command.replacement .. "x"
+  assert(not driver:preflight(command))
+  command.replacement = string.rep('"', 600000)
+  assert(not driver:preflight(command))
+  assert(act(owner, { kind = "submit", text = "after rejected preflight" }))
+  phase(owner, "idle")
+  eq(owner:snapshot().turns[1].text, "1")
+  assert(act(owner, { kind = "close" }))
+  phase(owner, "closed")
+end)
+scenario("corrected is terminal for the controller deadline", function()
+  local _, driver = create("answer", { timeout_ms = 50 })
+  local received, lost = false, false
+  local command = {
+    kind = "correct",
+    conversation_id = string.rep("a", 32),
+    owner_generation = 1,
+    turn_id = 1,
+    worker_generation = 1,
+  }
+  assert(driver:send(command, function(event)
+    received = event.kind == "corrected"
+    return true
+  end, function()
+    lost = true
+  end))
+  assert(vim.wait(1000, function()
+    return received
+  end, 5))
+  vim.wait(120, function()
+    return lost
+  end, 5)
+  assert(not lost, "completed correction must not time out")
+  command.kind = "close"
+  local closed = false
+  assert(driver:send(command, function(event)
+    closed = event.kind == "closed"
+    return true
+  end, function()
+    lost = true
+  end))
+  assert(vim.wait(1000, function()
+    return closed
+  end, 5))
+end)
+
 scenario("controller death during a turn or idle requires recovery without relaunch", function()
   for _, mode in ipairs({ "crash", "idle-crash" }) do
     local owner = create(mode)

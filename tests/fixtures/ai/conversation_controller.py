@@ -115,7 +115,7 @@ for line in sys.stdin.buffer:
         emit("submitted", model=command["model"])
         if mode == "nested":
             time.sleep(.02)
-        emit("text", text="Fixture answer: " + command["message"])
+        emit("text", text=str(frame["serial"]) if mode == "serial" else "Fixture answer: " + command["message"])
         emit("stopping")
         if mode == "review-crash":
             emit("settled", outcome="review", stopped=True, graceful=True, store_valid=True,
@@ -133,6 +133,8 @@ for line in sys.stdin.buffer:
         if sys.argv[1] == "idle-crash":
             time.sleep(.05)
             sys.exit(7)
+    elif command["kind"] == "correct":
+        emit("corrected", outcome="unchanged")
     elif command["kind"] == "close":
         if mode == "close-burst":
             stale = json.dumps({"version": 1, "serial": frame["serial"] - 1, "event": {}}) + "\n"

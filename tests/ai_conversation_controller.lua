@@ -165,6 +165,98 @@ local ok, reason = xpcall(function()
   finish(unopened)
   print("ok - production proposals remain passive until explicit frozen preview")
 
+  reset()
+  local manual_view
+  local manual = editing(nil, {
+    defer_review = true,
+    on_review = function(value)
+      manual_view = value
+    end,
+  })
+  assert(act(manual, { kind = "submit", text = "Propose an edit." }))
+  wait_phase(manual, "review")
+  assert(type(manual_view.proposal) == "function")
+  assert(not manual_view:proposal(), "hidden frozen material cannot initiate an edit")
+  assert(manual_view:show("example.txt"))
+  local material, previous = assert(manual_view:proposal()), manual_view
+  assert(material.path == "example.txt" and material.text == "proposed edit\n")
+  local round, prompts = manual:snapshot().review, 0
+  for _, event in ipairs(audit) do
+    if event.method == "session/prompt" then
+      prompts = prompts + 1
+    end
+  end
+  local action = {
+    kind = "edit-proposal",
+    path = material.path,
+    seed_sha256 = vim.fn.sha256(material.text),
+    round_id = round.id,
+    proposal_revision = round.revision,
+    proposal_token = round.token,
+  }
+  assert(act(manual, action))
+  assert(not previous:proposal() and not previous:prepare("approve", false))
+  action.kind, action.seed_sha256, action.replacement =
+    "correct", nil, string.rep('"', 600000) .. "\n"
+  assert(not act(manual, action), "encoded oversize must refuse before dispatch")
+  assert(manual:snapshot().phase == "editing")
+  action.replacement = "manual correction\n\n"
+  assert(act(manual, action))
+  wait_phase(manual, "review")
+  assert(
+    manual:snapshot().review.token ~= round.token and manual:snapshot().review.origin == "manual"
+  )
+  assert(not previous:show("example.txt"))
+  local after_prompts = 0
+  for _, event in ipairs(audit) do
+    if event.method == "session/prompt" then
+      after_prompts = after_prompts + 1
+    end
+  end
+  assert(after_prompts == prompts, "correction launched another provider prompt")
+  assert(vim.fn.readfile(project .. "/example.txt")[1] == "original text")
+  assert(manual_view:show("example.txt"))
+  assert(decide(manual, "example.txt"))
+  wait_phase(manual, "idle")
+  assert(
+    table.concat(vim.fn.readfile(project .. "/example.txt", "b"), "\n") == "manual correction\n\n"
+  )
+  finish(manual)
+  local source = reset()
+  local dirty_view
+  local dirty = editing(nil, {
+    defer_review = true,
+    on_review = function(value)
+      dirty_view = value
+    end,
+  })
+  assert(act(dirty, { kind = "submit", text = "Propose an edit." }))
+  wait_phase(dirty, "review")
+  assert(dirty_view:show("example.txt"))
+  local dirty_material = assert(dirty_view:proposal())
+  round = dirty:snapshot().review
+  local dirty_action = {
+    kind = "edit-proposal",
+    path = "example.txt",
+    seed_sha256 = vim.fn.sha256(dirty_material.text),
+    round_id = round.id,
+    proposal_revision = round.revision,
+    proposal_token = round.token,
+  }
+  assert(act(dirty, dirty_action))
+  vim.api.nvim_buf_set_lines(source, 0, -1, false, { "unsaved source" })
+  dirty_action.kind, dirty_action.seed_sha256, dirty_action.replacement = "correct", nil, "manual\n"
+  assert(not act(dirty, dirty_action))
+  finish(dirty)
+  assert(
+    vim.bo[source].modified
+      and vim.api.nvim_buf_get_lines(source, 0, -1, false)[1] == "unsaved source"
+  )
+  reset()
+  print(
+    "ok - manual corrections use source guards, exact preflight, fresh handles and the existing publisher"
+  )
+
   local prior_audit = #audit
   local owner = make()
   assert(driver_options[1].timeout_ms == 270000 and driver_options[1].stop_timeout_ms == 10000)

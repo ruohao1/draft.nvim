@@ -201,6 +201,7 @@ class EngineTest(unittest.TestCase):
         if kind in ("start", "revise"):
             self.turn += 1
             extra.setdefault("message", "Answer without editing.")
+        if kind in ("start", "revise", "correct"):
             extra.setdefault("sources", [{"path": path,
                 "snapshot_sha256": hashlib.sha256((self.root / path).read_bytes()).hexdigest()} for path in self.selection])
         command = dict(kind=kind, conversation_id="a" * 32, owner_generation=1,
@@ -242,7 +243,9 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([event["status"] for event in self.events if event["kind"] == "progress"], ["completed"])
         self.assertEqual([event["stage"] for event in self.events if event["kind"] == "startup"],
                          ["sources", "credentials", "launch", "initialize", "session", "model", "mode"])
-        self.assertEqual([item["method"] for item in self.audit if "method" in item], ["initialize", "session/new",
+        # Audit connection threads can finish out of the peer's receive order.
+        requests = sorted((item for item in self.audit if "method" in item), key=lambda item: item["sequence"])
+        self.assertEqual([item["method"] for item in requests], ["initialize", "session/new",
             "session/set_config_option", "session/set_config_option", "session/prompt"])
         self.assertIn({"exiting": True}, self.audit)
         self.assertEqual(Path(f"/proc/{self.child.pid}/task/{self.child.pid}/children").read_text().strip(), "")
@@ -774,6 +777,55 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(reverted["prior_review"]["status"], "retired")
         self.assertEqual(reverted["proposal"]["files"], [{"path": "example.txt", "state": "unchanged"}])
         self.assertEqual(self.source.read_bytes(), b"original text\n")
+
+    def test_manual_correction_has_no_provider_turn_and_later_followup_sees_it(self):
+        self.spawn('edit')
+        self.send('start')
+        first = self.receive('settled')
+        identity = dict(round_id=1, proposal_revision=1,
+                        proposal_token=first['proposal']['token'], receipt_sequence=0)
+        self.send('correct', path='example.txt', replacement='manual correction\n\n',
+                  context=dict(identity, files=first['proposal']['files']), **identity)
+        corrected = self.receive('corrected')
+        self.assertEqual(corrected['outcome'], 'review')
+        self.assertEqual((corrected['turn_id'], corrected['worker_generation']), (1, 1))
+        self.assertEqual(sum(item.get('method') == 'session/prompt' for item in self.audit), 1)
+        self.assertEqual(self.source.read_bytes(), b'original text\n')
+        ref = corrected['review_ref']
+        self.assertEqual(self.publisher('inspect-review', ref)['files'][0]['newText'], 'manual correction\n\n')
+        identity.update(proposal_revision=2, proposal_token=ref['token'])
+        self.send('revise', message='Discuss the current proposal.',
+                  context=dict(identity, files=corrected['proposal']['files']), **identity)
+        self.assertEqual(self.receive('settled')['prior_review']['status'], 'active')
+        prompt = [item['params']['prompt'] for item in self.audit if item.get('method') == 'session/prompt'][-1]
+        self.assertTrue(any('editor-made corrections' in item['text'] for item in prompt))
+        self.assertEqual(self.publisher('approve', ref, 'example.txt')['phase'], 'applied')
+        self.send('decide', choice='approve', path='example.txt', **identity)
+        self.assertEqual(self.receive('decided')['receipt']['phase'], 'applied')
+        self.assertEqual(self.source.read_bytes(), b'manual correction\n\n')
+
+    def test_manual_replacement_is_retired_by_cancel_and_close(self):
+        for kind in ('cancel', 'close'):
+            with self.subTest(kind=kind):
+                self.serial = self.turn = 0
+                self.spawn('edit')
+                try:
+                    self.send('start')
+                    first = self.receive('settled')
+                    identity = dict(round_id=1, proposal_revision=1,
+                                    proposal_token=first['proposal']['token'], receipt_sequence=0)
+                    self.send('correct', path='example.txt', replacement='manual correction\n',
+                              context=dict(identity, files=first['proposal']['files']), **identity)
+                    corrected = self.receive('corrected')
+                    self.send(kind, **identity)
+                    result = self.receive('cancelled' if kind == 'cancel' else 'closed')
+                    self.assertTrue(result['tokens_retired'])
+                    self.assertEqual(result['receipt']['proposal_token'], first['proposal']['token'])
+                    for ref in (first['review_ref'], corrected['review_ref']):
+                        self.assertNotEqual(self.publisher('approve', ref, 'example.txt')['phase'], 'applied')
+                    self.assertEqual(self.source.read_bytes(), b'original text\n')
+                finally:
+                    self.stop()
 
     def test_invalid_revision_workspace_restores_only_the_original_review(self):
         self.spawn("edit")

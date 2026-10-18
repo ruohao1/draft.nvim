@@ -26,6 +26,8 @@ class ReviewRegistry:
         self.rounds = 0
         self.context = []
         self.revision = None
+        self.candidate = None
+        self.manual_revisions = 0
 
     def install(self, frozen, turn_id, *, previous=None):
         if self.current is not None and self.current is not previous:
@@ -49,11 +51,13 @@ class ReviewRegistry:
         entry = dict(manifest=manifest, token=token,
                      round_id=previous['round_id'] if previous else self.rounds,
                      proposal_revision=previous['proposal_revision'] + 1 if previous else 1,
-                     receipt_sequence=0, files=merged, inherited=inherited,
+                     receipt_sequence=0, source_generation=turn_id, files=merged, inherited=inherited,
                      journal_files=copy.deepcopy(value['decisions']))
         self.entries[token] = entry
         self.current = entry if any(item['state'] == 'pending' for item in merged) else None
         self.context = copy.deepcopy(merged)
+        if self.candidate == Path(manifest).parent:
+            self.candidate = None  # Installed identities belong to the registry, not scratch cleanup.
         return {'proposal': {'token': token, 'source_generation': turn_id, 'files': value['decisions']},
                 'review_ref': {'manifest': manifest, 'token': token}}
 
@@ -170,10 +174,73 @@ class ReviewRegistry:
         self.pending = self.revision = None
         return dict(prior_review=evidence, candidates_retired=True)
 
-    def retire_all(self):
-        if self.current is None:
-            return {}
+    def discard_candidate(self):
+        if self.candidate is not None:
+            try:
+                staging.discard_workspace(self.candidate)
+            except FileNotFoundError:
+                try:
+                    self.candidate.lstat()
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise
+            self.candidate = None
+
+    def correct(self, command):
+        selected = self.begin_revision(command)
+        try:
+            target = next((item for item in selected if item['path'] == command['path']), None)
+            if target is None or target['context_only']:
+                raise ValueError('Only pending selected files can be corrected')
+            replacement = command['replacement'].encode('utf-8')
+            staging.text_bytes(replacement)
+            if replacement == target['seed']:
+                return dict(outcome='unchanged', **self.restore_revision())
+            if self.manual_revisions >= 64:
+                raise ValueError('Manual revision limit reached')
+            self.candidate = staging.prepare_workspace({'root': self.root}, selected)
+            (self.candidate / 'staging' / target['path']).write_bytes(replacement)
+            frozen = staging.freeze_workspace(self.candidate, self.root, selected,
+                                              multi=True, force_review=True)
+            result = self.finish_revision(frozen, self.revision['entry']['source_generation'])
+            self.manual_revisions += 1
+            return result
+        except (OSError, ValueError, staging.Refused):
+            self.discard_candidate()
+            # A started retirement or changed source makes restoration fail closed.
+            return dict(outcome='refused', **self.restore_revision())
+
+    def retire_all(self, command=None):
+        current = self.current
+        try:
+            self.discard_candidate()
+        finally:
+            result = self.retire_current()
+        if command and command.get('proposal_token'):
+            entry = self.entries.get(command['proposal_token'])
+            if entry is not current:
+                if (entry is None or any(command.get(key) != entry[key] for key in
+                                        ('round_id', 'proposal_revision', 'receipt_sequence'))):
+                    raise ValueError('Unknown review retirement request')
+                paths = [item['path'] for item in entry['files'] if item['state'] == 'pending']
+                if not paths:
+                    return result  # Terminal writer evidence already consumed this authority.
+                # Cancel can overtake adoption. Confirm the requested parent's real
+                # cancellation only after retiring every replacement we own.
+                value = decisions.read_receipt(entry['manifest'], entry['token'])
+                result = {'receipt': self.normalize(entry, value, 'cancel', paths)}
+        return result
+
+    def retire_current(self):
         entry = self.current
+        if self.pending is not None and self.revision is not None and self.revision['entry'] is not entry:
+            # Installation can succeed before its caller loses the reply. The
+            # held lock then belongs to the retired parent, not the new writer.
+            self.pending.close()
+            self.pending = self.revision = None
+        if entry is None:
+            return {}
         paths = [item['path'] for item in entry['files'] if item['state'] == 'pending']
         try:
             value = self.pending.cancel() if self.pending is not None else decisions.retire_review(entry['manifest'], entry['token'])

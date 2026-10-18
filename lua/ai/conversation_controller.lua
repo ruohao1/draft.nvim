@@ -200,20 +200,34 @@ function M.new(options)
   end
   local leave = vim.api.nvim_create_autocmd("VimLeavePre", { once = true, callback = cleanup })
   local captured, handle, binding, fenced
-  function wrapper:send(command, receive, disconnected)
-    if not tools.revalidate(python) or (fenced and command.kind ~= "close") then
-      return false
-    end
+  local function captured_command(command)
     command = vim.deepcopy(command)
-    if command.kind == "start" or command.kind == "revise" then
+    if command.kind == "start" or command.kind == "revise" or command.kind == "correct" then
       if not captured or not sources.unchanged(captured) then
-        return false
+        return nil, "Captured sources changed; correction draft retained"
       end
       command.sources = {}
       for _, item in ipairs(captured.files) do
         command.sources[#command.sources + 1] =
           { path = item.path, snapshot_sha256 = vim.fn.sha256(item.oldText) }
       end
+    end
+    return command
+  end
+  function wrapper:preflight(command)
+    local value, reason = captured_command(command)
+    if not value then
+      return nil, reason
+    end
+    return pipe:preflight(value)
+  end
+  function wrapper:send(command, receive, disconnected)
+    if not tools.revalidate(python) or (fenced and command.kind ~= "close") then
+      return false
+    end
+    command = captured_command(command)
+    if not command then
+      return false
     end
     local refresh_failed, presentation = false, nil
     if command.kind == "decide" then
@@ -250,7 +264,10 @@ function M.new(options)
           and current.token == replacement_binding.token
       end
       local guarded = true
-      if event.kind == "settled" and (event.outcome == "review" or event.prior_review ~= nil) then
+      if
+        (event.kind == "settled" or event.kind == "corrected")
+        and (event.outcome == "review" or event.prior_review ~= nil)
+      then
         guarded = turn_capture ~= nil and sources.unchanged(turn_capture)
         if event.prior_review then
           guarded = guarded
@@ -275,6 +292,7 @@ function M.new(options)
                 "cancel",
                 "followup",
                 "review",
+                "actions",
               }) do
                 actions[name] = function(argument)
                   if current_replacement() then
@@ -288,7 +306,8 @@ function M.new(options)
               decisions = event.prior_review and event.prior_review.files,
               defer = options.defer_review,
               actions = actions,
-              controls = actions and " a accept | r reject | f chat%< | A/R all | ]f/[f | q cancel"
+              controls = actions
+                  and " a accept | r reject | f chat%< | g? actions | A/R all | ]f/[f | q cancel"
                 or options.defer_review and "Frozen preview | :NvimAIChat to return | :NvimAIChatCancel to discard"
                 or nil,
             })
@@ -301,9 +320,11 @@ function M.new(options)
             replacement:close()
             replacement = nil
           end
-          event.outcome, event.submission = "failed", "submitted"
+          event.outcome = "failed"
           event.proposal, event.prior_review, event.candidates_retired = nil, nil, nil
-          event.tokens_retired = false
+          if event.kind == "settled" then
+            event.submission, event.tokens_retired = "submitted", false
+          end
         end
       elseif event.review_ref ~= nil then
         fenced = true
@@ -338,6 +359,12 @@ function M.new(options)
             return current_replacement() and owner:snapshot().phase == "review"
           end
           pcall(options.on_review, {
+            proposal = function()
+              if not available() then
+                return nil, "This frozen proposal is no longer available"
+              end
+              return current_handle:proposal()
+            end,
             show = function(_, path)
               if not available() then
                 return nil, "This frozen review is no longer available"
@@ -413,19 +440,27 @@ function M.new(options)
       and (
         (action.kind == "submit" and view.phase == "idle")
         or (action.kind == "retry" and view.phase == "failed" and view.retry_safe)
-        or (
-          action.kind == "revise"
-          and view.phase == "review"
-          and view.review.status == "pending"
-          and action.round_id == view.review.id
-          and action.proposal_revision == view.review.revision
-          and action.proposal_token == view.review.token
-        )
+        or (((action.kind == "revise" or action.kind == "edit-proposal") and view.phase == "review" and view.review.status == "pending" or action.kind == "correct" and view.phase == "editing") and action.round_id == view.review.id and action.proposal_revision == view.review.revision and action.proposal_token == view.review.token)
+        or (action.kind == "discard-correction" and view.phase == "editing")
       )
     then
-      if action.kind == "revise" and (not handle or not handle:intact()) then
+      if
+        action.kind ~= "submit"
+        and action.kind ~= "retry"
+        and (not handle or not handle:intact())
+      then
         fenced = true
         return nil, "Frozen review or captured sources changed; close the conversation"
+      end
+      if action.kind == "edit-proposal" then
+        local material, reason = handle:proposal()
+        if
+          not material
+          or material.path ~= action.path
+          or vim.fn.sha256(material.text) ~= action.seed_sha256
+        then
+          return nil, reason or "The visible pending proposal changed before editing"
+        end
       end
       local selected = {}
       for _, path in ipairs(view.selection) do

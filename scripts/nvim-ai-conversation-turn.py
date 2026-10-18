@@ -47,7 +47,7 @@ class Turn:
         self.diagnostic = stage
         self.emit('startup', stage=stage)
 
-    def start(self, command, *, selected=None, context=None):
+    def start(self, command, *, selected=None, context=None, manual_corrections=False):
         self.command = command
         self.startup('sources')
         if command['model'].split('/', 1)[0] != self.config['model'].split('/', 1)[0]:
@@ -55,6 +55,7 @@ class Turn:
         request = dict(self.config, root=command['root'], files=command['sources'], model=command['model'])
         self.selected = selected if selected is not None else staging.selected_files(request)[0]
         self.context = context
+        self.manual_corrections = manual_corrections
         self.editable = [staging.PROJECT + '/' + item['path'] for item in self.selected if not item.get('context_only')]
         self.task = staging.prepare_workspace(request, self.selected)
         agent = self.task / 'agent'
@@ -214,6 +215,9 @@ class Turn:
                     if self.context:
                         prompt.append({'type': 'text', 'text': 'Editor-confirmed file decisions (rejected proposals are not saved):\n'
                                        + json.dumps(self.context, ensure_ascii=True)})
+                    if self.manual_corrections:
+                        prompt.append({'type': 'text', 'text': 'This conversation includes editor-made corrections. '
+                                       'Use selected workspace contents and confirmed decisions as current state.'})
                     prompt.append({'type': 'text', 'text': self.command['message']})
                     self.begin('session/prompt', {'sessionId': self.session, 'prompt': prompt})
                     self.emit('submitted', model=self.command['model'], models=self.models)

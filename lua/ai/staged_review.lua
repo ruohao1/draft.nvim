@@ -448,6 +448,14 @@ local function create_panels(state)
     vim.bo[buf].modified, vim.bo[buf].modifiable, vim.bo[buf].readonly = false, false, true
     if state.actions then
       local actions = state.actions
+      if actions.actions then
+        vim.keymap.set(
+          "n",
+          "g?",
+          actions.actions,
+          { buffer = buf, silent = true, desc = "Draft: actions" }
+        )
+      end
       vim.keymap.set("n", "a", actions.approve, { buffer = buf, silent = true })
       vim.keymap.set("n", "r", actions.reject, { buffer = buf, silent = true })
       vim.keymap.set("n", "A", actions.approve_all, { buffer = buf, silent = true })
@@ -630,6 +638,16 @@ function M.open(frozen, captured, options)
     if state.phase == "review_ready" and state.index and visible_review(state, true) then
       return state.files[state.index].path
     end
+  end
+  function handle:proposal()
+    if not self:current() or not self:intact() then
+      return nil, "Open an intact pending frozen file before editing"
+    end
+    local item = state.files[state.index]
+    if item.decision ~= "pending" then
+      return nil, "Only pending proposals can be corrected"
+    end
+    return { path = item.path, text = item.newText }
   end
   function handle:move(delta)
     if not self:current() or (delta ~= 1 and delta ~= -1) then
