@@ -159,3 +159,11 @@ suites**, including all 11 terminal UI cases (`.test-results/run-qvjghft6`).
 `stylua --check lua tests` and `git diff --check` passed. Live-provider and
 installed-OpenCode checks remain opt-in and were not performed; daily-use benefit
 and crash recovery remain outside this validation.
+
+## Subsequent live acceptance
+
+The [2026-10-18 live trial](2026-10-18-manual-corrections-live.md) exercised
+Edit → Freeze → approval with one real OpenCode/OpenAI model turn. The project
+remained unchanged until approval and then matched the exact corrected bytes.
+The record includes an observer bookkeeping error resolved from saved evidence,
+cleanup verification and the remaining everyday-use limits.
