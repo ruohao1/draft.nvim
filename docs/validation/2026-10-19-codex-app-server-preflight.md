@@ -131,6 +131,7 @@ persisted-thread resume and state inventory with the pinned CLI. Build the
 adapter against those facts and drive the existing real Neovim review/publisher
 path. Real-account Codex acceptance remains a separate explicit opt-in.
 
-No paid provider request, real credential read, login, installation, global
-configuration change, product code change or full repository test run occurred
-in this investigation. The two documents are the only intended branch changes.
+No real credentials were supplied or mounted into the isolated probes. No
+model prompt, paid provider request, login, installation, global configuration
+change, product code change or full repository test run occurred in this
+investigation. The two documents are the only intended branch changes.
