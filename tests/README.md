@@ -306,3 +306,26 @@ UI suites above; fixture success does not imply live-account acceptance.
 The first extraction is validated on Linux with Neovim 0.12.4, Python 3.14.4,
 Bubblewrap 0.11.1, Git 2.53.0 and tmux 3.6. This is not a claim that older Neovim,
 macOS, Windows or every real backend/account workflow is supported.
+
+## Claude IDE observer controls (opt-in)
+
+The independent research exercise uses a clean claudecode.nvim checkout pinned
+at `2390c6e45c4789072c293ac69de051d169668b29`:
+
+```sh
+python3 -I -B tests/manual/claude_ide_review.py \
+  --self-test --plugin /absolute/path/to/claudecode.nvim
+```
+
+This runs three review controls and two protocol-error controls through the real
+editor handlers with a synthetic client, plus two synthetic writer controls. It requires Neovim, Python, Git and
+strace, creates private disposable HOME/XDG directories, and sends zero provider
+prompts. It neither starts Claude nor reads account configuration. Each child
+has a five-minute limit and twenty seconds for graceful termination.
+
+Private manifests, byte snapshots and payload-undecoded syscall traces remain
+under ignored `.test-results/claude-cli-review/`. The syscall controls filter to
+their two known fixture paths; they are not a general live-CLI trace collector.
+Missing tracing fails the control rather than inferring writer behavior from
+snapshots. See the [validation record](../docs/validation/claude-cli-review.md)
+for evidence and the separate, still-unrun authenticated CLI matrix.
