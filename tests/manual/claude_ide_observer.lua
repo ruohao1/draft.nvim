@@ -64,7 +64,7 @@ function M.install(opts)
   end
 
   server._handle_request = function(client, request)
-    local params = request.params or {}
+    local params = type(request.params) == "table" and request.params or {}
     local args = type(params.arguments) == "table" and params.arguments or {}
     local fields = {
       client = client.id,
@@ -108,7 +108,7 @@ function M.install(opts)
     fields.accepted = nil
     fields.delegated_return = sent
     observer.checkpoint("response_return", fields)
-    if pending[client.id] then
+    if pending[client.id] and id ~= nil then
       pending[client.id][id] = nil
     end
     return sent

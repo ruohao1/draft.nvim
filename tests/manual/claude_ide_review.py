@@ -78,6 +78,15 @@ local ok, err = xpcall(function()
   assert(received[2].result.content[1].text == "TAB_CLOSED")
   assert(diff._get_active_diffs()[title] == nil, "finalizer did not clean state")
   vim.wait(150, function() return false end, 10)
+  if scenario == "invalid_json" then
+    assert(server._handle_message(client, "{") == nil)
+    assert(#received == 3 and received[3].id == nil and received[3].error.code == -32700)
+  elseif scenario == "malformed_params" then
+    assert(server._handle_message(client, vim.json.encode({
+      jsonrpc = "2.0", id = 13, method = "tools/call", params = 42,
+    })) == nil)
+    assert(#received == 3 and received[3].id == 13 and received[3].error.code == -32603)
+  end
   observer.checkpoint("teardown")
   assert(#observer.errors == 0, table.concat(observer.errors, "\n"))
 end, debug.traceback)
@@ -119,11 +128,17 @@ def private_environment(home):
 def check_control(events, directory, case):
     requests = [e for e in events if e["kind"] == "request"]
     responses = [e for e in events if e["kind"] == "response_attempt"]
-    assert len(requests) == len(responses) == 2, "missing correlated RPC events"
-    assert [(e["client"], e["request_id"], e["tool"]) for e in requests] == [
-        ("synthetic-client", 11, "openDiff"), ("synthetic-client", 12, "close_tab")]
-    assert [(e["client"], e["request_id"], e["tool"]) for e in responses] == [
-        (e["client"], e["request_id"], e["tool"]) for e in requests]
+    error_case = case in ("invalid_json", "malformed_params")
+    expected = [("synthetic-client", 11, "openDiff"), ("synthetic-client", 12, "close_tab")]
+    if case == "malformed_params":
+        expected.append(("synthetic-client", 13, None))
+    assert [(e["client"], e["request_id"], e.get("tool")) for e in requests] == expected
+    assert len(responses) == (3 if error_case else 2), "missing correlated RPC events"
+    correlated = responses[:-1] if case == "invalid_json" else responses
+    assert [(e["client"], e["request_id"], e.get("tool")) for e in correlated] == expected
+    if error_case:
+        assert responses[-1]["error_code"] == (-32700 if case == "invalid_json" else -32603)
+        assert responses[-1].get("request_id") == (None if case == "invalid_json" else 13)
     assert [e["sequence"] for e in events] == list(range(1, len(events) + 1))
     assert all(e["origin"] == "nvim" for e in events)
     assert all(a["monotonic_ns"] <= b["monotonic_ns"] for a, b in zip(events, events[1:]))
@@ -145,7 +160,7 @@ def check_control(events, directory, case):
         assert (directory / accepted["snapshot"]).read_bytes() == expected
         assert accepted["sha256"] == hashlib.sha256(expected).hexdigest()
     returns = [e for e in events if e["kind"] == "response_return"]
-    assert len(returns) == 2 and all(e["delegated_return"] is True for e in returns)
+    assert len(returns) == len(responses) and all(e["delegated_return"] is True for e in returns)
     assert requests[1]["tab_name"] == "✻ [Claude Code] sample.lua (synthetic) ⧉"
 
 
@@ -218,7 +233,7 @@ def self_test(plugin):
                 "python": sys.version.split()[0], "claude": "not invoked", "model": None,
                 "permission_mode": None, "diff_tool": None, "layout": "vertical",
                 "explicit_prompts": 0, "results": [], "fixtures": []}
-    for case in ("accept", "reject", "edited"):
+    for case in ("accept", "reject", "edited", "invalid_json", "malformed_params"):
         directory = evidence / case
         directory.mkdir(mode=0o700)
         try:

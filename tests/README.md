@@ -317,8 +317,8 @@ python3 -I -B tests/manual/claude_ide_review.py \
   --self-test --plugin /absolute/path/to/claudecode.nvim
 ```
 
-This runs three real editor-handler controls with a synthetic client, followed
-by two synthetic filesystem-writer controls. It requires Neovim, Python, Git and
+This runs three review controls and two protocol-error controls through the real
+editor handlers with a synthetic client, plus two synthetic writer controls. It requires Neovim, Python, Git and
 strace, creates private disposable HOME/XDG directories, and sends zero provider
 prompts. It neither starts Claude nor reads account configuration. Each child
 has a five-minute limit and twenty seconds for graceful termination.

@@ -50,11 +50,11 @@ Modify only `tests/README.md` to document the opt-in exercise. Leave runtime, de
 **Output contract:** A run manifest records versions, model, permission/diff settings, fixture paths, explicit prompt count and provenance (`synthetic` or `real-cli`). Event records contain `origin`, per-origin `sequence`, `monotonic_ns`, `kind`, request ID/tool where present, relative path, byte length/hash, existence and file identity. Preserve synthetic proposal/accepted bytes in private snapshots. Match responses by client/request ID, not arrival order in a separate collector.
 
 - [ ] Check local executables and exact versions. Select a specific Claude release during setup, disable updates for the trial, and verify the version again afterwards. If installation or authentication is missing, report that prerequisite before a live request.
-- [ ] Add observer controls for accept, reject and edited proposal using the real pinned editor handlers with a synthetic client. Assert one correlated request/response, correct accepted bytes, and unchanged disk at the response boundary.
-- [ ] Run `python3 -I -B tests/manual/claude_ide_review.py --self-test --plugin /absolute/pinned/claudecode.nvim`. Before implementation, expect the observer assertions to fail; after minimal implementation, require all three controls to pass without launching Claude or accessing account state.
-- [ ] Verify process-scoped filesystem tracing can distinguish in-place writes and temporary-file rename replacement using a synthetic writer. Exclude payload decoding and filter exported events to the fixture; keep private raw traces private. If tracing is unavailable, mark writer attribution/ordering unknown and do not claim them from polling alone.
-- [ ] Capture file existence, identity and exact bytes at request, decision/response, finalization and teardown. Also retain the independent syscall trace; checkpoints alone do not prove the absence of intervening writes. Wrappers must not replace, delay or fabricate ordinary responses; enable a delay/drop only in its explicitly labelled fault case.
-- [ ] Commit observer and controls when the three controls and trace checks pass; retain this plan and prerequisite memo on the same branch.
+- [x] Add observer controls for accept, reject and edited proposal using the real pinned editor handlers with a synthetic client. Assert one correlated request/response, correct accepted bytes, and unchanged disk at the response boundary.
+- [x] Run `python3 -I -B tests/manual/claude_ide_review.py --self-test --plugin /absolute/pinned/claudecode.nvim`. Before implementation, expect the observer assertions to fail; after minimal implementation, require all three controls to pass without launching Claude or accessing account state.
+- [x] Verify process-scoped filesystem tracing can distinguish in-place writes and temporary-file rename replacement using a synthetic writer. Exclude payload decoding and filter exported events to the fixture; keep private raw traces private. If tracing is unavailable, mark writer attribution/ordering unknown and do not claim them from polling alone.
+- [x] Capture file existence, identity and exact bytes at request, decision/response, finalization and teardown. Also retain the independent syscall trace; checkpoints alone do not prove the absence of intervening writes. Wrappers must not replace, delay or fabricate ordinary responses; enable a delay/drop only in its explicitly labelled fault case.
+- [x] Commit observer and controls when the three controls and trace checks pass; retain this plan and prerequisite memo on the same branch.
 
 ### Task 2: Establish one real CLI baseline
 
@@ -106,9 +106,9 @@ Pinned source interfaces: [RPC/deferred responses](https://github.com/coder/clau
 
 ## Execution status — 2026-10-19
 
-The [validation record](../../validation/claude-cli-review.md) contains five passing
-offline controls: accept, reject, edited proposal and both filesystem write
-strategies. The observer uses real pinned handlers and a synthetic transport.
+The [validation record](../../validation/claude-cli-review.md) contains seven passing
+offline controls: accept, reject, edited proposal, two protocol-error paths and
+both filesystem write strategies. The observer uses real pinned handlers and a synthetic transport.
 No real CLI was installed or invoked; no provider prompt was sent. Task 2 and
 the ten-case live matrix await an account route and pinned authenticated runtime.
 The live runner, cross-clock correlation and arbitrary temporary-file tracing

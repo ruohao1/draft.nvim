@@ -45,10 +45,12 @@ git diff --check
 | Accept | One correlated `openDiff` response, `FILE_SAVED`, exact 25-byte proposal returned; source bytes and inode unchanged at every checkpoint. |
 | Reject | One correlated `DIFF_REJECTED` response; source bytes and inode unchanged at every checkpoint. |
 | Edit proposal | Human revision plus a trailing blank line returned exactly, 26 bytes; source unchanged at the response boundary. |
+| Invalid JSON | After earlier requests, the upstream nil-ID parse-error response is still delegated and returns normally. |
+| Malformed params | Numeric request params reach the upstream handler and return its internal-error response without an observer exception. |
 | In-place writer | Child trace includes target open/truncate and undecoded write; target identity preserved. |
 | Rename writer | Child trace includes temporary-file write and successful rename onto target; target identity changed. |
 
-In each editor control the event sequence is:
+In each of the three review controls the event sequence is:
 
 `openDiff request → pending → decision → response attempt → response return → close_tab request → response attempt → response return → finalization → teardown`.
 
@@ -84,7 +86,12 @@ Private runs are under `.test-results/claude-cli-review/` in the research checko
   observer, after real handler behavior succeeds.
 - `20261019T195621-yemuibfa`: all three observer controls pass.
 - `20261019T195713-tr67pqnr`: both trace assertions fail before tracing exists.
-- `20261019T195728-27e36m4j`: all five controls pass; temporary fixtures removed.
+- `20261019T195728-27e36m4j`: initial five controls pass; temporary fixtures removed.
+- `20261019T200236-fsbukdl5`: independent review regressions fail for nil-ID
+  response cleanup and non-table request params; original evidence retained.
+- `20261019T200249-_hqo1qje`: all **seven** controls pass after the two-line
+  bookkeeping fix. Params normalization affects observation only; upstream
+  receives the original request. No live request was used to diagnose or fix it.
 
 The wrapper delegates ordinary requests/responses unchanged and records observer
 I/O errors without suppressing the original RPC. Controls fail if such errors
@@ -100,7 +107,7 @@ CLI process-tree cleanup and live lockfile cleanup remain unvalidated. No
 combined event order or live writer attribution is claimed.
 
 The default Draft suite was not rerun: runtime modules, shared fixtures and
-default test discovery are unchanged. The new opt-in utility has its own five
+default test discovery are unchanged. The new opt-in utility has its own seven
 controls. Formatting and whitespace checks accompany the recorded self-test.
 
 ## Live matrix and recommendation
