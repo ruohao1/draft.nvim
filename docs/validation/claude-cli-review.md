@@ -1,7 +1,7 @@
 # Claude CLI review validation
 
 Recorded 2026-10-19 for [ISQ-463](https://linear.app/isqrd/issue/ISQ-463).
-The offline observer controls pass. **No real Claude CLI trial has run.**
+The offline observer controls pass. **No real Claude IDE review trial has run.**
 Explicit provider prompts: **0 of the authorized maximum 10**.
 
 ## Environment and provenance
@@ -15,10 +15,12 @@ Explicit provider prompts: **0 of the authorized maximum 10**.
 | strace | 6.19 |
 | tmux | 3.7c available; these headless controls do not use it |
 | Editor configuration | Vertical split, selection tracking and automatic startup off, no terminal provider |
-| Claude CLI, model, permissions, IDE Diff tool | Not established; no installed CLI or authentication found during preflight |
+| Claude CLI | 2.1.303, official npm Linux x64 binary; isolated local diagnostics passed with networking disabled |
+| Authentication | Local preflight: not logged in, `authMethod: none`, exit 1 |
+| Model, effective permissions, IDE Diff tool | Not established; live trial has not started |
 
-Every control is synthetic. The editor controls use the pinned RPC dispatcher,
-coroutine tool handler, deferred response sender, WebSocket encoder, diff buffers
+All seven observer/writer controls are synthetic. The editor controls use the
+pinned RPC dispatcher, coroutine tool handler, deferred response sender, WebSocket encoder, diff buffers
 and `close_tab` handler. Only the client transport handle is synthetic: it captures
 and decodes the emitted WebSocket frame. This proves local handler behavior,
 not a socket handshake, delivery to Claude, CLI tool routing or a provider turn.
@@ -28,6 +30,34 @@ The [primary-source memo](../research/2026-10-18-claude-cli-validation-prerequis
 records documented installation, authentication, permissions and IDE setup.
 Those documents do not establish this reverse-engineered Neovim protocol's
 compatibility with an untested CLI release.
+
+## Pinned CLI preflight — 2026-10-19
+
+An isolated temporary install now provides Claude Code **2.1.303**, selected from
+Anthropic's official npm distribution and pinned exactly. The public installer
+URL returned HTTP 403; the [documented npm alternative](https://code.claude.com/docs/en/setup#install-with-npm)
+was used. Packages were first fetched with install scripts disabled; the packaged
+`install.cjs` was inspected before it placed the matching native binary. The
+package lock, registry integrity values and local command output are retained in
+`.test-results/claude-cli-review/20261019-cli-preflight-2.1.303/`.
+
+The Linux x64 binary is 285,809,912 bytes, SHA-256
+`375988f457756524234695cf2d8f64ace99c5f68682e47ea24862a843c191450`.
+It is outside the user's normal installation and uses a private HOME, XDG and
+Claude configuration. Both version checks returned `2.1.303 (Claude Code)`;
+`doctor` exited 0, reported no installation issues and confirmed auto-updates
+were disabled by `DISABLE_AUTOUPDATER`. The binary hash also remained unchanged.
+
+These local checks ran with networking disabled by Bubblewrap. `auth status`
+exited 1 and reported `loggedIn: false`, `authMethod: none`. Help confirms this
+release exposes `--ide`, `--permission-mode` and the subscription/Console login
+options; command availability does not establish effective session behavior.
+`doctor` did not fetch remote managed settings or organization policy. Its local
+success is not proof of provider connectivity or authenticated IDE compatibility.
+
+No login flow or provider prompt was started. The account route, model, effective
+permissions, Diff tool setting, live tracing and real IDE baseline remain open.
+The ten-case live matrix below is unchanged.
 
 ## Checked controls
 
@@ -93,6 +123,9 @@ Private runs are under `.test-results/claude-cli-review/` in the research checko
   bookkeeping fix. Params normalization affects observation only; upstream
   receives the original request. No live request was used to diagnose or fix it.
 
+- `20261019T210750-h7biiuvp`: all **seven** controls pass again after the
+  separate CLI preflight. These controls still do not launch Claude.
+
 The wrapper delegates ordinary requests/responses unchanged and records observer
 I/O errors without suppressing the original RPC. Controls fail if such errors
 are reported. Evidence directories use private permissions and child environments
@@ -114,7 +147,7 @@ controls. Formatting and whitespace checks accompany the recorded self-test.
 
 | Planned live case | Status |
 | --- | --- |
-| 1. Baseline IDE edit | Not run: CLI/account/model prerequisite unavailable |
+| 1. Baseline IDE edit | Not run: account/model prerequisite unavailable |
 | 2. Reject | Not run: requires baseline |
 | 3. Edited split proposal | Not run: requires baseline; synthetic result above is separate |
 | 4. Source content conflict | Not run: requires baseline |
@@ -132,9 +165,9 @@ Draft should retain its existing publication checks and recovery receipts; neith
 interaction lesson, already addressed separately by Draft's manual-correction
 work. No new adapter or roadmap change follows from these controls.
 
-Resume after the account route is established: install and pin a CLI release,
-verify authentication without recording account details, complete the isolated
-live runner/trace correlation, then establish one real IDE baseline under explicit
+Resume after the account route is established: authenticate the pinned CLI
+without recording account details, complete the isolated live runner/trace
+correlation, then establish one real IDE baseline under explicit
 `--permission-mode default` and Diff tool `auto`. Stop if routing or observations
 are unusable. The remaining matrix keeps the [approved plan's](../superpowers/plans/2026-10-18-claude-cli-review-validation.md)
 one-prompt-per-case budget, deadlines and no-retry rule. ISQ-463's live acceptance

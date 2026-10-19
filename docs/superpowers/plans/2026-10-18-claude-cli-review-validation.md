@@ -49,7 +49,7 @@ Modify only `tests/README.md` to document the opt-in exercise. Leave runtime, de
 
 **Output contract:** A run manifest records versions, model, permission/diff settings, fixture paths, explicit prompt count and provenance (`synthetic` or `real-cli`). Event records contain `origin`, per-origin `sequence`, `monotonic_ns`, `kind`, request ID/tool where present, relative path, byte length/hash, existence and file identity. Preserve synthetic proposal/accepted bytes in private snapshots. Match responses by client/request ID, not arrival order in a separate collector.
 
-- [ ] Check local executables and exact versions. Select a specific Claude release during setup, disable updates for the trial, and verify the version again afterwards. If installation or authentication is missing, report that prerequisite before a live request.
+- [x] Check local executables and exact versions. Select a specific Claude release during setup, disable updates for the trial, and verify the version again afterwards. If installation or authentication is missing, report that prerequisite before a live request.
 - [x] Add observer controls for accept, reject and edited proposal using the real pinned editor handlers with a synthetic client. Assert one correlated request/response, correct accepted bytes, and unchanged disk at the response boundary.
 - [x] Run `python3 -I -B tests/manual/claude_ide_review.py --self-test --plugin /absolute/pinned/claudecode.nvim`. Before implementation, expect the observer assertions to fail; after minimal implementation, require all three controls to pass without launching Claude or accessing account state.
 - [x] Verify process-scoped filesystem tracing can distinguish in-place writes and temporary-file rename replacement using a synthetic writer. Exclude payload decoding and filter exported events to the fixture; keep private raw traces private. If tracing is unavailable, mark writer attribution/ordering unknown and do not claim them from polling alone.
@@ -109,8 +109,12 @@ Pinned source interfaces: [RPC/deferred responses](https://github.com/coder/clau
 The [validation record](../../validation/claude-cli-review.md) contains seven passing
 offline controls: accept, reject, edited proposal, two protocol-error paths and
 both filesystem write strategies. The observer uses real pinned handlers and a synthetic transport.
-No real CLI was installed or invoked; no provider prompt was sent. Task 2 and
-the ten-case live matrix await an account route and pinned authenticated runtime.
-The live runner, cross-clock correlation and arbitrary temporary-file tracing
-still need verification before a baseline. This branch is a partial validation
-deliverable and must not close ISQ-463's live acceptance items.
+A follow-up installed Claude Code 2.1.303 in an isolated temporary runtime and
+verified local version/help/authentication-status/doctor commands with networking
+disabled. Both version checks and the binary hash matched; doctor confirmed
+updates disabled and no local installation issues. Authentication status was
+not logged in (exit 1). No login flow or provider prompt was started.
+Task 2 and the ten-case live matrix still await an account route and authenticated
+runtime. The live runner, cross-clock correlation and arbitrary temporary-file
+tracing still need verification before a baseline. This branch is a partial
+validation deliverable and must not close ISQ-463's live acceptance items.

@@ -33,3 +33,20 @@ Use a disposable independent fixture repository. A git worktree alone is insuffi
 ## What still requires observation
 
 None of these pages establishes a Neovim protocol stability contract, conflict-safe publication, or durable write ordering after an IDE acceptance response. Treat those as research questions. Capture separately: proposal bytes, editor response, disk bytes before/after acceptance, intervening external edits, client result, and cleanup after rejection/disconnection. A missing diff is a failed baseline, not evidence that acceptance or conflict handling passed. No Claude installation, account operation, provider request, or production-code change was performed for this memo.
+
+## Execution follow-up — 2026-10-19
+
+Claude Code 2.1.303 is now pinned in an isolated temporary npm installation.
+The [validation record](../validation/claude-cli-review.md#pinned-cli-preflight--2026-10-19)
+records the binary hash and local results. `--version`, `--help`, `auth login --help`
+and `doctor` completed with networking disabled; `auth status` returned exit 1
+and `authMethod: none`. `doctor` confirmed updates disabled and no local
+installation issues. Remote settings, policy and provider connectivity were not
+validated. No login flow or provider prompt was started.
+
+The installed help confirms `claude auth login --claudeai` selects a Claude
+subscription and `claude auth login --console` selects Console API billing.
+Choose the account route before invoking either command; never put a credential
+in the report. The isolated configuration has its own authentication state.
+Installation is now available for this runtime; account/model selection and the
+real IDE baseline remain prerequisites. This does not complete live acceptance.
