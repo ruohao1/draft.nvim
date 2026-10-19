@@ -321,8 +321,47 @@ class CompatibilityCacheTest(unittest.TestCase):
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             results = list(pool.map(publish, range(4)))
+        self.assertEqual(list(self.cache.iterdir()), [self.record()])
+        self.assertEqual(self.run_editor()["starts"], 0)
+        # Pin the observed stat/rename interleaving with two real store calls.
+        replaced = subprocess.run([sys.executable, "-I", "-B", "-c", """
+import importlib.util, io, json, os, sys
+spec = importlib.util.spec_from_file_location("cache", sys.argv[1])
+cache = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cache)
+raw = sys.stdin.buffer.read()
+request = json.loads(raw)
+original_stat, injected = os.stat, False
+
+def replaced_stat(name, *args, **kwargs):
+    global injected
+    if name != cache.NAME or injected:
+        return original_stat(name, *args, **kwargs)
+    fd = os.open(name, cache.review.READ_FLAGS, dir_fd=kwargs["dir_fd"])
+    injected = True
+    try:
+        assert cache.store(**request) == {"stored": True}
+        node = os.fstat(fd)
+        assert node.st_nlink == 0
+        return node
+    finally:
+        os.close(fd)
+
+os.stat = replaced_stat
+sys.stdin = io.TextIOWrapper(io.BytesIO(raw))
+sys.argv = [sys.argv[1], "store"]
+cache.main()
+assert injected
+""", str(self.runtime / "scripts/nvim-ai-opencode-cache.py")],
+            input=request, capture_output=True, timeout=5, check=True, env={"LANG": "C.UTF-8"})
+        self.assertEqual(replaced.stderr, b"")
+        refused = json.loads(replaced.stdout)
+        self.assertEqual(refused, {"stored": False})
+        results.append(refused)
+        # Replacement may safely refuse a stale inode; at least one writer must publish.
+        self.assertIn({"stored": True}, results)
         for result in results:
-            self.assertEqual(result, {"stored": True})
+            self.assertIn(result, ({"stored": True}, {"stored": False}))
         self.assertEqual(list(self.cache.iterdir()), [self.record()])
         self.assertEqual(self.run_editor()["starts"], 0)
 
