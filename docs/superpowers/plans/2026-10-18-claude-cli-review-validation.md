@@ -103,3 +103,14 @@ Planned on 2026-10-18 from `bba5c4b`. Claude is not on PATH or at the usual exec
 Recommended execution is native/inline: the observer, baseline and fault cases are sequential and share the same evidence contract. Start with Task 1; installation/account readiness is the dependency for Task 2. The plan itself does not require another full Draft suite run because it changes documentation only.
 
 Pinned source interfaces: [RPC/deferred responses](https://github.com/coder/claudecode.nvim/blob/2390c6e45c4789072c293ac69de051d169668b29/lua/claudecode/server/init.lua#L174-L260), [openDiff](https://github.com/coder/claudecode.nvim/blob/2390c6e45c4789072c293ac69de051d169668b29/lua/claudecode/tools/open_diff.lua), [close_tab](https://github.com/coder/claudecode.nvim/blob/2390c6e45c4789072c293ac69de051d169668b29/lua/claudecode/tools/close_tab.lua).
+
+## Execution status — 2026-10-19
+
+The [validation record](../../validation/claude-cli-review.md) contains five passing
+offline controls: accept, reject, edited proposal and both filesystem write
+strategies. The observer uses real pinned handlers and a synthetic transport.
+No real CLI was installed or invoked; no provider prompt was sent. Task 2 and
+the ten-case live matrix await an account route and pinned authenticated runtime.
+The live runner, cross-clock correlation and arbitrary temporary-file tracing
+still need verification before a baseline. This branch is a partial validation
+deliverable and must not close ISQ-463's live acceptance items.
