@@ -204,6 +204,39 @@ assert all(checks.values()), checks
         self.assertEqual(len(self.provider.requests), 1)
         self.stop("confined-completed")
 
+    def test_commands_cannot_read_credentials(self):
+        checks = """import json, pathlib
+secret = pathlib.Path('/home/agent/.codex/auth.json')
+alias = pathlib.Path('/tmp/project/auth-link')
+alias.symlink_to(secret)
+checks = {}
+for name, path in [('direct', secret), ('alias', alias),
+                   ('proc_root', pathlib.Path('/proc/self/root/home/agent/.codex/auth.json'))]:
+    try:
+        checks[name] = not path.read_bytes()
+    except (PermissionError, FileNotFoundError):
+        checks[name] = True
+alias.unlink()
+print(json.dumps(checks))
+"""
+        result = self.rpc("command/exec", {"command": ["/usr/bin/python3", "-I", "-B", "-c", checks],
+            "cwd": "/tmp/project", "sandboxPolicy": POLICY, "timeoutMs": 5000})
+        self.assertEqual(result["exitCode"], 0, result)
+        self.assertTrue(all(json.loads(result["stdout"]).values()),
+                        "Command can read the private credential file directly or through an alias")
+        self.stop("credential-reads-denied")
+
+    def test_model_command_cannot_return_credentials(self):
+        self.provider.enqueue(self.fixture.command("cat /home/agent/.codex/auth.json 2>/dev/null || true"))
+        self.provider.enqueue(self.fixture.answer("Credential read attempt finished."))
+        thread = self.thread()
+        turn = self.turn(thread, "Run the synthetic credential-isolation check.")
+        self.assertEqual(self.terminal(thread, turn)["status"], "completed")
+        self.assertEqual(len(self.provider.requests), 2)
+        self.assertTrue("synthetic-codex-key" not in json.dumps(self.provider.requests[-1]["input"]),
+                        "Command exposed the synthetic credential to provider history")
+        self.stop("model-credential-output-denied")
+
     def test_empty_thread_resume_fails(self):
         thread = self.thread()
         self.stop("empty")
