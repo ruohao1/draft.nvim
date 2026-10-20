@@ -25,15 +25,16 @@ def sandbox(config, task, store):
     agent = task / "agent"
     for name in ("home", "codex-tmp"):
         (agent / name).mkdir(mode=0o700, parents=True)
+    private_masks = "".join(json.dumps("/home/agent/.codex/" + name) + ' = "deny"\n'
+                            for name in sorted(store.private_roots))
     profile = (
         "model = " + json.dumps(model.split("/", 1)[1]) + "\n"
         'cli_auth_credentials_store = "file"\ncheck_for_update_on_startup = false\n'
         'web_search = "disabled"\napproval_policy = "never"\napprovals_reviewer = "user"\n'
         'default_permissions = "draft"\nproject_doc_max_bytes = 0\n'
         '[projects."/tmp/project"]\ntrust_level = "untrusted"\n'
-        '[permissions.draft.filesystem]\n":minimal" = "read"\n'
-        '"/opt/codex" = "read"\n"/tmp/project" = "write"\n'
-        '[permissions.draft.network]\nenabled = false\n'
+        '[permissions.draft.filesystem]\n"/" = "read"\n"/tmp/project" = "write"\n'
+        + private_masks + '[permissions.draft.network]\nenabled = false\n'
         '[skills.bundled]\nenabled = false\n[analytics]\nenabled = false\n'
         '[agents]\nenabled = false\n[mcp_servers]\n[features]\n'
         'memories = false\nplugins = false\napps = false\nshell_snapshot = false\n'

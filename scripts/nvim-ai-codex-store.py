@@ -93,6 +93,8 @@ def _auth(raw):
 
 
 class Store:
+    private_roots = frozenset(FILES | {"sessions", "thread-writer-locks"})
+
     def __init__(self, parent="/tmp"):
         parent = os.fspath(parent)
         if (not hasattr(os, "O_PATH") or not isinstance(parent, str) or not parent.startswith("/")

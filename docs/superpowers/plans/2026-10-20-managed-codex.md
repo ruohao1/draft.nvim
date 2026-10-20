@@ -38,8 +38,8 @@ Track [ISQ-491](https://linear.app/isqrd/issue/ISQ-491/bring-codex-into-drafts-m
   `excludeTmpdirEnvVar=true`, `excludeSlashTmp=true`; `approvalPolicy="never"`,
   `approvalsReviewer="user"`. Retain both sandbox layers and process supervision.
 - Final-review correction: inherit the generated named read profile across all
-  RPC calls. Only system tools, the Codex executable and selected copies are
-  readable; private credentials/state are excluded. Legacy sandbox overrides
+  RPC calls. Keep the outer view read-only and mask every retained private
+  payload root from the closed store inventory; only selected copies are writable. Legacy sandbox overrides
   would erase those restrictions. The response projects cwd writes with no
   extra writable roots; test credential unreadability before submission.
 - Provider connectivity belongs to the engine. Test command network denial

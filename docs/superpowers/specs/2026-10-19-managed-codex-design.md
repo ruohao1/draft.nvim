@@ -125,12 +125,15 @@ and completion text never replace the stopped filesystem snapshot.
 
 Final-review correction (2026-10-20): a legacy `workspaceWrite` override allows
 reads across the outer filesystem, including private auth. Use the pinned named
-permission profile instead: platform tools and `/opt/codex` readable, only
-`/tmp/project` writable, network disabled. Inherit it across commands, thread
+permission profile instead: a read-only outer view with explicit masks derived
+from every retained private payload root, only `/tmp/project` writable and
+network disabled. Inherit it across commands, thread
 start/resume and turns without legacy overrides. The legacy response projection
 has cwd implicitly writable and no additional roots; the pre-prompt command
 also verifies the credential file is unreadable. The active helper alias is the
-only readable private-home subtree Codex adds. Both sandbox layers remain.
+only private-home subtree whose payload remains readable. Both sandbox layers
+remain. A minimal read allowlist alone leaves writable temporary mount parents
+on the pinned Linux runtime; preserve the read-only baseline.
 
 The engine needs provider connectivity in a real turn; command subprocesses do
 not. Do not confuse the network-disabled discovery probe with that production

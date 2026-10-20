@@ -38,7 +38,7 @@ class ProfileTest(unittest.TestCase):
         self.source.chmod(0o600)
         return str(self.source)
 
-    def test_commands_only_read_system_tools_and_selected_files(self):
+    def test_command_profile_masks_private_state_without_widening_writes(self):
         self.store.initialize(self.credential({"OPENAI_API_KEY": "synthetic-api-key"}))
         task = self.parent / "turn"
         (task / "staging").mkdir(mode=0o700, parents=True)
@@ -48,9 +48,11 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(profile.get("default_permissions"), "draft")
         self.assertNotIn("sandbox_mode", profile)
         self.assertNotIn("sandbox_workspace_write", profile)
+        denied = storage.FILES | {"sessions", "thread-writer-locks"}
+        filesystem = {"/": "read", "/tmp/project": "write"}
+        filesystem.update({"/home/agent/.codex/" + name: "deny" for name in denied})
         self.assertEqual(profile["permissions"], {"draft": {
-            "filesystem": {":minimal": "read", "/opt/codex": "read", "/tmp/project": "write"},
-            "network": {"enabled": False}}})
+            "filesystem": filesystem, "network": {"enabled": False}}})
 
     def test_private_api_key_import(self):
         source = self.credential({"OPENAI_API_KEY": "synthetic-api-key"})

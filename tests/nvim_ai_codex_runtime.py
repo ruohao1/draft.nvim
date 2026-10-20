@@ -87,7 +87,7 @@ class InstalledTest(unittest.TestCase):
                 + json.dumps(["-c", "from pathlib import Path; Path('/tmp/project/mcp-started').touch()"])
                 + '\n[features]\nplugins = true\n')
         argv, env = runtime.sandbox({"bwrap": os.path.realpath(shutil.which("bwrap")),
-            "codex": str(self.binary), "model": "openai/gpt-5.4"}, task, self.store)
+            "codex": str(self.binary), "model": "openai/gpt-6.1-sol"}, task, self.store)
         # Only this explicit test redirects the provider; production has no override option.
         profile = task / "agent/codex.toml"
         profile.write_text("openai_base_url = " + json.dumps(self.provider.url) + "\n" + profile.read_text())
@@ -113,12 +113,12 @@ class InstalledTest(unittest.TestCase):
             self.peer.poll_events(deadline=deadline)
 
     def thread(self, previous=None):
-        params = {"cwd": "/tmp/project", "model": "gpt-5.4", "modelProvider": "openai",
+        params = {"cwd": "/tmp/project", "model": "gpt-6.1-sol", "modelProvider": "openai",
                   "approvalPolicy": "never", "approvalsReviewer": "user"}
         if previous:
             params.update(threadId=previous, excludeTurns=True)
         result = self.rpc("thread/resume" if previous else "thread/start", params)
-        self.assertEqual(result["model"], "gpt-5.4")
+        self.assertEqual(result["model"], "gpt-6.1-sol")
         self.assertEqual(result["modelProvider"], "openai")
         self.assertEqual(result["cwd"], "/tmp/project")
         return result["thread"]["id"]
@@ -256,7 +256,7 @@ print(json.dumps(checks))
         self.stop("before-managed-controller")
         config = self.root / "controller.json"
         config.write_text(json.dumps({"backend": "codex", "codex": str(self.binary),
-            "bwrap": os.path.realpath(shutil.which("bwrap")), "model": "openai/gpt-5.4",
+            "bwrap": os.path.realpath(shutil.which("bwrap")), "model": "openai/gpt-6.1-sol",
             "auth_file": str(self.auth)}))
         config.chmod(0o600)
         self.audit_file = self.root / "controller-audit.jsonl"
@@ -294,7 +294,7 @@ print(json.dumps(checks))
                 "snapshot_sha256": hashlib.sha256(self.source.read_bytes()).hexdigest()}]
         command = dict(kind=kind, conversation_id="a" * 32, owner_generation=1,
             turn_id=self.editor_turn, worker_generation=self.editor_turn,
-            root=str(self.root), selection=[self.source.name], model="openai/gpt-5.4", **extra)
+            root=str(self.root), selection=[self.source.name], model="openai/gpt-6.1-sol", **extra)
         self.controller.stdin.write(json.dumps(
             {"version": 1, "serial": self.editor_serial, "command": command}).encode() + b"\n")
         self.controller.stdin.flush()

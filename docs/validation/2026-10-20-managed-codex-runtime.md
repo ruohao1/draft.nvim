@@ -244,9 +244,10 @@ the engine's private auth file. A command could return those bytes through tool
 output even while command network access was denied. No real credential was
 used in the review or regression tests.
 
-The fix uses a generated named filesystem profile: `:minimal` platform-tool
-reads, `/opt/codex` reads and `/tmp/project` writes, with command network disabled.
-Private credentials and retained conversation artifacts are not readable.
+The fix uses a generated named filesystem profile: a read-only outer view,
+`/tmp/project` writes, and explicit read masks generated from the store's closed
+private payload inventory, with command network disabled. Private credentials
+and retained conversation artifacts are not readable.
 Pinned Codex adds only its active helper alias directory for command execution.
 All RPC calls inherit this profile; legacy sandbox overrides would replace it.
 The startup probe runs `test ! -r /home/agent/.codex/auth.json` before any prompt.
@@ -280,3 +281,23 @@ establishes runtime acceptance.
 Minor deferred from review: the worker aggregate-byte fixture drops its request
 parameters and repeats message-count coverage. Production byte limits remain;
 independent aggregate-byte regression coverage needs a follow-up correction.
+
+
+### Restricted-profile acceptance findings
+
+[Run 39487629004](https://github.com/ruohao1/draft.nvim/actions/runs/39487629004)
+at `936c5dd02682ebba33f3163896d2579aba5418c3` passed 73 default suites.
+Direct/aliased credential reads and model-output leakage were denied, including
+after stopped-worker resume. The full audit still failed: the minimal-read
+filesystem created writable temporary mount parents outside `/tmp/project`, and
+the production-controller fixture requested `gpt-5.4`, which is absent from the
+pinned CLI's advertised catalog. The unchanged confinement assertion caught the
+write failure; neither denial nor model validation was relaxed.
+
+A prompt-free local `model/list` probe returned the pinned catalog and no provider
+requests; the installed fixture now explicitly selects advertised `gpt-6.1-sol`.
+Offline fake peers keep their own synthetic model catalogs. The read profile now
+preserves a read-only outer filesystem and masks each retained private payload
+root, derived from the same closed inventory used by Store. Temporary helper
+aliases remain readable. The corrected profile regression failed first in
+`run-ligqv51i`; supported-host acceptance must verify reads and writes together.
