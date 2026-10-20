@@ -226,15 +226,22 @@ print(json.dumps(checks))
         self.stop("credential-reads-denied")
 
     def test_model_command_cannot_return_credentials(self):
-        self.provider.enqueue(self.fixture.command("cat /home/agent/.codex/auth.json 2>/dev/null || true"))
-        self.provider.enqueue(self.fixture.answer("Credential read attempt finished."))
-        thread = self.thread()
-        turn = self.turn(thread, "Run the synthetic credential-isolation check.")
-        self.assertEqual(self.terminal(thread, turn)["status"], "completed")
-        self.assertEqual(len(self.provider.requests), 2)
-        self.assertTrue("synthetic-codex-key" not in json.dumps(self.provider.requests[-1]["input"]),
-                        "Command exposed the synthetic credential to provider history")
-        self.stop("model-credential-output-denied")
+        thread = None
+        for phase in ("new", "resumed"):
+            if phase == "resumed":
+                self.launch()
+            self.provider.enqueue(self.fixture.command("cat /home/agent/.codex/auth.json 2>/dev/null || true"))
+            self.provider.enqueue(self.fixture.answer("Credential read attempt finished."))
+            previous = thread
+            thread = self.thread(previous)
+            if previous:
+                self.assertEqual(thread, previous)
+            turn = self.turn(thread, "Run the synthetic credential-isolation check.")
+            self.assertEqual(self.terminal(thread, turn)["status"], "completed")
+            self.assertEqual(len(self.provider.requests), 2 if phase == "new" else 4)
+            self.assertTrue("synthetic-codex-key" not in json.dumps(self.provider.requests[-1]["input"]),
+                            "Command exposed the synthetic credential to provider history: " + phase)
+            self.stop("model-credential-output-denied-" + phase)
 
     def test_empty_thread_resume_fails(self):
         thread = self.thread()

@@ -265,7 +265,7 @@ and RPC policy overrides, then all four affected suites passed (`run-_7evse_t`):
 The latter correctly skipped all seven installed cases without explicit opt-in.
 Installed regressions check direct, selected-symlink and proc-root credential
 reads, plus a model-issued command whose output must never contain the synthetic
-credential in provider history.
+credential in provider history, both before and after a stopped-worker resume.
 
 [Regression run 39485899731](https://github.com/ruohao1/draft.nvim/actions/runs/39485899731)
 at `745e3eca6460d41ca4b1f7e56cea898b181daf2d` passed all 73 default suites.

@@ -321,7 +321,8 @@ not load account credentials or make paid model requests. An explicit unsupporte
 version or sandbox failure fails the audit rather than skipping it. The audit
 checks command confinement while the engine can reach its provider. Direct,
 symlink and proc-root credential reads must fail; model-command output must not
-return the synthetic credential to provider history. Edit,
+return the synthetic credential to provider history, including after worker exit
+and exact-thread resume. Edit,
 matching completion, frozen review, interruption and exact-thread resume after
 worker exit use the production conversation controller and Codex turn/store.
 The test-only launcher redirects the generated profile to the local provider;
