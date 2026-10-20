@@ -319,9 +319,14 @@ python3 -I -B tests/run.py --codex /absolute/path/to/codex nvim_ai_codex_runtime
 This uses synthetic credentials and a loopback Responses SSE provider. It does
 not load account credentials or make paid model requests. An explicit unsupported
 version or sandbox failure fails the audit rather than skipping it. The audit
-checks command confinement while the engine can reach its provider, an isolated
-edit, interruption and exact-thread resume after worker exit. It prints only
-retained-state metadata, never database, rollout or credential contents.
+checks command confinement while the engine can reach its provider. Edit,
+matching completion, frozen review, interruption and exact-thread resume after
+worker exit use the production conversation controller and Codex turn/store.
+The test-only launcher redirects the generated profile to the local provider;
+it introduces no public provider override. The separate confinement/hostile
+configuration probes still use the production sandbox and worker directly.
+Logs contain synthetic protocol evidence and retained-state metadata, never
+account credentials or the contents of the retained databases and rollouts.
 
 The Linux workflow has a `codex_runtime` dispatch input, default false. When
 selected it verifies the pinned release checksum and runs the same audit on the
@@ -329,3 +334,24 @@ disposable runner with its existing Bubblewrap profile. The current development
 host cannot create Codex's nested namespace; do not weaken either sandbox or
 change host policy to make this test pass. See the
 [runtime evidence](../docs/validation/2026-10-20-managed-codex-runtime.md).
+
+
+`ai_chat_codex` drives the production editor/controller/publisher with a confined
+synthetic Codex peer: passive setup/health, backend independence, startup errors,
+terminal-gated review, Accept/Reject, blocked source drift, partial decisions,
+local correction, Freeze and exact-thread continuation. Unsupported CRLF and
+missing-final-newline corrections retain the draft and leave disk untouched;
+supported LF correction bytes survive resume and explicit approval.
+`nvim_ai_chat_ui.ChatCodexUITest` exercises real composer and review keys. To
+capture only that scenario (the fixture isolates HOME/XDG and tmux itself):
+
+```sh
+DRAFT_CHAT_CAPTURE_DIR=/tmp/draft-codex-captures \
+  python3 -I -B tests/nvim_ai_chat_ui.py ChatCodexUITest -q
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-codex-captures/codex-chat.ansi \
+  /tmp/draft-codex-captures/codex-chat.png --columns 140
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-codex-captures/codex-review.ansi \
+  /tmp/draft-codex-captures/codex-review.png --columns 140
+```

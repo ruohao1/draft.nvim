@@ -1,9 +1,11 @@
 """Offline runner checks and explicit pinned Codex sandbox acceptance."""
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
+import select
 import socket
 import subprocess
 import sys
@@ -48,7 +50,7 @@ class InstalledTest(unittest.TestCase):
         self.store = storage.Store(self.root)
         self.codex_home = self.store.path
         self.addCleanup(self.store.close)
-        self.source = self.root / "real-project.txt"
+        self.source = self.root / "example.txt"
         self.source.write_bytes(b"original text\n")
         self.editor = socket.socket(socket.AF_UNIX)
         self.addCleanup(self.editor.close)
@@ -211,40 +213,151 @@ assert all(checks.values()), checks
         self.assertEqual(len(self.provider.requests), 0)
         self.stop("empty-resume-refused")
 
+    def start_controller(self):
+        self.stop("before-managed-controller")
+        config = self.root / "controller.json"
+        config.write_text(json.dumps({"backend": "codex", "codex": str(self.binary),
+            "bwrap": os.path.realpath(shutil.which("bwrap")), "model": "openai/gpt-5.4",
+            "auth_file": str(self.auth)}))
+        config.chmod(0o600)
+        self.audit_file = self.root / "controller-audit.jsonl"
+        self.controller = subprocess.Popen([sys.executable, "-I", "-B",
+            str(ROOT / "tests/fixtures/ai/codex_runtime_controller.py"), "--config", str(config)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env={"PATH": os.defpath, "LANG": "C.UTF-8", "DRAFT_CODEX_PROVIDER": self.provider.url,
+                 "DRAFT_CODEX_AUDIT": str(self.audit_file)}, umask=0o077)
+        self.addCleanup(self.stop_controller)
+        self.editor_serial = self.editor_turn = 0
+        self.editor_buffer, self.editor_events = bytearray(), []
+        self.proposals = set()
+
+    def stop_controller(self):
+        self.provider.release()
+        if self.controller.poll() is None:
+            self.controller.stdin.close()
+            try:
+                self.controller.wait(timeout=12)
+            except subprocess.TimeoutExpired:
+                self.controller.kill()
+                self.controller.wait(timeout=3)
+        for stream in (self.controller.stdin, self.controller.stdout, self.controller.stderr):
+            stream.close()
+        for path in self.proposals:
+            if path.exists():
+                shutil.rmtree(path)
+
+    def editor_send(self, kind, **extra):
+        self.editor_serial += 1
+        if kind in ("start", "revise"):
+            self.editor_turn += 1
+            extra.setdefault("message", "Answer without editing.")
+            extra["sources"] = [{"path": self.source.name,
+                "snapshot_sha256": hashlib.sha256(self.source.read_bytes()).hexdigest()}]
+        command = dict(kind=kind, conversation_id="a" * 32, owner_generation=1,
+            turn_id=self.editor_turn, worker_generation=self.editor_turn,
+            root=str(self.root), selection=[self.source.name], model="openai/gpt-5.4", **extra)
+        self.controller.stdin.write(json.dumps(
+            {"version": 1, "serial": self.editor_serial, "command": command}).encode() + b"\n")
+        self.controller.stdin.flush()
+
+    def editor_receive(self, kind):
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            while b"\n" in self.editor_buffer:
+                raw, _, rest = self.editor_buffer.partition(b"\n")
+                self.editor_buffer = bytearray(rest)
+                event = json.loads(raw)["event"]
+                self.editor_events.append(event)
+                if "review_ref" in event:
+                    self.proposals.add(Path(event["review_ref"]["manifest"]).parent)
+                if event["kind"] == kind:
+                    return event
+            if select.select([self.controller.stdout], [], [], .1)[0]:
+                data = os.read(self.controller.stdout.fileno(), 65536)
+                if not data:
+                    self.fail("Controller closed: " + repr(self.editor_events)
+                              + self.controller.stderr.read().decode())
+                self.editor_buffer.extend(data)
+        self.fail("Controller timed out before " + kind + ": " + repr(self.editor_events))
+
+    def controller_settled(self, outcome):
+        event = self.editor_receive("settled")
+        self.assertEqual(event["outcome"], outcome, self.editor_events)
+        self.assertTrue(event["stopped"] and event["graceful"] and event["store_valid"])
+        self.assertEqual(Path(f"/proc/{self.controller.pid}/task/{self.controller.pid}/children")
+                         .read_text().strip(), "", "No worker may remain before review or resume")
+        self.assertEqual(self.source.read_bytes(), b"original text\n")
+        return event
+
+    def controller_audit(self):
+        return [json.loads(line) for line in self.audit_file.read_text().splitlines()]
+
+    def close_controller(self):
+        self.editor_send("close")
+        self.assertTrue(self.editor_receive("closed")["cleaned"])
+        self.assertEqual(self.controller.wait(timeout=3), 0)
+        self.assertEqual(self.auth.read_text(), '{"OPENAI_API_KEY":"synthetic-codex-key"}')
+        self.assertFalse(self.provider.errors, self.provider.errors)
+
     def test_completed_thread_resumes_after_exit(self):
+        self.start_controller()
         self.provider.enqueue(self.fixture.command("printf 'proposed text\\n' > /tmp/project/example.txt"))
         self.provider.enqueue(self.fixture.answer("copper-orbit-731"))
-        thread = self.thread()
-        turn = self.turn(thread, "Edit the selected copy.")
-        self.assertEqual(self.terminal(thread, turn)["status"], "completed")
-        self.assertEqual((self.project / "example.txt").read_bytes(), b"proposed text\n")
-        self.stop("completed-edit")
-        self.launch()
-        self.assertEqual(self.thread(thread), thread)
+        self.editor_send("start", message="Edit the selected copy.")
+        first = self.controller_settled("review")
+        manifest = Path(first["review_ref"]["manifest"])
+        proposal = json.loads(manifest.read_bytes())
+        self.assertEqual(first["proposal"]["files"][0]["state"], "pending")
+        self.assertEqual(proposal["id"], first["review_ref"]["token"])
+        self.assertEqual((manifest.parent / "after-0").read_bytes(), b"proposed text\n")
+        identity = dict(round_id=1, proposal_revision=1, proposal_token=first["review_ref"]["token"],
+                        receipt_sequence=0)
         self.provider.enqueue(self.fixture.answer("Resumed."))
-        turn = self.turn(thread, "Continue without editing.")
-        self.assertEqual(self.terminal(thread, turn)["status"], "completed")
+        self.editor_send("revise", message="Continue without editing.",
+                        context=dict(identity, files=first["proposal"]["files"]), **identity)
+        self.controller_settled("answer")
+        audit = self.controller_audit()
+        starts = [entry for entry in audit if entry.get("method") == "turn/start"]
+        resumes = [entry for entry in audit if entry.get("method") == "thread/resume"]
+        terminals = [entry for entry in audit if "terminal" in entry]
+        self.assertEqual(len(starts), 2)
+        self.assertEqual(len(resumes), 1)
+        self.assertEqual([entry["threadId"] for entry in starts], [resumes[0]["threadId"]] * 2)
+        self.assertEqual([entry["terminal"] for entry in terminals], ["completed", "completed"])
+        self.assertEqual([entry["threadId"] for entry in terminals], [resumes[0]["threadId"]] * 2)
         self.assertEqual(len(self.provider.requests), 3)
         self.assertIn("copper-orbit-731", json.dumps(self.provider.requests[-1]["input"]))
-        self.stop("resumed")
+        self.close_controller()
+        print("\nProduction controller: real edit → frozen pending review → stopped exact-thread resume", flush=True)
 
     def test_interrupt_requires_terminal(self):
+        self.start_controller()
         self.provider.hold()
         self.provider.enqueue(self.fixture.answer("Partial answer."))
-        thread = self.thread()
-        turn = self.turn(thread, "cancelled-user-marker")
+        self.editor_send("start", message="cancelled-user-marker")
+        self.editor_receive("submitted")
         self.assertTrue(self.provider.streaming.wait(timeout=8))
-        self.rpc("turn/interrupt", {"threadId": thread, "turnId": turn})
-        self.assertEqual(self.terminal(thread, turn)["status"], "interrupted")
+        self.editor_send("cancel")
+        cancelled = self.editor_receive("cancelled")
+        self.assertTrue(cancelled["cancel_confirmed"] and cancelled["stopped"]
+                        and cancelled["graceful"] and cancelled["store_valid"])
+        self.assertFalse(any("review_ref" in event for event in self.editor_events))
         self.provider.release()
-        self.stop("interrupted")
-        self.launch()
-        self.assertEqual(self.thread(thread), thread)
         self.provider.enqueue(self.fixture.answer("New explicit turn."))
-        turn = self.turn(thread, "Continue explicitly.")
-        self.assertEqual(self.terminal(thread, turn)["status"], "completed")
+        self.editor_send("start", message="Continue explicitly.")
+        self.controller_settled("answer")
+        audit = self.controller_audit()
+        terminals = [entry for entry in audit if "terminal" in entry]
+        self.assertEqual([entry["terminal"] for entry in terminals], ["interrupted", "completed"])
+        resumed = next(entry for entry in audit if entry.get("method") == "thread/resume")
+        interrupted = next(entry for entry in audit if entry.get("method") == "turn/interrupt")
+        self.assertEqual(resumed["threadId"], terminals[0]["threadId"])
+        self.assertEqual((interrupted["threadId"], interrupted["turnId"]),
+                         (terminals[0]["threadId"], terminals[0]["turnId"]))
         self.assertIn("cancelled-user-marker", json.dumps(self.provider.requests[-1]["input"]))
-        self.stop("resumed-after-interrupt")
+        self.close_controller()
+        print("\nProduction controller: matching interrupt terminal → stopped exact-thread resume", flush=True)
+
 
 
 class RunnerTest(unittest.TestCase):

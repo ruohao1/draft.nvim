@@ -4,6 +4,7 @@ local root = assert(vim.uv.fs_mkdtemp("/tmp/draft-chat-codex-XXXXXX"))
 local make =
   dofile(assert(vim.api.nvim_get_runtime_file("tests/fixtures/ai/chat_approval.lua", false)[1]))
 local f
+local original_select = vim.ui.select
 local tools = require("ai.tools")
 local resolve, spawn, fs_open, readfile =
   tools.resolve, vim.uv.spawn, vim.uv.fs_open, vim.fn.readfile
@@ -171,11 +172,155 @@ local ok, reason = xpcall(function()
     f = nil
   end
   print("ok - Codex startup refusals agree across chat, status and health")
+  local dialogs = {}
+  vim.ui.select = function(items, _, callback)
+    dialogs[#dialogs + 1] = { items = items, callback = callback }
+  end
+  local function review(index)
+    vim.cmd("NvimAIChatReview")
+    local dialog = dialogs[#dialogs]
+    dialog.callback(dialog.items[index or 1])
+  end
+  local function bytes(index)
+    return table.concat(vim.fn.readfile(f.files[index], "b"), "\n")
+  end
+  local function held()
+    assert(vim.wait(12000, function()
+      return #f.waiters > 0 or f.snapshot().phase == "failed"
+    end, 10))
+    assert(#f.waiters > 0, vim.inspect(f.snapshot()))
+  end
+  f = make(directory("review"), {}, "codex", "edit-held")
+  f.compose("Propose edits to all selected files.")
+  vim.cmd("NvimAIChatSend")
+  held()
+  f.phase("generating")
+  assert(f.snapshot().review == nil)
+  assert(not f.runtime:chat_approve(), "Acknowledgement cannot authorize review")
+  for index = 1, 3 do
+    assert(bytes(index) == "original text\n")
+  end
+  f.release()
+  f.phase("review")
+  for index = 1, 3 do
+    assert(bytes(index) == "original text\n", "A frozen proposal is not publication")
+  end
+  review()
+  vim.cmd("NvimAIChatApprove")
+  f.phase("review")
+  assert(bytes(1) == "proposed text\n" and bytes(2) == "original text\n")
+  review(2)
+  vim.cmd("NvimAIChatReject")
+  f.phase("review")
+  assert(bytes(2) == "original text\n")
+  review(3)
+  local original, old_approve = f.snapshot().review, f.key("a")
+  assert(original.files[1].state == "accepted" and original.files[2].state == "rejected")
+  assert(original.receipt_sequence == 2)
+  vim.cmd("NvimAIChatRejectAll")
+  local stale_dialog = dialogs[#dialogs]
+  local sent = requests("turn/start")
+  vim.cmd("NvimAIChatEditProposal")
+  f.phase("editing")
+  local draft = vim.api.nvim_get_current_buf()
+  local lines = { "manual correction 二", "second line", "" }
+  local corrected_bytes = table.concat(lines, "\n") .. "\n"
+  vim.api.nvim_buf_set_lines(draft, 0, -1, false, lines)
+  for _, format in ipairs({ "crlf", "no-final-newline" }) do
+    local proposed = format == "crlf" and lines or { "manual correction 二", "second line" }
+    vim.api.nvim_buf_set_lines(draft, 0, -1, false, proposed)
+    vim.bo[draft].fileformat = format == "crlf" and "dos" or "unix"
+    vim.bo[draft].endofline = format ~= "no-final-newline"
+    assert(not f.runtime:chat_freeze_proposal(), "Unsupported byte formats must be refused")
+    assert(f.snapshot().phase == "editing" and f.snapshot().review.token == original.token)
+    assert(vim.deep_equal(vim.api.nvim_buf_get_lines(draft, 0, -1, false), proposed))
+    assert(vim.bo[draft].fileformat == (format == "crlf" and "dos" or "unix"))
+    assert(vim.bo[draft].endofline == (format ~= "no-final-newline"))
+    assert(bytes(3) == "original text\n" and requests("turn/start") == sent)
+  end
+  vim.api.nvim_buf_set_lines(draft, 0, -1, false, lines)
+  vim.bo[draft].fileformat, vim.bo[draft].endofline = "unix", true
+  vim.cmd("NvimAIChatHide")
+  vim.cmd("NvimAIChatEditProposal")
+  assert(vim.api.nvim_get_current_buf() == draft)
+  vim.cmd("NvimAIChatFreezeProposal")
+  f.phase("review")
+  local corrected = f.snapshot().review
+  assert(corrected.token ~= original.token and corrected.revision == 2)
+  assert(corrected.receipt_sequence == 0, "A replacement has a fresh writer journal")
+  assert(corrected.history[1].receipt_sequence == original.receipt_sequence)
+  assert(
+    vim.deep_equal(corrected.history[1].files, original.files),
+    "Prior receipts must remain exact"
+  )
+  assert(corrected.files[1].state == "accepted" and corrected.files[2].state == "rejected")
+  old_approve()
+  stale_dialog.callback(stale_dialog.items[2])
+  assert(f.snapshot().review.receipt_sequence == corrected.receipt_sequence)
+  assert(not f.runtime:chat_approve_all(), "The corrected revision needs fresh visits")
+  assert(requests("turn/start") == sent and #f.snapshot().turns == 1)
+  assert(bytes(3) == "original text\n", "Edit and Freeze cannot publish")
+  vim.cmd("NvimAIChat")
+  f.compose("Preserve manual correction.")
+  vim.cmd("NvimAIChatSend")
+  held()
+  f.release()
+  f.phase("review")
+  assert(requests("turn/start") == sent + 1 and requests("thread/resume") == 1)
+  assert(requests("thread/start") == 1)
+  local request, workspace, thread
+  for _, event in ipairs(f.audit) do
+    if event.method == "turn/start" then
+      if thread then
+        assert(event.params.threadId == thread, "The exact stopped thread must resume")
+      end
+      thread, request = event.params.threadId, event.params.input[1].text
+    elseif event.workspace then
+      workspace = event.workspace
+    end
+  end
+  assert(request:find("editor-made corrections", 1, true))
+  local decisions =
+    vim.json.decode(request:match("Editor%-confirmed file decisions[^\n]*\n([^\n]+)"))
+  assert(decisions[1].state == "accepted" and decisions[2].state == "rejected")
+  assert(decisions[3].state == "pending")
+  assert(
+    vim.deep_equal(workspace, { ["third.txt"] = corrected_bytes }),
+    "Decided files must not regain edit authority"
+  )
+  assert(f.snapshot().review.receipt_sequence == corrected.receipt_sequence)
+  review(3)
+  vim.cmd("NvimAIChatApprove")
+  f.phase("idle")
+  assert(bytes(1) == "proposed text\n" and bytes(2) == "original text\n")
+  assert(bytes(3) == corrected_bytes, "Approval must preserve the frozen correction bytes")
+  f.cleanup()
+  f = nil
+  print("ok - Codex terminal, partial decisions, local correction and exact-thread resume")
+
+  f = make(directory("source-drift"), {}, "codex", "edit")
+  f.compose("Propose edits.")
+  vim.cmd("NvimAIChatSend")
+  f.phase("review")
+  review()
+  vim.fn.writefile({ "external change" }, f.files[1])
+  vim.cmd("NvimAIChatApprove")
+  f.phase("failed")
+  assert(bytes(1) == "external change\n")
+  assert(bytes(2) == "original text\n" and bytes(3) == "original text\n")
+  assert(f.snapshot().recovery_required and not f.snapshot().retry_safe)
+  for _, file in ipairs(f.snapshot().rounds[1].files) do
+    assert(file.state == "blocked", "Source drift cannot produce acceptance")
+  end
+  f.cleanup()
+  f = nil
+  vim.ui.select = original_select
+  print("ok - Codex review refuses source drift without publication")
 end, debug.traceback)
 if f then
   f.cleanup()
 end
 tools.resolve, vim.uv.spawn, vim.uv.fs_open, vim.fn.readfile = resolve, spawn, fs_open, readfile
-backends.health = native_health
+backends.health, vim.ui.select = native_health, original_select
 vim.fn.delete(root, "rf")
 assert(ok, reason)

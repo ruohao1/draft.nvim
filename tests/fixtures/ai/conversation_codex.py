@@ -242,9 +242,11 @@ for line in sys.stdin:
             assert params["approvalPolicy"] == "never" and params["approvalsReviewer"] == "user"
             assert all(item["type"] == "text" and item["text_elements"] == [] for item in params["input"])
             persist()
-            if CASE in ("edit", "edit-held", "forced-exit"):
-                selected = Path("/tmp/project/example.txt")
-                selected.write_bytes(b"revised text\n" if selected.read_bytes() == b"proposed text\n" else b"proposed text\n")
+            selected = sorted(Path("/tmp/project").rglob("*.txt"))
+            audit({"workspace": {str(path.relative_to("/tmp/project")): path.read_text() for path in selected}})
+            if CASE in ("edit", "edit-held", "forced-exit") and "Preserve manual correction" not in params["input"][0]["text"]:
+                for path in selected:
+                    path.write_bytes(b"revised text\n" if path.read_bytes() == b"proposed text\n" else b"proposed text\n")
             if CASE == "lost-start":
                 continue
             if CASE in ("early", "early-wrong"):
