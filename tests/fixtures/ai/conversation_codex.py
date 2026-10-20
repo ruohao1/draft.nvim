@@ -1,7 +1,9 @@
 #!/usr/bin/python3
 """Deterministic Codex wire faults; only run in a disposable test namespace."""
+import errno
 import json
 import os
+from pathlib import Path
 import sys
 import time
 
@@ -23,7 +25,49 @@ if "--version" in sys.argv:
 for line in sys.stdin:
     frame = json.loads(line)
     method, params = frame.get("method"), frame.get("params", {})
-    if method == "fixture/stream":
+    if method == "fixture/codex-state":
+        home = Path(os.environ["CODEX_HOME"])
+        for name in (".sandbox_migration", "state_5.sqlite", "state_5.sqlite-wal", "logs_2.sqlite",
+                     "goals_1.sqlite", "memories_1.sqlite", "queue_1.sqlite", "thread_history_1.sqlite"):
+            (home / name).write_bytes(b"opaque")
+        (home / "installation_id").write_text("00000000-0000-4000-8000-000000000002")
+        (home / "installation_id").chmod(0o644)
+        locks = home / "thread-writer-locks"
+        locks.mkdir(mode=0o700, exist_ok=True)
+        (locks / ".coordination.lock").touch(mode=0o600)
+        if params.get("rollout", True):
+            sessions = home / "sessions/2026/10/20"
+            sessions.mkdir(mode=0o700, parents=True, exist_ok=True)
+            (sessions / ("rollout-2026-10-20T00-00-00-" + params["thread"] + ".jsonl")).write_bytes(b"opaque")
+        send({"id": frame["id"], "result": {}})
+    elif method == "fixture/rotate-auth":
+        (Path(os.environ["CODEX_HOME"]) / "auth.json").write_text('{"OPENAI_API_KEY":"synthetic-refreshed"}')
+        send({"id": frame["id"], "result": {}})
+    elif method == "fixture/auth-generation":
+        auth = json.loads((Path(os.environ["CODEX_HOME"]) / "auth.json").read_bytes())
+        send({"id": frame["id"], "result": {"refreshed": auth.get("OPENAI_API_KEY") == "synthetic-refreshed"}})
+    elif method == "fixture/grow-codex-state":
+        with (Path(os.environ["CODEX_HOME"]) / "state_5.sqlite").open("wb") as output:
+            output.truncate(64 * 1024 * 1024 + 1)
+        send({"id": frame["id"], "result": {}})
+    elif method == "fixture/codex-many-entries":
+        locks = Path(os.environ["CODEX_HOME"]) / "thread-writer-locks"
+        locks.mkdir(mode=0o700, exist_ok=True)
+        for i in range(4097):
+            (locks / ("00000000-0000-4000-8000-" + str(i).zfill(12) + ".lock")).touch(mode=0o600)
+        send({"id": frame["id"], "result": {}})
+    elif method == "fixture/profile-isolation":
+        home = Path(os.environ["CODEX_HOME"])
+        readonly = False
+        try:
+            (home / "config.toml").write_text("bad")
+        except OSError as error:
+            readonly = error.errno == errno.EROFS
+        (home / "tmp/alias").symlink_to("/opt/codex")
+        send({"id": frame["id"], "result": {"readonly": readonly,
+              "ambient_absent": "OPENAI_API_KEY" not in os.environ and "CODEX_CONFIG_FILE" not in os.environ,
+              "scratch_separate": (home / "tmp/alias").is_symlink()}})
+    elif method == "fixture/stream":
         send({"method": "item/agentMessage/delta", "emittedAtMs": 1700000000000,
               "params": {"threadId": "thread-1", "turnId": "turn-1",
                          "itemId": "item-1", "delta": "Early text"}})

@@ -128,3 +128,27 @@ replacement thread identities. These are discovery-harness results with a real
 CLI and synthetic provider. The production store/turn/controller still need the
 same acceptance checks in later plan tasks. The development host remains
 unsupported; real-account access and refresh remain untested.
+
+
+## Production private profile and state owner
+
+The installed-runtime audit now uses the production `sandbox`, `Store` and
+bounded `Worker`; its duplicate launcher/client were removed. Synthetic API-key
+and saved-token import, private refresh retention, metadata-only inspection,
+closed path/mode policy, size/entry limits and cleanup races have offline coverage.
+The replacement-ancestor test first demonstrated deletion before refusal
+(`run-s6qybu_p`); cleanup now matches every parent descriptor to the validated
+inventory before removing a payload (`run-lagilsbz`, 16 tests passed).
+
+Live writer lock names are limited to canonical thread UUIDs plus `.lock`, as
+created and removed by the pinned
+[rollout writer](https://github.com/openai/codex/blob/rust-v0.163.0/codex-rs/rollout/src/writer_lock.rs).
+All other retained paths come from the successful inventory above. Helper aliases
+live on a separate disposable `tmp` mount. The generated profile is read-only;
+ambient environment is not forwarded. An additional real-CLI audit injects a
+selected project MCP configuration and checks that it never starts.
+
+The local production-helper run (`run-k6y2jyac`) passed the runner check and failed
+all five installed cases at the pre-prompt nested namespace check, with no cleanup
+errors. This continues to identify an unsupported host. The same production audit
+must pass on the supported disposable runner before Task 3 is complete.
