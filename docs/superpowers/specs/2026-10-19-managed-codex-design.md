@@ -1,12 +1,13 @@
 # Managed Codex conversation and review
 
-Date: 2026-10-19. Proposed design for
+Date: 2026-10-19. Design approved by the user on 2026-10-20 for
 [ISQ-491](https://linear.app/isqrd/issue/ISQ-491/bring-codex-into-drafts-managed-conversation-and-pre-write-review).
 Base: `bba5c4bfda8f1f779348bd5b776235924a07c90d`.
 Branch: `feat/isq-491-managed-codex`.
 
-This is a design for review, not shipped support or an approved implementation
-plan. Protocol discovery succeeded; command confinement inside the existing
+The design is approved; the [implementation plan](../plans/2026-10-20-managed-codex.md)
+awaits review. Managed support is not shipped. Protocol discovery succeeded;
+command confinement inside the existing
 outer sandbox has an unresolved host compatibility gate. See the
 [preflight evidence](../../validation/2026-10-19-codex-app-server-preflight.md).
 
@@ -80,7 +81,7 @@ configuration through `staged.conversation_options()` and saved staged
 preferences. An explicitly supplied chat configuration is complete; it does not
 silently inherit OpenCode credentials or provider settings.
 
-Proposed shape, not usable on the base commit:
+Configuration shape, not usable on the base commit:
 
 ```lua
 require("draft").setup({
