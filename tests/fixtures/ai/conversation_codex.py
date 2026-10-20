@@ -5,7 +5,71 @@ import json
 import os
 from pathlib import Path
 import sys
+import socket
+import threading
 import time
+
+
+CASE = "answer"
+AUDIT_PORT = 0
+THREAD = "00000000-0000-4000-8000-000000000001"
+TURN = "00000000-0000-4000-8000-000000000002"
+POLICY = {"type": "workspaceWrite", "writableRoots": ["/tmp/project"],
+          "networkAccess": False, "excludeTmpdirEnvVar": True, "excludeSlashTmp": True}
+
+
+def audit(value):
+    if AUDIT_PORT:
+        with socket.create_connection(("127.0.0.1", AUDIT_PORT), timeout=6) as stream:
+            stream.sendall(json.dumps(value).encode() + b"\n")
+            stream.recv(64)
+
+
+def note(method, **params):
+    send({"method": method, "params": params, "emittedAtMs": 1700000000000})
+
+
+def persist():
+    home = Path(os.environ["CODEX_HOME"])
+    (home / "state_5.sqlite").write_bytes(b"opaque fixture database")
+    sessions = home / "sessions/2026/10/20"
+    sessions.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (sessions / ("rollout-2026-10-20T00-00-00-" + THREAD + ".jsonl")).open("ab") as out:
+        out.write(b"opaque fixture rollout\n")
+
+
+def completed(status="completed"):
+    note("turn/completed", threadId=THREAD,
+         turn={"id": TURN, "status": status, "items": [], "error": None})
+
+
+def answer_events():
+    item = {"type": "agentMessage", "id": "message-1", "text": ""}
+    fields = {"threadId": THREAD, "turnId": TURN}
+    note("turn/started", threadId=THREAD, turn={"id": TURN, "status": "inProgress", "items": []})
+    note("item/started", **fields, item=item, startedAtMs=1700000000000)
+    if CASE in ("wrong-thread", "early-wrong"):
+        fields["threadId"] = "foreign-thread"
+    if CASE == "wrong-turn":
+        fields["turnId"] = "foreign-turn"
+    note("item/agentMessage/delta", **fields,
+         itemId="foreign-item" if CASE == "foreign-item" else "message-1", delta="Bounded answer.")
+    note("item/completed", threadId=THREAD, turnId=TURN,
+         item=dict(item, text="Bounded answer."), completedAtMs=1700000000001)
+    completed("failed" if CASE == "failed-terminal" else "completed")
+    if CASE == "duplicate-terminal":
+        completed()
+
+
+def held_answer():
+    audit({"waiting": True})
+    answer_events()
+
+
+def model(name):
+    return {"id": name, "model": name, "displayName": name, "description": "fixture",
+            "hidden": False, "isDefault": True, "defaultReasoningEffort": "medium",
+            "supportedReasoningEfforts": [{"reasoningEffort": "medium", "description": "fixture"}]}
 
 
 def send(value):
@@ -137,5 +201,82 @@ for line in sys.stdin:
     elif method == "fixture/blocked":
         send({"id": frame["id"], "result": {}})
         time.sleep(20)
+    elif method in ("initialize", "initialized", "model/list", "command/exec", "thread/start",
+                    "thread/resume", "turn/start", "turn/interrupt"):
+        audit({"method": method, "params": params})
+        if method == "initialized":
+            continue
+        if method == "initialize":
+            result = {"userAgent": "draft_conversation/" + ("0.999.0" if CASE == "wrong-version" else "0.163.0") + " (fixture)",
+                      "codexHome": "/home/agent/.codex", "platformFamily": "unix", "platformOs": "linux"}
+        elif method == "model/list":
+            result = {"data": [model("gpt-5.4")], "nextCursor": None}
+            if CASE == "missing-model":
+                result["data"] = [model("another-model")]
+            if CASE in ("model-pages", "model-loop"):
+                result = {"data": [model("gpt-5.4" if not params.get("cursor") else "gpt-second")],
+                          "nextCursor": "page-2" if CASE == "model-loop" or not params.get("cursor") else None}
+        elif method == "command/exec":
+            assert params["command"] == ["/usr/bin/true"] and params["sandboxPolicy"] == POLICY
+            result = {"exitCode": 1 if CASE == "unsupported" else 0, "stdout": "", "stderr": ""}
+        elif method in ("thread/start", "thread/resume"):
+            assert params["cwd"] == "/tmp/project" and params["sandbox"] == "workspace-write"
+            assert params["approvalPolicy"] == "never" and params["approvalsReviewer"] == "user"
+            assert params["modelProvider"] == "openai"
+            if method == "thread/resume":
+                assert params["threadId"] == THREAD
+                if CASE == "resume-refused":
+                    send({"id": frame["id"], "error": {"code": -32600, "message": "resume refused"}})
+                    continue
+            result = {"thread": {"id": THREAD, "sessionId": THREAD, "cwd": "/tmp/project", "cliVersion": "0.163.0",
+                      "createdAt": 1700000000, "updatedAt": 1700000000, "ephemeral": False, "turns": [],
+                      "status": {"type": "idle"}, "source": "vscode", "preview": "", "projectId": None,
+                      "modelProvider": "openai", "model": params["model"]},
+                      "model": "different" if CASE == "wrong-model" else params["model"],
+                      "modelProvider": "openai", "cwd": "/tmp/project", "approvalPolicy": "never",
+                      "approvalsReviewer": "user", "sandbox": dict(POLICY)}
+            if CASE == "wrong-policy":
+                result["sandbox"]["networkAccess"] = True
+        elif method == "turn/start":
+            assert params["threadId"] == THREAD and params["sandboxPolicy"] == POLICY
+            assert params["approvalPolicy"] == "never" and params["approvalsReviewer"] == "user"
+            assert all(item["type"] == "text" and item["text_elements"] == [] for item in params["input"])
+            persist()
+            if CASE in ("edit", "edit-held", "forced-exit"):
+                selected = Path("/tmp/project/example.txt")
+                selected.write_bytes(b"revised text\n" if selected.read_bytes() == b"proposed text\n" else b"proposed text\n")
+            if CASE == "lost-start":
+                continue
+            if CASE in ("early", "early-wrong"):
+                answer_events()
+            send({"id": frame["id"], "result": {"turn": {"id": TURN, "status": "inProgress", "items": []}}})
+            if CASE == "callbacks":
+                for index, method in enumerate(("item/commandExecution/requestApproval", "item/fileChange/requestApproval",
+                    "item/tool/requestUserInput", "item/permissions/requestApproval", "item/tool/call")):
+                    send({"id": "callback-" + str(index), "method": method,
+                          "params": {"threadId": THREAD, "turnId": TURN}})
+                    reply = json.loads(next(sys.stdin))
+                    assert reply.get("error", {}).get("code") == -32601
+                audit({"client_denied": True})
+            if CASE in ("early", "early-wrong", "cancel", "cancel-ack"):
+                continue
+            if CASE == "edit-held":
+                threading.Thread(target=held_answer, daemon=True).start()
+                continue
+            answer_events()
+            if CASE == "forced-exit":
+                time.sleep(20)
+            continue
+        else:
+            assert params == {"threadId": THREAD, "turnId": TURN}
+            send({"id": frame["id"], "result": {}})
+            if CASE != "cancel-ack":
+                completed("interrupted")
+            continue
+        send({"id": frame["id"], "result": result})
     else:
         send({"id": frame["id"], "result": {}})
+
+if CASE == "late-terminal":
+    completed()
+audit({"exiting": True})

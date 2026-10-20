@@ -56,7 +56,7 @@ Track [ISQ-491](https://linear.app/isqrd/issue/ISQ-491/bring-codex-into-drafts-m
    and needs positive pre-submission cleanup evidence — Tasks 1 and 4.
 3. Credential paths with spaces/non-ASCII, private token rotation and replaced
    directory entries must preserve source credentials and refuse tampering — Task 3.
-4. Revision after partial decisions and manual CRLF correction must retain
+4. Revision after partial decisions and a supported LF correction must retain
    receipts, require a fresh review visit and avoid an extra model turn — Task 6.
 5. Passive UI/health with the other backend missing must not launch app-server
    or import auth; stale callbacks cannot change the conversation's backend — Task 5.
@@ -344,9 +344,11 @@ under `docs/validation/` alongside the evidence.
   Neovim commands through compose → Send → frozen diff → Accept/Reject.
   Assert exact project bytes unchanged before approval and after Reject;
   Accept writes only the visited frozen version, while drift blocks publication.
-- [ ] Add `test_partial_decisions_manual_crlf_revision_and_resume`: accept one
-  file, reject another, correct remaining CRLF/no-final-newline bytes locally,
-  Freeze, then explicitly revise. Assert receipts remain unchanged, old review
+- [ ] Add `test_partial_decisions_manual_correction_and_resume`: accept one
+  file, reject another, correct the remaining supported LF bytes locally,
+  Freeze, then explicitly revise. Separately verify CRLF/no-final-newline
+  corrections are refused without losing the draft or changing disk bytes,
+  preserving the existing documented format policy. Assert receipts remain unchanged, old review
   visits cannot approve the new revision, Edit/Freeze sends zero model requests,
   the next request includes correction/decision context, and prior decided
   files do not regain edit authority. Assert byte fidelity after final approval.

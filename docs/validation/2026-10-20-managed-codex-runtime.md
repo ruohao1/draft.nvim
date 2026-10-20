@@ -152,3 +152,13 @@ The local production-helper run (`run-k6y2jyac`) passed the runner check and fai
 all five installed cases at the pre-prompt nested namespace check, with no cleanup
 errors. This continues to identify an unsupported host. The same production audit
 must pass on the supported disposable runner before Task 3 is complete.
+
+
+The production-helper [CI run 39478329838](https://github.com/ruohao1/draft.nvim/actions/runs/39478329838)
+passed at `42872224523946f7a83dfef7d4cf522f8e649fd7`: 71 default suites and all
+six explicit runtime tests (40.759 seconds, zero skips). The same confinement,
+edit, interrupt and exact-thread resume assertions passed with live metadata
+guards and stopped seals. Injected selected-project MCP configuration did not
+start its sentinel process or emit an MCP event; only the configured local
+provider received a request. No new retained artifact family was required.
+Scratch aliases stayed outside retained state. Task 3 is complete.
