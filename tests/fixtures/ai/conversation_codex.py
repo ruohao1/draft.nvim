@@ -14,7 +14,7 @@ CASE = "answer"
 AUDIT_PORT = 0
 THREAD = "00000000-0000-4000-8000-000000000001"
 TURN = "00000000-0000-4000-8000-000000000002"
-POLICY = {"type": "workspaceWrite", "writableRoots": ["/tmp/project"],
+POLICY = {"type": "workspaceWrite", "writableRoots": [],
           "networkAccess": False, "excludeTmpdirEnvVar": True, "excludeSlashTmp": True}
 
 
@@ -217,10 +217,11 @@ for line in sys.stdin:
                 result = {"data": [model("gpt-5.4" if not params.get("cursor") else "gpt-second")],
                           "nextCursor": "page-2" if CASE == "model-loop" or not params.get("cursor") else None}
         elif method == "command/exec":
-            assert params["command"] == ["/usr/bin/true"] and params["sandboxPolicy"] == POLICY
+            assert params["command"] == ["/usr/bin/test", "!", "-r", "/home/agent/.codex/auth.json"]
+            assert "sandboxPolicy" not in params
             result = {"exitCode": 1 if CASE == "unsupported" else 0, "stdout": "", "stderr": ""}
         elif method in ("thread/start", "thread/resume"):
-            assert params["cwd"] == "/tmp/project" and params["sandbox"] == "workspace-write"
+            assert params["cwd"] == "/tmp/project" and "sandbox" not in params
             assert params["approvalPolicy"] == "never" and params["approvalsReviewer"] == "user"
             assert params["modelProvider"] == "openai"
             if method == "thread/resume":
@@ -238,7 +239,7 @@ for line in sys.stdin:
             if CASE == "wrong-policy":
                 result["sandbox"]["networkAccess"] = True
         elif method == "turn/start":
-            assert params["threadId"] == THREAD and params["sandboxPolicy"] == POLICY
+            assert params["threadId"] == THREAD and "sandboxPolicy" not in params
             assert params["approvalPolicy"] == "never" and params["approvalsReviewer"] == "user"
             assert all(item["type"] == "text" and item["text_elements"] == [] for item in params["input"])
             persist()

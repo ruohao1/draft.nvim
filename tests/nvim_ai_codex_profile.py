@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import stat
+import shutil
+import tomllib
 import tempfile
 import unittest
 
@@ -19,6 +21,7 @@ def helper(name):
 
 
 storage = helper("nvim-ai-codex-store")
+runtime = helper("nvim-ai-codex-runtime")
 
 
 class ProfileTest(unittest.TestCase):
@@ -34,6 +37,20 @@ class ProfileTest(unittest.TestCase):
         self.source.write_text(json.dumps(value))
         self.source.chmod(0o600)
         return str(self.source)
+
+    def test_commands_only_read_system_tools_and_selected_files(self):
+        self.store.initialize(self.credential({"OPENAI_API_KEY": "synthetic-api-key"}))
+        task = self.parent / "turn"
+        (task / "staging").mkdir(mode=0o700, parents=True)
+        runtime.sandbox({"model": "openai/gpt-5.4", "bwrap": os.path.realpath(shutil.which("bwrap")),
+                         "codex": os.path.realpath(shutil.which("true"))}, task, self.store)
+        profile = tomllib.loads((task / "agent/codex.toml").read_text())
+        self.assertEqual(profile.get("default_permissions"), "draft")
+        self.assertNotIn("sandbox_mode", profile)
+        self.assertNotIn("sandbox_workspace_write", profile)
+        self.assertEqual(profile["permissions"], {"draft": {
+            "filesystem": {":minimal": "read", "/opt/codex": "read", "/tmp/project": "write"},
+            "network": {"enabled": False}}})
 
     def test_private_api_key_import(self):
         source = self.credential({"OPENAI_API_KEY": "synthetic-api-key"})

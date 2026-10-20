@@ -16,8 +16,6 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
-POLICY = {"type": "workspaceWrite", "writableRoots": ["/tmp/project"],
-          "networkAccess": False, "excludeTmpdirEnvVar": True, "excludeSlashTmp": True}
 
 
 def provider_fixture():
@@ -52,6 +50,7 @@ class InstalledTest(unittest.TestCase):
         self.addCleanup(self.store.close)
         self.source = self.root / "example.txt"
         self.source.write_bytes(b"original text\n")
+        self.source.chmod(0o644)
         self.editor = socket.socket(socket.AF_UNIX)
         self.addCleanup(self.editor.close)
         self.socket_path = self.root / "editor.sock"
@@ -72,7 +71,7 @@ class InstalledTest(unittest.TestCase):
         self.store.initialize(str(self.auth))
         self.launch()
         result = self.rpc("command/exec", {"command": ["/usr/bin/true"],
-            "cwd": "/tmp/project", "sandboxPolicy": POLICY, "timeoutMs": 5000})
+            "cwd": "/tmp/project", "timeoutMs": 5000})
         self.assertEqual(result["exitCode"], 0, "Nested sandbox unavailable: " + str(result))
 
     def launch(self, hostile=False):
@@ -115,7 +114,7 @@ class InstalledTest(unittest.TestCase):
 
     def thread(self, previous=None):
         params = {"cwd": "/tmp/project", "model": "gpt-5.4", "modelProvider": "openai",
-                  "approvalPolicy": "never", "approvalsReviewer": "user", "sandbox": "workspace-write"}
+                  "approvalPolicy": "never", "approvalsReviewer": "user"}
         if previous:
             params.update(threadId=previous, excludeTurns=True)
         result = self.rpc("thread/resume" if previous else "thread/start", params)
@@ -127,7 +126,7 @@ class InstalledTest(unittest.TestCase):
     def turn(self, thread, message):
         result = self.rpc("turn/start", {"threadId": thread,
             "input": [{"type": "text", "text": message, "text_elements": []}],
-            "sandboxPolicy": POLICY, "approvalPolicy": "never", "approvalsReviewer": "user"})
+            "approvalPolicy": "never", "approvalsReviewer": "user"})
         return result["turn"]["id"]
 
     def cleanup_peer(self):
@@ -194,7 +193,7 @@ print(json.dumps(checks))
 assert all(checks.values()), checks
 """
         executed = self.rpc("command/exec", {"command": ["/usr/bin/python3", "-I", "-B", "-c", checks],
-            "cwd": "/tmp/project", "sandboxPolicy": POLICY, "timeoutMs": 5000})
+            "cwd": "/tmp/project", "timeoutMs": 5000})
         self.assertEqual(executed["exitCode"], 0, executed)
         self.assertTrue(all(json.loads(executed["stdout"]).values()))
         self.provider.enqueue(self.fixture.answer("Engine reached the local provider."))
@@ -220,7 +219,7 @@ alias.unlink()
 print(json.dumps(checks))
 """
         result = self.rpc("command/exec", {"command": ["/usr/bin/python3", "-I", "-B", "-c", checks],
-            "cwd": "/tmp/project", "sandboxPolicy": POLICY, "timeoutMs": 5000})
+            "cwd": "/tmp/project", "timeoutMs": 5000})
         self.assertEqual(result["exitCode"], 0, result)
         self.assertTrue(all(json.loads(result["stdout"]).values()),
                         "Command can read the private credential file directly or through an alias")

@@ -37,6 +37,11 @@ Track [ISQ-491](https://linear.app/isqrd/issue/ISQ-491/bring-codex-into-drafts-m
 - Inner `workspaceWrite`: only `/tmp/project` writable, `networkAccess=false`,
   `excludeTmpdirEnvVar=true`, `excludeSlashTmp=true`; `approvalPolicy="never"`,
   `approvalsReviewer="user"`. Retain both sandbox layers and process supervision.
+- Final-review correction: inherit the generated named read profile across all
+  RPC calls. Only system tools, the Codex executable and selected copies are
+  readable; private credentials/state are excluded. Legacy sandbox overrides
+  would erase those restrictions. The response projects cwd writes with no
+  extra writable roots; test credential unreadability before submission.
 - Provider connectivity belongs to the engine. Test command network denial
   while the outer sandbox can reach a local provider; `--unshare-net` is no proof.
 - Keep private `CODEX_HOME=/home/agent/.codex`, generated profile and file auth.
@@ -255,7 +260,9 @@ Modify `tests/run.py`, `tests/README.md`, `.github/workflows/linux-tests.yml`.
   expect missing adapter/unsupported trusted configuration failures.
 - [ ] Implement the Codex adapter and two explicit controller branches. On Send,
   initialize/validate 0.163.0, send `initialized`, discover models and verify
-  sandbox execution with `command/exec` of `/usr/bin/true` before `turn/start`.
+  sandbox execution and credential unreadability with `command/exec` of
+  `/usr/bin/test ! -r /home/agent/.codex/auth.json` before `turn/start`
+  (strengthened following final review).
   Fail unsupported hosts before a prompt; this readiness check supplements
   Task 1's full confinement proof. Start or resume the exact thread; validate
   returned cwd, model/provider and permissions. Strip `openai/` only at this

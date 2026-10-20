@@ -202,8 +202,12 @@ and records method/terminal identities; no public provider override exists.
 Other cases retain direct production sandbox/worker confinement probes.
 The development-host run `run-ep7ppzwq` still failed all five installed cases at
 nested namespace creation before any prompt, with the runner regression passing.
-Supported-runner controller acceptance is pending
-[run 39484117631](https://github.com/ruohao1/draft.nvim/actions/runs/39484117631).
+[Run 39484117631](https://github.com/ruohao1/draft.nvim/actions/runs/39484117631)
+passed all 73 default suites but failed both new controller cases before
+submission: runner umask 077 created their selected source as 0600. A direct
+snapshot reproduction rejected 0600 and accepted 0644. The fixture now sets
+0644, matching Draft's unchanged source policy. Final controller acceptance
+is tracked on the implementation PR with checks on its final head.
 The first dispatch was cancelled by the push workflow concurrency group and was
 restarted on the same implementation commit.
 
@@ -231,3 +235,48 @@ The terminal scenario passed and both renders were visually inspected at
 
 Real-account authentication, live token refresh and paid model requests remain
 untested. No login or original credential modification was performed.
+
+## Final review: command read isolation
+
+The fresh whole-branch review identified a critical credential read exposure:
+legacy `workspaceWrite` limits writes but reads the outer filesystem, including
+the engine's private auth file. A command could return those bytes through tool
+output even while command network access was denied. No real credential was
+used in the review or regression tests.
+
+The fix uses a generated named filesystem profile: `:minimal` platform-tool
+reads, `/opt/codex` reads and `/tmp/project` writes, with command network disabled.
+Private credentials and retained conversation artifacts are not readable.
+Pinned Codex adds only its active helper alias directory for command execution.
+All RPC calls inherit this profile; legacy sandbox overrides would replace it.
+The startup probe runs `test ! -r /home/agent/.codex/auth.json` before any prompt.
+The response still projects `workspaceWrite`, with cwd writable and no extra
+write roots. The profile was accepted by the pinned CLI in a prompt-free local
+projection probe; that alone is not command-confinement acceptance.
+
+These decisions follow the pinned upstream
+[configuration and helper-read handling](https://github.com/openai/codex/blob/rust-v0.163.0/codex-rs/core/src/config/mod.rs),
+[permission compilation](https://github.com/openai/codex/blob/rust-v0.163.0/codex-rs/core/src/config/permissions.rs)
+and [Linux read mounts](https://github.com/openai/codex/blob/rust-v0.163.0/codex-rs/linux-sandbox/src/bwrap.rs).
+
+Offline regressions failed first (`run-4rjx3__y`) for the broad generated profile
+and RPC policy overrides, then all four affected suites passed (`run-_7evse_t`):
+6 profile tests, 15 turn tests, public Codex editor cases and the runtime runner.
+The latter correctly skipped all seven installed cases without explicit opt-in.
+Installed regressions check direct, selected-symlink and proc-root credential
+reads, plus a model-issued command whose output must never contain the synthetic
+credential in provider history.
+
+[Regression run 39485899731](https://github.com/ruohao1/draft.nvim/actions/runs/39485899731)
+at `745e3eca6460d41ca4b1f7e56cea898b181daf2d` passed all 73 default suites.
+Both new installed credential tests failed on the old implementation for the
+intended reason: commands could read auth, and the model-command result exposed
+the synthetic key to provider history. The two controller cases also repeated
+the confirmed source-mode fixture failure; the other four audit cases passed.
+The exact corrected head and its complete default/installed results are recorded
+in the implementation PR and linked CI run. No skipped or failed installed run
+establishes runtime acceptance.
+
+Minor deferred from review: the worker aggregate-byte fixture drops its request
+parameters and repeats message-count coverage. Production byte limits remain;
+independent aggregate-byte regression coverage needs a follow-up correction.

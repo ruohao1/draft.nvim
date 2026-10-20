@@ -105,6 +105,19 @@ class TurnTest(unittest.TestCase):
     def methods(self):
         return [entry["method"] for entry in self.audit if "method" in entry]
 
+    def test_generated_permissions_survive_start_and_resume(self):
+        self.start()
+        self.assertEqual(self.finish()["outcome"], "answer")
+        self.start(session=self.turn.session)
+        self.assertEqual(self.finish()["outcome"], "answer")
+        for entry in self.audit:
+            if entry.get("method") in ("command/exec", "thread/start", "thread/resume", "turn/start"):
+                self.assertNotIn("sandbox", entry["params"])
+                self.assertNotIn("sandboxPolicy", entry["params"])
+            if entry.get("method") == "command/exec":
+                self.assertEqual(entry["params"]["command"],
+                                 ["/usr/bin/test", "!", "-r", "/home/agent/.codex/auth.json"])
+
     def test_completion_is_not_start_ack(self):
         self.start("edit-held")
         self.until(lambda: self.turn.stage == "running")

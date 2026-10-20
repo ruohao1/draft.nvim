@@ -319,7 +319,9 @@ python3 -I -B tests/run.py --codex /absolute/path/to/codex nvim_ai_codex_runtime
 This uses synthetic credentials and a loopback Responses SSE provider. It does
 not load account credentials or make paid model requests. An explicit unsupported
 version or sandbox failure fails the audit rather than skipping it. The audit
-checks command confinement while the engine can reach its provider. Edit,
+checks command confinement while the engine can reach its provider. Direct,
+symlink and proc-root credential reads must fail; model-command output must not
+return the synthetic credential to provider history. Edit,
 matching completion, frozen review, interruption and exact-thread resume after
 worker exit use the production conversation controller and Codex turn/store.
 The test-only launcher redirects the generated profile to the local provider;

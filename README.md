@@ -159,6 +159,7 @@ standalone staging retain their existing behavior.
 
 Codex requires an explicit `openai/model` from its advertised catalog. Send checks
 CLI **0.163.0**, the model and nested command sandbox before submitting the turn.
+The startup probe also checks that commands cannot read the private credential file.
 Unsupported hosts fail before the prompt; there is no unconfined or native
 fallback. Setup, opening/hiding chat, status and health do not import credentials
 or start app-server. `:NvimAIChatModel` selects an advertised model for a later
@@ -167,7 +168,8 @@ explicit turn.
 On first Send, Draft imports only the configured, owned, single-link **0600**
 credential file: an OpenAI API key or saved ChatGPT login tokens. It creates a
 private copy, leaves the original unchanged and retains private refresh writes
-between stopped workers. It does not copy global/project configuration, export
+between stopped workers. Commands can read system tools and selected copies; the
+private credential and conversation store are outside their readable filesystem. It does not copy global/project configuration, export
 credentials or initiate login. Close removes safely owned private state; unsafe
 state requires recovery. Installed-runtime checks use synthetic credentials and
 a local provider; real-account access and actual token refresh remain unverified.

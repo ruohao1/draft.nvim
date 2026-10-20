@@ -11,7 +11,8 @@ spec = importlib.util.spec_from_file_location("nvim-ai-staged", HERE / "nvim-ai-
 staging = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(staging)
 Refused = staging.Refused
-POLICY = {"type": "workspaceWrite", "writableRoots": ["/tmp/project"],
+# The legacy response projects cwd writes but cannot describe restricted reads.
+POLICY = {"type": "workspaceWrite", "writableRoots": [],
           "networkAccess": False, "excludeTmpdirEnvVar": True, "excludeSlashTmp": True}
 VERSION = "0.163.0"
 
@@ -28,10 +29,11 @@ def sandbox(config, task, store):
         "model = " + json.dumps(model.split("/", 1)[1]) + "\n"
         'cli_auth_credentials_store = "file"\ncheck_for_update_on_startup = false\n'
         'web_search = "disabled"\napproval_policy = "never"\napprovals_reviewer = "user"\n'
-        'sandbox_mode = "workspace-write"\nproject_doc_max_bytes = 0\n'
+        'default_permissions = "draft"\nproject_doc_max_bytes = 0\n'
         '[projects."/tmp/project"]\ntrust_level = "untrusted"\n'
-        '[sandbox_workspace_write]\nwritable_roots = ["/tmp/project"]\nnetwork_access = false\n'
-        'exclude_tmpdir_env_var = true\nexclude_slash_tmp = true\n'
+        '[permissions.draft.filesystem]\n":minimal" = "read"\n'
+        '"/opt/codex" = "read"\n"/tmp/project" = "write"\n'
+        '[permissions.draft.network]\nenabled = false\n'
         '[skills.bundled]\nenabled = false\n[analytics]\nenabled = false\n'
         '[agents]\nenabled = false\n[mcp_servers]\n[features]\n'
         'memories = false\nplugins = false\napps = false\nshell_snapshot = false\n'

@@ -277,7 +277,8 @@ identity is fixed until close. Native companions and standalone staging retain
 their existing behavior.
 
 Send requires Codex 0.163.0, an advertised openai/model and a Linux host supporting
-its nested command sandbox. It checks readiness before submitting a prompt;
+its nested command sandbox. It checks readiness and command credential
+unreadability before submitting a prompt;
 unsupported hosts receive no unconfined or native fallback. Opening/hiding chat,
 setup, status and health do not import credentials or start app-server. Model
 selection remains an explicit next-turn action with :NvimAIChatModel.
@@ -285,7 +286,9 @@ selection remains an explicit next-turn action with :NvimAIChatModel.
 On first Send, Draft imports only an explicitly configured, owned, single-link
 0600 auth file containing an OpenAI API key or saved ChatGPT login tokens. The
 private copy can retain refresh writes across workers; the original stays
-unchanged. No global/project config import, credential export or login occurs.
+unchanged. Commands can read system tools and selected copies; the private
+credential and conversation store are outside their readable filesystem.
+No global/project config import, credential export or login occurs.
 Close removes safely owned private state; unsafe state requires recovery.
 Synthetic local-provider tests validate the installed runtime. Real-account
 access and actual token refresh remain unverified.

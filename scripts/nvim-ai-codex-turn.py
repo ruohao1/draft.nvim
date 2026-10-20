@@ -188,8 +188,8 @@ class Turn:
         else:
             if self.command["model"] not in self.models:
                 raise protocol.Refused("Requested Codex model is not advertised")
-            self.begin("command/exec", {"command": ["/usr/bin/true"], "cwd": staging.PROJECT,
-                                       "sandboxPolicy": runtime.POLICY, "timeoutMs": 5000})
+            self.begin("command/exec", {"command": ["/usr/bin/test", "!", "-r", "/home/agent/.codex/auth.json"],
+                                       "cwd": staging.PROJECT, "timeoutMs": 5000})
 
     def bind_thread(self, result):
         thread = result.get("thread")
@@ -214,7 +214,7 @@ class Turn:
         text += "\n" + self.command["message"]
         self.begin("turn/start", {"threadId": self.session,
             "input": [{"type": "text", "text": text, "text_elements": []}],
-            "sandboxPolicy": runtime.POLICY, "approvalPolicy": "never", "approvalsReviewer": "user"})
+            "approvalPolicy": "never", "approvalsReviewer": "user"})
         self.emit("submitted", model=self.command["model"], models=self.models)
 
     def advance(self):
@@ -238,10 +238,10 @@ class Turn:
                 self.catalog(result)
             elif self.stage == "command/exec":
                 if type(result.get("exitCode")) is not int or result["exitCode"] != 0:
-                    raise protocol.Refused("Codex nested sandbox is unavailable")
+                    raise protocol.Refused("Codex command isolation is unavailable")
                 params = {"cwd": staging.PROJECT, "model": self.command["model"].split("/", 1)[1],
                           "modelProvider": "openai", "approvalPolicy": "never",
-                          "approvalsReviewer": "user", "sandbox": "workspace-write"}
+                          "approvalsReviewer": "user"}
                 if self.session is not None:
                     params.update(threadId=self.session, excludeTurns=True)
                 self.begin("thread/resume" if self.session is not None else "thread/start", params)
