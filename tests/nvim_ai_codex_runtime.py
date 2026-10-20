@@ -218,7 +218,7 @@ class InstalledTest(unittest.TestCase):
         self.assertFalse(self.provider.errors, self.provider.errors)
 
     def test_pinned_cli_confinement(self):
-        checks = f"""import json, pathlib, socket
+        checks = f"""import errno, json, pathlib, socket
 p = pathlib.Path('/tmp/project/probe.txt')
 p.write_text('isolated')
 checks = {{'workspace_write': p.read_text() == 'isolated'}}
@@ -226,16 +226,22 @@ for name, path in [('private_state_denied', '/home/agent/.codex/escape'), ('tmp_
     try:
         pathlib.Path(path).write_text('escape')
         checks[name] = False
-    except PermissionError:
+    except OSError as error:
+        if error.errno not in (errno.EACCES, errno.EPERM, errno.EROFS):
+            raise
         checks[name] = True
 try:
     s = socket.socket()
-    s.settimeout(1)
-    s.connect(('127.0.0.1', {self.provider.server.server_port}))
-    checks['command_network_denied'] = False
     s.close()
-except OSError:
-    checks['command_network_denied'] = True
+    checks['command_network_sockets_denied'] = False
+except PermissionError:
+    checks['command_network_sockets_denied'] = True
+try:
+    with socket.create_connection(('127.0.0.1', {self.provider.server.server_port}), timeout=1):
+        pass
+    checks['command_provider_connection_denied'] = False
+except PermissionError:
+    checks['command_provider_connection_denied'] = True
 checks['host_project_absent'] = not pathlib.Path({str(self.source)!r}).exists()
 checks['editor_socket_absent'] = not pathlib.Path({str(self.socket_path)!r}).exists()
 print(json.dumps(checks))

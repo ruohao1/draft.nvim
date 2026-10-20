@@ -49,3 +49,23 @@ The isolated profile directs the built-in OpenAI provider to loopback using
 `openai_base_url`; only synthetic credentials enter the probes. The outer
 network remains available so a passed command denial cannot be explained by
 outer network isolation. Actual-account access and refresh are untested.
+
+## First CI attempt
+
+[Run 39472837116](https://github.com/ruohao1/draft.nvim/actions/runs/39472837116)
+tested `4b1a9aa5b77fb04b90b86a5dc1e052f48789f76e`. All 68 default suites
+passed; the optional runtime audit failed with three fixture failures. Unlike
+the development host, the CI runner successfully executed nested sandboxed
+commands. A real isolated edit and interrupted terminal event were observed,
+with graceful worker exits and 0600 rollout files; resume checks were not reached.
+
+The write-denial probe expected only `PermissionError`, but a read-only mount
+correctly returned `EROFS`. The probe now accepts only EACCES, EPERM or EROFS;
+unrelated filesystem errors still fail. The provider fixture also treated
+Codex's WebSocket upgrade attempts as unexpected GET requests. It now refuses
+only the recognized `/v1/responses` WebSocket handshake with HTTP 426, allowing
+the observed HTTP fallback; other GETs still fail the audit. Command-to-provider
+connection denial is still asserted, alongside a separate socket-creation
+denial assertion. Both fixture corrections follow actual CI failures, not
+relaxed runtime policy. The complete confinement and resume gate remains open
+until the corrected audit passes.

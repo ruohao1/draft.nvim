@@ -30,6 +30,7 @@ class Provider:
     def __init__(self):
         self.requests = []
         self.errors = []
+        self.websocket_probes = 0
         self.replies = queue.Queue()
         self.streaming = threading.Event()
         self.gate = threading.Event()
@@ -41,6 +42,12 @@ class Provider:
                 pass
 
             def do_GET(self):
+                if (self.path == "/v1/responses"
+                        and self.headers.get("Upgrade", "").lower() == "websocket"
+                        and owner.websocket_probes < 16):
+                    owner.websocket_probes += 1
+                    self.send_error(426, "This fixture supports Responses over HTTP")
+                    return
                 owner.errors.append("Unexpected GET " + self.path)
                 self.send_error(404)
 
