@@ -1,7 +1,8 @@
 # Managed Codex runtime validation
 
 Date: 2026-10-20. [ISQ-491](https://linear.app/isqrd/issue/ISQ-491).
-This is an implementation-stage record; managed Codex is not yet exposed.
+Managed Codex is implemented behind the complete optional `chat` configuration.
+The supported-runner controller audit below is the final runtime acceptance gate.
 
 ## Baseline and explicit opt-in
 
@@ -32,9 +33,9 @@ Both sandbox layers and host policy remain intact.
 
 The existing workflow now accepts an explicit `codex_runtime` boolean input.
 Its default remains false. The optional job steps reuse the existing narrow
-Bubblewrap AppArmor profile and the same audit; positive results are pending.
-No closed state-artifact policy can be admitted until a completed real-runtime
-turn and stopped-worker resume produce their metadata inventory.
+Bubblewrap AppArmor profile and the same audit. The initial gate required a
+completed real-runtime turn and stopped-worker resume before admitting a closed
+state-artifact policy; the passing inventories are recorded below.
 
 The [official 0.163.0 release](https://github.com/openai/codex/releases/tag/rust-v0.163.0)
 archive was downloaded to temporary storage and verified against published
@@ -67,8 +68,8 @@ only the recognized `/v1/responses` WebSocket handshake with HTTP 426, allowing
 the observed HTTP fallback; other GETs still fail the audit. Command-to-provider
 connection denial is still asserted, alongside a separate socket-creation
 denial assertion. Both fixture corrections follow actual CI failures, not
-relaxed runtime policy. The complete confinement and resume gate remains open
-until the corrected audit passes.
+relaxed runtime policy. The complete confinement and resume gate remained open until the corrected
+audit passed below.
 
 ## Bounded transport implementation
 
@@ -151,7 +152,7 @@ selected project MCP configuration and checks that it never starts.
 The local production-helper run (`run-k6y2jyac`) passed the runner check and failed
 all five installed cases at the pre-prompt nested namespace check, with no cleanup
 errors. This continues to identify an unsupported host. The same production audit
-must pass on the supported disposable runner before Task 3 is complete.
+was then repeated on the supported disposable runner, as recorded below.
 
 
 The production-helper [CI run 39478329838](https://github.com/ruohao1/draft.nvim/actions/runs/39478329838)
@@ -162,3 +163,71 @@ guards and stopped seals. Injected selected-project MCP configuration did not
 start its sentinel process or emit an MCP event; only the configured local
 provider received a request. No new retained artifact family was required.
 Scratch aliases stayed outside retained state. Task 3 is complete.
+
+
+## Managed editor and production-controller acceptance
+
+At `90db620a99f3f92a28c51ef7dc4bdae3462e3f85`, the targeted Codex editor, turn, runtime-runner and TUI suites passed
+(`run-wwto1h7g`). The TUI suite ran all 12 cases; the default runtime suite skipped
+its five installed cases as designed. Earlier complete provider-free validation
+passed 73/73 suites (`run-2cs9hvpk`). The complete implementation at the commit
+above also passed 73/73 suites (`run-jbhdadck`); formatting and diff checks passed.
+
+The Codex editor cases use public commands and the production controller, frozen
+review and publisher. A held terminal event keeps the project unchanged and
+review unavailable. Explicit Accept changes only the visited file; Reject leaves
+its original bytes. Source drift produces blocked receipts and recovery status,
+with no publication or automatic retry. Partial decisions survive a local UTF-8
+LF correction and Freeze without another model request. Old keys/dialogs cannot
+approve the replacement. The next explicit request resumes the original thread,
+contains the confirmed decisions/correction notice, and exposes only the pending
+file for editing. Final approval publishes the exact corrected bytes.
+
+CRLF and missing-final-newline corrections remain unsupported, following the
+existing byte policy. Refusal preserves the user's correction buffer, its options
+and project bytes. The replacement proposal uses a new writer journal; prior
+receipts remain in review history. Native/OpenCode regressions use the same
+publisher unchanged.
+
+Health initially reached native credential-reading probes despite passive chat.
+The setup/open-chat regression failed in `run-m5tgaf25`; health now defers native
+account probes while managed chat is configured or open. All 12 targeted
+setup/editor/runtime/health suites passed afterward (`run-gjt2xgn_`). Native
+backend capability records and explicit native launch behavior are unchanged.
+
+The installed audit's edit/resume and cancellation/resume cases now drive the
+production conversation controller and Codex turn over real editor pipes.
+Only the test launcher adds a local Responses endpoint to the generated profile
+and records method/terminal identities; no public provider override exists.
+Other cases retain direct production sandbox/worker confinement probes.
+The development-host run `run-ep7ppzwq` still failed all five installed cases at
+nested namespace creation before any prompt, with the runner regression passing.
+Supported-runner controller acceptance is pending
+[run 39484117631](https://github.com/ruohao1/draft.nvim/actions/runs/39484117631).
+The first dispatch was cancelled by the push workflow concurrency group and was
+restarted on the same implementation commit.
+
+## Inspected terminal captures
+
+Produced from `90db620a99f3f92a28c51ef7dc4bdae3462e3f85` by:
+
+```sh
+DRAFT_CHAT_CAPTURE_DIR=/tmp/draft-codex-captures \
+  python3 -I -B tests/nvim_ai_chat_ui.py ChatCodexUITest -q
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-codex-captures/codex-chat.ansi \
+  /tmp/draft-codex-captures/codex-chat.png --columns 140
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-codex-captures/codex-review.ansi \
+  /tmp/draft-codex-captures/codex-review.png --columns 140
+```
+
+The terminal scenario passed and both renders were visually inspected at
+140 columns × 42 rows. They contain only synthetic files and prompts.
+
+![Codex composer before explicit Send](2026-10-20-codex-chat.png)
+
+![Pending frozen proposal before publication](2026-10-20-codex-review.png)
+
+Real-account authentication, live token refresh and paid model requests remain
+untested. No login or original credential modification was performed.
