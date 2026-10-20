@@ -25,6 +25,7 @@ Track [ISQ-491](https://linear.app/isqrd/issue/ISQ-491/bring-codex-into-drafts-m
 - Pin CLI **0.163.0** and its generated stable schemas; refuse version mismatch.
 - Retain **1–16 files / 1 MiB** aggregate selection and existing byte/mode checks.
 - Retain worker limits: **16 MiB/frame, 32 MiB/stream, 20000 messages**.
+  Codex additionally enforces **depth 32** before decoding (execution ruling).
 - Retain **60 s startup, 15 s RPC, 180 s generation, 5 s cancellation** deadlines;
   shutdown has **3 s each** for EOF, TERM and KILL. Output never renews deadlines.
 - Retained state: **64 MiB, 4096 entries, depth 8**; owned 0700 directories and
@@ -146,30 +147,30 @@ Modify `tests/run.py`, `tests/README.md`, `.github/workflows/linux-tests.yml`.
 - Produces: fake executable fixture selected through test-owned configuration;
   it supports `--version`, `app-server` and deterministic protocol fault cases.
 
-- [ ] Write `test_codex_envelopes_and_idle_pump`: use frames without `jsonrpc`,
+- [x] Write `test_codex_envelopes_and_idle_pump`: use frames without `jsonrpc`,
   timestamped notifications, interleaved callbacks and completion after the
   `turn/start` response. Assert callbacks still run with no pending RPC.
   Add `test_acp_stays_strict`: the same Codex envelope is rejected in default mode.
   After the RPC settles, `assert worker.poll_events(deadline=deadline) > 0`
   and `assert notifications[-1]["method"] == "turn/completed"`.
-- [ ] Run `python3 -I -B tests/run.py nvim_ai_codex_worker nvim_ai_acp_worker`;
+- [x] Run `python3 -I -B tests/run.py nvim_ai_codex_worker nvim_ai_acp_worker`;
   expect new constructor/pump tests to fail before the implementation.
-- [ ] Implement the explicit codec branch and idle event pump. Validate the
+- [x] Implement the explicit codec branch and idle event pump. Validate the
   observed optional `emittedAtMs` integer on Codex notifications; reject invalid
   envelope structure, duplicate JSON keys/IDs and unsolicited responses.
   Allow additive response payload data only outside authority validation.
   Keep denied client-request replies bounded and preserve cancel responsiveness
   during blocked/partial writes; a partial frame cannot be followed by another.
-- [ ] Add `test_terminal_validation_during_close`: a late duplicate/contradictory
+- [x] Add `test_terminal_validation_during_close`: a late duplicate/contradictory
   terminal callback marks `Exit.settled` false even when exit code is zero.
   Codex shutdown must continue semantic notification validation while reaping,
   without answering new client requests or initiating work. Callback failure
   must not prevent cleanup. Preserve the existing ACP shutdown behavior.
   Assert `result.reaped is True` and `result.settled is False`.
-- [ ] Run the two suites with malformed UTF-8/JSON, oversized/deep frames,
+- [x] Run the two suites with malformed UTF-8/JSON, oversized/deep frames,
   cumulative budget, EOF, blocked writes, delayed notifications and sustained
   output cases. Assert bounded failure, no deadline renewal and reaped workers.
-- [ ] Commit `feat: support bounded Codex app-server transport`.
+- [x] Commit `feat: support bounded Codex app-server transport`.
 
 ### Task 3: Own the Private Codex Profile and Retained State
 

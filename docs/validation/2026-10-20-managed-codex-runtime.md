@@ -69,3 +69,19 @@ connection denial is still asserted, alongside a separate socket-creation
 denial assertion. Both fixture corrections follow actual CI failures, not
 relaxed runtime policy. The complete confinement and resume gate remains open
 until the corrected audit passes.
+
+## Bounded transport implementation
+
+The shared worker now has an explicit Codex wire mode, an idle notification
+pump and semantic notification validation during shutdown. ACP remains the
+default. Fourteen Codex tests and all nineteen existing ACP tests pass; the full
+provider-free run passed 69/69 suites (`.test-results/run-vz2fddtv`).
+`stylua --check lua tests` and `git diff --check` also passed.
+
+Coverage includes timestamped/early/late notifications, duplicate terminal
+callbacks, disabled client operations, malformed envelopes/UTF-8, byte/frame/
+message limits, blocked writes, EOF, idle state checks and absolute deadlines.
+A depth regression first failed because Python 3.14 accepts deeply nested JSON;
+Codex now checks a depth limit of 32 before parsing, matching the editor limit.
+This may refuse future legitimate deeper payloads until compatibility is reviewed.
+Transport tests do not establish real-runtime confinement or account access.

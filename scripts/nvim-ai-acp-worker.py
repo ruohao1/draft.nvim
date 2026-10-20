@@ -1,4 +1,4 @@
-"""Bounded ACP pipe/process seam for one isolated conversational worker.
+"""Bounded ACP/Codex pipe/process seam for one isolated conversational worker.
 
 The trusted caller supplies staging.sandbox's Bubblewrap command/environment:
 PID isolation and die-with-parent are required, not provided by this module.
@@ -13,6 +13,7 @@ from contextlib import ExitStack
 import json
 import math
 import os
+import re
 import select
 import subprocess
 import time
@@ -63,7 +64,10 @@ class Exit(namedtuple("Exit", "reaped output_closed forced returncode fault pend
 
 class Worker:
     def __init__(self, command, *, env, rpc_timeout=15, stop_timeout=3,
-                 on_notification=None, on_request=None, guard=None, on_write_wait=None):
+                 on_notification=None, on_request=None, guard=None, on_write_wait=None, wire="acp"):
+        if wire not in ("acp", "codex"):
+            raise ValueError("Unsupported worker wire mode")
+        self.wire = wire
         self.rpc_timeout, self.stop_timeout = rpc_timeout, stop_timeout
         self.on_notification, self.on_request = on_notification, on_request
         self.on_write_wait = on_write_wait
@@ -89,6 +93,8 @@ class Worker:
             parent_ends.pop_all()  # close() now owns these streams.
 
     def _fail(self, reason):
+        if self.wire == "codex":
+            reason = reason.replace("ACP", "Codex")
         self.fault = self.fault or reason
         raise ProtocolError(self.fault) from None
 
@@ -136,20 +142,38 @@ class Worker:
         if len(raw) > MAX_FRAME or self.count > MAX_MESSAGES:
             self._fail("ACP frame or message budget exceeded")
         try:
-            value = json.loads(raw.decode("utf-8"), object_pairs_hook=_object,
+            text = raw.decode("utf-8")
+            if self.wire == "codex":
+                # Python's decoder recursion limit differs across supported versions.
+                depth = 0
+                for match in re.finditer(r'"[^"\\]*(?:\\.[^"\\]*)*"|[{}\[\]]', text):
+                    token = match.group()
+                    if token in ("{", "["):
+                        depth += 1
+                        if depth > 32:
+                            self._fail("Malformed Codex JSON depth budget exceeded")
+                    elif token in ("}", "]"):
+                        depth -= 1
+            value = json.loads(text, object_pairs_hook=_object,
                                parse_constant=_number, parse_float=_number)
         except (ValueError, UnicodeError, RecursionError):
             self._fail("Malformed ACP JSON")
-        if not isinstance(value, dict) or value.get("jsonrpc") != "2.0":
+        if not isinstance(value, dict) or (self.wire == "acp" and value.get("jsonrpc") != "2.0"):
             self._fail("Malformed ACP message")
+        envelope = {"jsonrpc"} if self.wire == "acp" else set()
         if "id" in value and not _identifier(value["id"]):
             self._fail("Malformed ACP identity")
         if "method" in value:
             method = value["method"]
+            if self.wire == "codex" and "id" not in value:
+                envelope.add("emittedAtMs")
+                if ("emittedAtMs" in value and (type(value["emittedAtMs"]) is not int
+                        or not 0 <= value["emittedAtMs"] <= 2 ** 53 - 1)):
+                    self._fail("Malformed Codex notification timestamp")
             if (not isinstance(method, str) or not 0 < len(method) <= 128
                     or any(ord(char) < 33 or ord(char) > 126 for char in method)
                     or not isinstance(value.get("params", {}), dict)
-                    or set(value) - {"jsonrpc", "id", "method", "params"}):
+                    or set(value) - (envelope | {"id", "method", "params"})):
                 self._fail("Malformed ACP request or notification")
             if "id" in value:
                 if value["id"] in self.request_ids:
@@ -157,7 +181,7 @@ class Worker:
                 self.request_ids.add(value["id"])
         else:
             if ("id" not in value or ("result" in value) == ("error" in value)
-                    or set(value) - {"jsonrpc", "id", "result", "error"}):
+                    or set(value) - (envelope | {"id", "result", "error"})):
                 self._fail("Malformed ACP response")
             if "result" in value and not isinstance(value["result"], dict):
                 self._fail("Malformed ACP result")
@@ -171,7 +195,8 @@ class Worker:
 
     def _send(self, value, deadline):
         self._live()
-        payload = (json.dumps(dict(jsonrpc="2.0", **value), allow_nan=False) + "\n").encode()
+        frame = dict(jsonrpc="2.0", **value) if self.wire == "acp" else value
+        payload = (json.dumps(frame, allow_nan=False) + "\n").encode()
         if len(payload) > MAX_FRAME:
             self._fail("ACP input frame budget exceeded")
         offset = 0
@@ -265,6 +290,10 @@ class Worker:
                     raise ProtocolError(f"ACP request refused: {value['error'].get('code')}")
                 return True, value["result"]
             processed += 1
+            self._dispatch(value, deadline)
+
+    def _dispatch(self, value, deadline):
+        try:
             if "id" not in value:
                 if self.on_notification:
                     self.on_notification(value)
@@ -272,6 +301,42 @@ class Worker:
                 response = (self.on_request(value) if self.on_request else
                             {"error": {"code": -32601, "message": "Client capability disabled"}})
                 self._send(dict(response, id=value["id"]), deadline)
+        except Exception:
+            if self.wire == "codex":
+                self._fail("Codex event handling failed")
+            raise
+
+    def poll_events(self, *, deadline, timeout=.05):
+        """Pump Codex notifications between RPCs without renewing the turn deadline."""
+        if (type(deadline) not in (int, float) or not math.isfinite(deadline)
+                or type(timeout) not in (int, float) or not math.isfinite(timeout)
+                or not 0 < timeout <= 1):
+            raise ValueError("Event deadline/timeout must be finite; timeout within (0, 1]")
+        self._live()
+        if self.wire != "codex" or self.pending is not None:
+            self._fail("Event polling requires an idle Codex worker")
+        poll_deadline = time.monotonic() + timeout
+        processed = 0
+        while True:
+            self._poll_guard()
+            now = time.monotonic()
+            if now >= deadline:
+                self._fail("Codex event deadline exceeded")
+            if now >= poll_deadline or processed >= 64:
+                return processed
+            value = self._message()
+            if value is not None:
+                if "method" not in value:
+                    self._fail("Unexpected Codex response without a pending request")
+                self._dispatch(value, deadline)
+                processed += 1
+                continue
+            if self.eof:
+                if processed:
+                    return processed  # The owner must first validate any terminal event.
+                self._fail("Codex output closed before completion")
+            if select.select([self.output], [], [], min(.1, deadline - now, poll_deadline - now))[0]:
+                self._read()
 
     def request(self, method, params, *, timeout=None):
         return self.receive(self.begin(method, params, timeout=timeout))
@@ -286,6 +351,12 @@ class Worker:
                     if value is not None:
                         if "method" not in value:
                             self._fail("Unexpected ACP response during shutdown")
+                        if self.wire == "codex":
+                            if "id" in value:
+                                self._fail("Unexpected Codex request during shutdown")
+                            # Late terminal events still invalidate semantic completion.
+                            # closing=True prevents callbacks from writing to the peer.
+                            self._dispatch(value, deadline)
                         continue  # Never execute client operations during shutdown.
                 except ProtocolError:
                     continue
