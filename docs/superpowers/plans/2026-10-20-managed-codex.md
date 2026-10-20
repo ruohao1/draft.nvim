@@ -97,31 +97,31 @@ Modify `tests/run.py`, `tests/README.md`, `.github/workflows/linux-tests.yml`.
 - Produces: exact stopped-state path/type/mode inventory after initialize,
   completed turn, interrupted turn and stopped-worker resume; no payload bytes.
 
-- [ ] Write `test_opt_in_is_explicit` and `test_pinned_cli_confinement`: absent
+- [x] Write `test_opt_in_is_explicit` and `test_pinned_cli_confinement`: absent
   flag skips installed execution; an explicit wrong version or denied namespace
   fails. Assert workspace write succeeds, private-state and `/tmp` escape writes
   fail, actual project/editor socket are absent, and a command cannot reach the
   fixture while the app-server engine demonstrably can.
   Key assertions: `assert command_exit == 0`, `assert all(checks.values())`,
   `assert len(provider.requests) > 0`; a namespace error cannot produce `checks`.
-- [ ] Run `python3 -I -B tests/run.py --codex /absolute/path/to/codex nvim_ai_codex_runtime`.
+- [x] Run `python3 -I -B tests/run.py --codex /absolute/path/to/codex nvim_ai_codex_runtime`.
   Initially expect the missing runner option/test harness to fail, then retain
   a real unsupported-host result separately from implementation failures.
-- [ ] Implement the opt-in harness using the pinned stable schema and the
+- [x] Implement the opt-in harness using the pinned stable schema and the
   disposable launch shape in the preflight. Add
   `test_empty_thread_resume_fails`, `test_completed_thread_resumes_after_exit`
   and `test_interrupt_requires_terminal`: assert the empty-thread -32600
   negative control, matching thread ID after a completed edit and process exit,
   and matching interrupted terminal event before continuation. Record artifact
   metadata only after reaping; do not count an ID-only fake as resume evidence.
-- [ ] Add `workflow_dispatch.inputs.codex_runtime` as a boolean, default false,
+- [x] Add `workflow_dispatch.inputs.codex_runtime` as a boolean, default false,
   to the existing Linux workflow. Its opt-in steps download the official
   `rust-v0.163.0/codex-x86_64-unknown-linux-musl.tar.gz` release asset and verify
   SHA-256 `beb339e8ecd9ba057a6bb2dc81ad8ca474812edfbf0fc5056ca818797648dde4`
   before extraction/execution. Inspect archive paths and resolve its executable
   unambiguously. Reuse the workflow's existing narrow Bubblewrap AppArmor profile;
   do not change host sysctls, weaken either sandbox or use legacy Landlock.
-- [ ] Run the optional workflow on this feature ref and the explicit local
+- [x] Run the optional workflow on this feature ref and the explicit local
   command above where supported. Require actual executed confinement, completion,
   cancellation and resume assertions, not skipped tests. If nested confinement
   still fails, record the failure and pause dependent runtime/store work; Task 2
@@ -129,7 +129,7 @@ Modify `tests/run.py`, `tests/README.md`, `.github/workflows/linux-tests.yml`.
   identity, commands, CI URL, exact inventory and any unproved behaviors.
   The checksum above is published metadata from the [official release](https://github.com/openai/codex/releases/tag/rust-v0.163.0);
   this planning turn did not download/execute that archive.
-- [ ] Commit `test: establish pinned Codex runtime gate`.
+- [x] Commit `test: establish pinned Codex runtime gate`.
 
 ### Task 2: Support Codex Frames Without Relaxing ACP
 

@@ -85,3 +85,46 @@ A depth regression first failed because Python 3.14 accepts deeply nested JSON;
 Codex now checks a depth limit of 32 before parsing, matching the editor limit.
 This may refuse future legitimate deeper payloads until compatibility is reviewed.
 Transport tests do not establish real-runtime confinement or account access.
+
+## Supported-runner gate passed
+
+[Run 39474588025](https://github.com/ruohao1/draft.nvim/actions/runs/39474588025)
+tested `c0db8bc947bff7666e4bc0c808125c9481e3c6d9`. All 68 default suites
+passed, followed by all five explicit Codex audit tests (34.468 seconds, zero
+skips). The downloaded log `run-dvvizwkw/nvim_ai_codex_runtime.log` records
+completed edit, resumed thread, empty thread/refused resume, interruption,
+resume after interruption, and confinement inventories.
+
+The full probe demonstrated selected-workspace writes, denied private-state and
+outside-workspace writes, denied network socket creation and provider
+connections from commands, and absent host project/editor socket. The engine
+successfully reached the local provider. Both sandbox layers stayed enabled.
+The native CLI edited only the selected copy; source bytes remained unchanged.
+Completed and interrupted threads resumed with their original thread IDs after
+workers exited. Empty-thread resume remained the expected -32600 failure.
+
+Observed retained root entries were `auth.json`, `config.toml`,
+`.sandbox_migration`, `installation_id`, `sessions`, `thread-writer-locks`, `tmp`,
+and these six exact database families with optional `-wal`/`-shm` sidecars:
+`goals_1.sqlite`, `logs_2.sqlite`, `memories_1.sqlite`, `queue_1.sqlite`,
+`state_5.sqlite`, `thread_history_1.sqlite`. Rollouts appeared under
+`sessions/YYYY/MM/DD/rollout-YYYY-MM-DDTHH-MM-SS-<thread-uuid>.jsonl`.
+Writer-lock inventory contained `.coordination.lock`; stopped helper scratch
+contained `tmp/arg0-linux`. Directories were 0700 and regular files 0600 except
+exact root `installation_id` (0644, 36 bytes). All regular files had one link.
+
+| Stopped state | Entries | Regular-file bytes |
+| --- | ---: | ---: |
+| Completed edit | 31 | 3583046 |
+| Resumed completed thread | 25 | 3406496 |
+| Empty thread | 23 | 2706350 |
+| Empty resume refused | 22 | 2780078 |
+| Interrupted turn | 31 | 3471977 |
+| Resumed interrupted thread | 31 | 4016639 |
+| Confined completed turn | 31 | 3452232 |
+
+The two successful resumes grew the existing rollout files rather than creating
+replacement thread identities. These are discovery-harness results with a real
+CLI and synthetic provider. The production store/turn/controller still need the
+same acceptance checks in later plan tasks. The development host remains
+unsupported; real-account access and refresh remain untested.
