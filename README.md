@@ -1,12 +1,12 @@
 # Draft.nvim
 
-An OpenCode conversation beside your code, with approval before project writes.
+Codex or OpenCode beside your code, with approval before project writes.
 
-Start with [OpenCode chat](#start-with-opencode-chat): discuss selected saved
+Start with [OpenCode chat](#start-with-opencode-chat) or [managed Codex](#managed-codex-chat): discuss selected saved
 files, request an edit, inspect its frozen diff, then approve or reject it.
 `:NvimAIChat` keeps the conversation and review inside Neovim. Tmux is optional.
 
-Draft is an early Linux plugin. In chat, OpenCode edits isolated copies; project
+Draft is an early Linux plugin. In managed chat, the agent edits isolated copies; project
 files change only when you approve a frozen proposal. Review happens after
 generation finishes, before project writes.
 
@@ -22,7 +22,9 @@ has **after-write review**: the agent writes first, then you inspect its changes
   **3.14.4**, Git **2.53.0**, and Bubblewrap **0.11.1**.
 - The CLI for your chosen backend, installed and authenticated separately.
   Managed OpenCode and staging require exactly **OpenCode 1.18.34 / ACP 1**;
-  other OpenCode versions are refused.
+  other OpenCode versions are refused. Managed Codex requires exactly **Codex
+  0.163.0** and a Linux host that supports its nested sandbox; readiness is
+  checked before sending a prompt.
 - `rg` (ripgrep) for the staged file picker.
 - Optional tmux. Health recommends **3.7+** for the full tmux integration;
   the beta release is tested with **3.7c**. Without tmux, the native
@@ -111,14 +113,14 @@ submission. A refused Send keeps your unsent draft. Choose a supported
 file; Draft does not change file permissions for you.
 
 After Send, chat shows its current startup step: checking credentials, starting
-OpenCode, checking compatibility, opening or resuming the session, and confirming
+the selected backend, checking compatibility, opening or resuming the session, and confirming
 the model. Use `gc` or `:NvimAIChatCancel` to stop waiting. Failures show a recovery
 action; retry is offered only when the controller proves it safe.
 
 `:NvimAIStatus` reports the active chat, including its startup step or failure
-reason. `:checkhealth draft` shows the same chat state and labels native-companion
-checks separately. Opening chat checks no account access; readiness is checked
-on explicit Send. These diagnostics exclude credentials and conversation text.
+reason. `:checkhealth draft` shows the same chat state and defers native account
+probes while managed chat is configured or open. Opening chat checks no account
+access; readiness is checked on explicit Send. These diagnostics exclude credentials and conversation text.
 See the [startup validation and measured timings](docs/validation/2026-10-03-chat-startup.md).
 
 Chat always uses **review before write**, regardless of the saved
@@ -130,6 +132,52 @@ If Ctrl-S freezes terminal output, press Ctrl-Q to resume. To send without
 Ctrl-S, press Escape and run `:NvimAIChatSend`.
 
 ![OpenCode chat with the review-before-write label](docs/images/opencode-chat-start.png)
+
+## Managed Codex chat
+
+The tagged beta above provides OpenCode chat. Managed Codex requires a checkout
+containing this integration. Configure it on the first setup call:
+
+```lua
+require("draft").setup({
+  chat = {
+    backend = "codex",
+    model = "openai/<advertised-codex-model>",
+    auth_file = "/absolute/path/to/codex/auth.json",
+    -- codex = "/absolute/path/to/codex",
+  },
+})
+```
+
+Use the same `:NvimAIChat`, Send, diff, Accept/Reject and Edit/Freeze workflow.
+`chat` is a complete configuration: it does not inherit staged credentials,
+provider options or saved preferences. Omit `chat` to keep the existing OpenCode
+setup, or set `backend = "opencode"` with its own model/auth/provider options.
+Both forms accept `root`, `python` and `bwrap`; only the chosen CLI is required.
+The backend stays fixed until that conversation closes. Native companions and
+standalone staging retain their existing behavior.
+
+Codex requires an explicit `openai/model` from its advertised catalog. Send checks
+CLI **0.163.0**, the model and nested command sandbox before submitting the turn.
+Unsupported hosts fail before the prompt; there is no unconfined or native
+fallback. Setup, opening/hiding chat, status and health do not import credentials
+or start app-server. `:NvimAIChatModel` selects an advertised model for a later
+explicit turn.
+
+On first Send, Draft imports only the configured, owned, single-link **0600**
+credential file: an OpenAI API key or saved ChatGPT login tokens. It creates a
+private copy, leaves the original unchanged and retains private refresh writes
+between stopped workers. It does not copy global/project configuration, export
+credentials or initiate login. Close removes safely owned private state; unsafe
+state requires recovery. Installed-runtime checks use synthetic credentials and
+a local provider; real-account access and actual token refresh remain unverified.
+
+A start acknowledgement never opens a diff. Draft waits for matching terminal
+completion, process exit and state/source validation. Cancel needs a matching
+interrupted terminal event before continuation is eligible. Retry is explicit
+and requires proven pre-submission cleanup; failed resume never starts a new
+thread or replays the request automatically. See the [runtime evidence and host
+limits](docs/validation/2026-10-20-managed-codex-runtime.md).
 
 | Command | Purpose |
 | --- | --- |

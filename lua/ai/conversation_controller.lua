@@ -1,4 +1,4 @@
--- Trusted internal assembly; only explicit owner actions start an ACP worker.
+-- Trusted internal assembly; only explicit owner actions start an agent worker.
 local M = {}
 local sources = require("ai.staged_sources")
 local review = require("ai.staged_review")
@@ -127,6 +127,8 @@ function M.new(options)
     root = true,
     selection = true,
     model = true,
+    backend = true,
+    codex = true,
     opencode = true,
     bwrap = true,
     python = true,
@@ -148,6 +150,27 @@ function M.new(options)
       return nil, "Unknown trusted conversation option"
     end
   end
+  local backend = options.backend or "opencode"
+  if
+    not ({ codex = true, opencode = true })[backend]
+    or (backend == "opencode" and options.codex ~= nil)
+    or (
+      backend == "codex"
+      and (
+        options.opencode ~= nil
+        or options.provider ~= nil
+        or type(options.model) ~= "string"
+        or not options.model:match("^openai/[%w_.-]+$")
+        or type(options.auth_file) ~= "string"
+        or options.auth_file:sub(1, 1) ~= "/"
+        or #options.auth_file > 4096
+        or options.auth_file:find("[%z\1-\31\127]")
+      )
+    )
+  then
+    return nil,
+      "Invalid managed backend configuration; Codex needs an openai/model and absolute chat.auth_file"
+  end
   if
     not script
     or type(options.root) ~= "string"
@@ -168,19 +191,21 @@ function M.new(options)
     root = options.root,
     selection = options.selection,
     model = options.model,
+    backend = backend,
     driver = wrapper,
   })
   if not owner then
     return nil, why
   end
   local python, python_error = tools.resolve(options.python or "python3")
-  local opencode, opencode_error = tools.resolve(options.opencode or "opencode")
+  local agent, agent_error = tools.resolve(options[backend] or backend)
   local bwrap, bwrap_error = tools.resolve(options.bwrap or "bwrap")
-  if not python or not opencode or not bwrap then
-    return nil, python_error or opencode_error or bwrap_error
+  if not python or not agent or not bwrap then
+    return nil, python_error or agent_error or bwrap_error
   end
   local config, cleanup = private_config({
-    opencode = opencode,
+    backend = backend,
+    [backend] = agent,
     bwrap = bwrap,
     model = options.model,
     auth_file = options.auth_file,

@@ -70,7 +70,7 @@ local function projection(snapshot, notice)
   end
   local header = {
     "Draft · " .. (snapshot.phase or "idle") .. " · next: " .. (snapshot.desired_model or ""),
-    "OpenCode · review before write",
+    (snapshot.backend == "codex" and "Codex" or "OpenCode") .. " · review before write",
     "Scope: " .. table.concat(snapshot.selection or {}, ", "),
     "Ctrl-S send · q hide · gi compose · g? actions",
     "gd review · gm model for next turn",

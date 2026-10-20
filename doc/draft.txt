@@ -113,6 +113,8 @@ tmux_project_pairs      Opt into the legacy session-pair routing convention.
                         Stale/mismatched pairs refuse launch.
 staged                  Session-only staging preferences. Explicit enabled/model/
                         auth_file choices override saved preferences. See below.
+chat                    Optional complete managed-chat configuration. Omit it to
+                        keep staged OpenCode preferences. See |draft-chat-codex|.
 status.redraw           Optional status redraw callback. The default uses
                         Neovim's redrawstatus command.
 
@@ -218,9 +220,9 @@ stop waiting. Failures include a recovery action. Retry is offered only when the
 controller proves it safe; an unsubmitted request alone does not prove this.
 
 :NvimAIStatus reports the active chat's phase and startup step or failure reason.
-:checkhealth draft shows the same chat state, with native-companion checks labeled
-separately. Opening chat checks no account access; readiness is checked on explicit
-Send. Diagnostics exclude credentials and conversation text. Recorded startup
+:checkhealth draft shows the same chat state and defers native account probes
+while managed chat is configured or open. Opening chat checks no account access;
+readiness is checked on explicit Send. Diagnostics exclude credentials and conversation text. Recorded startup
 timings and limitations are in docs/validation/2026-10-03-chat-startup.md.
 
 Chat-buffer keys: Ctrl-S send (normal/insert); q hide (normal); gi compose;
@@ -251,6 +253,50 @@ outcomes from writer receipts, separately from the assistant's text, including
 pending, accepted, rejected, cancelled, blocked and uncertain states.
 
 Return to chat with f or :NvimAIChat. Closing only the diff tab makes no decision.
+
+MANAGED CODEX                                              *draft-chat-codex*
+
+Managed Codex requires a checkout containing this integration; the tagged
+v0.1.0-beta.1 release provides OpenCode chat. On the first setup call:
+>
+  require("draft").setup({
+    chat = {
+      backend = "codex",
+      model = "openai/<advertised-codex-model>",
+      auth_file = "/absolute/path/to/codex/auth.json",
+      -- codex = "/absolute/path/to/codex",
+    },
+  })
+<
+Use the existing chat commands, frozen diff and explicit Accept/Reject. A chat
+configuration is complete: no staged credentials, provider options or saved
+preferences are inherited. Omit chat for the existing OpenCode defaults, or use
+backend="opencode" with explicit model/auth/provider options. Both forms accept
+root, python and bwrap; only the selected backend CLI is required. Backend
+identity is fixed until close. Native companions and standalone staging retain
+their existing behavior.
+
+Send requires Codex 0.163.0, an advertised openai/model and a Linux host supporting
+its nested command sandbox. It checks readiness before submitting a prompt;
+unsupported hosts receive no unconfined or native fallback. Opening/hiding chat,
+setup, status and health do not import credentials or start app-server. Model
+selection remains an explicit next-turn action with :NvimAIChatModel.
+
+On first Send, Draft imports only an explicitly configured, owned, single-link
+0600 auth file containing an OpenAI API key or saved ChatGPT login tokens. The
+private copy can retain refresh writes across workers; the original stays
+unchanged. No global/project config import, credential export or login occurs.
+Close removes safely owned private state; unsafe state requires recovery.
+Synthetic local-provider tests validate the installed runtime. Real-account
+access and actual token refresh remain unverified.
+
+A turn-start acknowledgement cannot expose a proposal. Matching terminal
+completion, settled process exit and state/source validation precede the frozen
+diff. Cancel requires a matching interrupted terminal for eligible continuation.
+Retry requires positive pre-submission cleanup evidence and an explicit action;
+failed resume never starts a new thread or replays a request automatically.
+See docs/validation/2026-10-20-managed-codex-runtime.md for supported-runner proof
+and the development host's pre-prompt nested-sandbox refusal.
 
 MANUAL CORRECTIONS                                      *draft-chat-corrections*
 

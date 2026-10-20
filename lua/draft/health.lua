@@ -220,18 +220,23 @@ function M.check(options)
   local ai = package.loaded["ai"]
   local chat = ai and ai.conversation_status and ai.conversation_status()
   if chat then
-    report("info", "OpenCode chat (review before write): " .. chat.state)
+    local label = chat.backend == "codex" and "Codex" or "OpenCode"
+    report("info", label .. " chat (review before write): " .. chat.state)
     if chat.startup then
       report("info", chat.startup)
     end
     if chat.reason then
       report(chat.state == "failed" and "error" or "warn", chat.reason)
     elseif chat.turn == 0 then
-      report("info", "OpenCode chat readiness is checked on explicit Send.")
+      report("info", label .. " chat readiness is checked on explicit Send.")
     end
   end
+  if ai and ai.has_managed_chat and ai.has_managed_chat() then
+    report("info", "Native account probes deferred; managed chat readiness is checked on Send.")
+    return true
+  end
   for _, name in ipairs({ "codex", "claude", "opencode" }) do
-    local label = name == "opencode" and chat and "opencode native companion" or name
+    local label = chat and name == chat.backend and name .. " native companion" or name
     local ok, value = pcall(backend_health, name)
     if not ok or type(value) ~= "table" then
       report("error", label .. ": local health probe failed.")
