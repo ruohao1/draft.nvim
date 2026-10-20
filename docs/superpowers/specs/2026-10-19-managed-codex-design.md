@@ -6,9 +6,9 @@ Base: `bba5c4bfda8f1f779348bd5b776235924a07c90d`.
 Branch: `feat/isq-491-managed-codex`.
 
 The design is approved; the [implementation plan](../plans/2026-10-20-managed-codex.md)
-awaits review. Managed support is not shipped. Protocol discovery succeeded;
-command confinement inside the existing
-outer sandbox has an unresolved host compatibility gate. See the
+was approved on 2026-10-20. Managed support is not shipped. Protocol discovery
+succeeded; command confinement inside the existing outer sandbox has an
+unresolved host compatibility gate. See the
 [preflight evidence](../../validation/2026-10-19-codex-app-server-preflight.md).
 
 ## Intended result

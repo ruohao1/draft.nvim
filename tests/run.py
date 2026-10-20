@@ -1,7 +1,7 @@
 """Run the provider-free Linux suites with disposable editor state.
 
 Usage: python3 -I -B tests/run.py [suite ...]
-Installed OpenCode probes are deliberately excluded; see tests/README.md.
+Installed provider probes require an explicit flag; see tests/README.md.
 """
 import argparse
 import os
@@ -20,10 +20,13 @@ ROOT = Path(__file__).resolve().parent.parent
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--opencode", type=Path, help="opt in to the installed OpenCode artifact audit")
+    parser.add_argument("--codex", type=Path, help="opt in to the pinned Codex runtime audit")
     parser.add_argument("suites", nargs="*")
     args = parser.parse_args()
     if args.opencode and not args.opencode.is_absolute():
         parser.error("--opencode must be an absolute executable path")
+    if args.codex and not args.codex.is_absolute():
+        parser.error("--codex must be an absolute executable path")
     os.umask(0o077)
     nvim = shutil.which("nvim")
     if not nvim:
@@ -66,6 +69,8 @@ def main():
                 env[key] = str(path)
             if args.opencode:
                 env["NVIM_AI_MANAGED_REAL_OPENCODE"] = str(args.opencode.resolve())
+            if args.codex:
+                env["NVIM_AI_REAL_CODEX"] = str(args.codex.resolve())
             if name == "ai_review":
                 review_root = private / "review"
                 review_root.mkdir(mode=0o700)

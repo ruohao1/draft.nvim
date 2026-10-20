@@ -16,7 +16,7 @@ Prove the pinned runtime's command confinement before exposing managed support.
 tmux and Codex CLI 0.163.0 app-server over stdio. No new package dependencies.
 
 **Spec:** [Approved design](../specs/2026-10-19-managed-codex-design.md).
-User approved the design on 2026-10-20; this implementation plan awaits review.
+User approved the design and implementation plan on 2026-10-20; Native execution selected.
 Work on `feat/isq-491-managed-codex`, based on `bba5c4bfda8f1f779348bd5b776235924a07c90d`.
 Track [ISQ-491](https://linear.app/isqrd/issue/ISQ-491/bring-codex-into-drafts-managed-conversation-and-pre-write-review).
 

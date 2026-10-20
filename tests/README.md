@@ -306,3 +306,26 @@ UI suites above; fixture success does not imply live-account acceptance.
 The first extraction is validated on Linux with Neovim 0.12.4, Python 3.14.4,
 Bubblewrap 0.11.1, Git 2.53.0 and tmux 3.6. This is not a claim that older Neovim,
 macOS, Windows or every real backend/account workflow is supported.
+
+## Optional pinned Codex runtime audit
+
+The default suite runs the Codex opt-in/environment regression and skips the
+installed runtime cases. To opt in explicitly with CLI **0.163.0**:
+
+```sh
+python3 -I -B tests/run.py --codex /absolute/path/to/codex nvim_ai_codex_runtime
+```
+
+This uses synthetic credentials and a loopback Responses SSE provider. It does
+not load account credentials or make paid model requests. An explicit unsupported
+version or sandbox failure fails the audit rather than skipping it. The audit
+checks command confinement while the engine can reach its provider, an isolated
+edit, interruption and exact-thread resume after worker exit. It prints only
+retained-state metadata, never database, rollout or credential contents.
+
+The Linux workflow has a `codex_runtime` dispatch input, default false. When
+selected it verifies the pinned release checksum and runs the same audit on the
+disposable runner with its existing Bubblewrap profile. The current development
+host cannot create Codex's nested namespace; do not weaken either sandbox or
+change host policy to make this test pass. See the
+[runtime evidence](../docs/validation/2026-10-20-managed-codex-runtime.md).
