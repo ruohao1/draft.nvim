@@ -10,7 +10,7 @@ local bindings = {
   { "NvimAIGrants", "ag", "grants", "AI: inspect or revoke temporary grants" },
   { "NvimAIStatus", "as", "show_status", "AI: show companion status" },
   { "NvimAIClose", "ax", "close", "AI: close companion" },
-  { "NvimAIChat", "at", "chat_open", "Draft: OpenCode chat (review before write)" },
+  { "NvimAIChat", "at", "chat_open", "Draft: chat (review before write)" },
   { "NvimAIChatNew", false, "chat_new", "Draft: start a new conversation after close" },
   { "NvimAIChatAttach", false, "chat_attach", "Draft: attach selected saved lines to composer" },
   { "NvimAIChatSend", false, "chat_send", "Draft: explicitly send composer" },
@@ -71,7 +71,8 @@ function M.setup(options)
     return active.runtime
   end
   options = options or {}
-  local state = { stopped = false, runtime = {}, generation = 0 }
+  local explicit_chat, chat_config = options.chat ~= nil, vim.deepcopy(options.chat)
+  local state = { stopped = false, runtime = {}, generation = 0, explicit_chat = explicit_chat }
   local runtime = state.runtime
   local display = require("ai.status").new(
     vim.tbl_extend("keep", options.status or {}, { notify = options.notify })
@@ -154,7 +155,7 @@ function M.setup(options)
       return nil, ran and reason or "Conversation construction failed"
     end
     lease.owner = owner
-    lease.phase = owner:snapshot().phase
+    lease.phase, lease.backend = owner:snapshot().phase, owner:snapshot().backend or "opencode"
     lease.unsubscribe = owner:subscribe(function(snapshot)
       if state.conversation == lease and lease.phase ~= snapshot.phase then
         lease.phase = snapshot.phase
@@ -195,7 +196,20 @@ function M.setup(options)
           create = function(config)
             return runtime:conversation(config)
           end,
-          configuration = staged.conversation_options,
+          configuration = function()
+            if not explicit_chat then
+              return staged.conversation_options()
+            end
+            if
+              type(chat_config) ~= "table"
+              or getmetatable(chat_config) ~= nil
+              or not ({ codex = true, opencode = true })[chat_config.backend]
+              or type(chat_config.model) ~= "string"
+            then
+              return nil, "Configure chat.backend and chat.model explicitly"
+            end
+            return vim.deepcopy(chat_config)
+          end,
           notify = options.notify,
         })
       end
@@ -829,7 +843,7 @@ function M.setup(options)
     local snapshot = owner:snapshot()
     -- Status and health never expose prompts, replies, credentials or source text.
     return {
-      backend = "opencode",
+      backend = snapshot.backend,
       mode = "pre_write",
       state = snapshot.phase,
       startup = snapshot.startup,
@@ -903,7 +917,10 @@ function M.setup(options)
   end
   function runtime:compact()
     local chat = state.conversation
-    return chat and chat.phase and "AI:O " .. chat.phase or display:compact()
+    return chat
+        and chat.phase
+        and "AI:" .. (chat.backend == "codex" and "C" or "O") .. " " .. chat.phase
+      or display:compact()
   end
 
   for _, name in ipairs({ "open", "native_prompt", "backend" }) do
@@ -1009,6 +1026,12 @@ end
 
 function M.compact()
   return active and active.runtime:compact() or ""
+end
+
+function M.has_managed_chat()
+  return active ~= nil
+    and not active.stopped
+    and (active.explicit_chat or active.conversation ~= nil)
 end
 
 function M.conversation_status()

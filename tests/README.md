@@ -306,3 +306,55 @@ UI suites above; fixture success does not imply live-account acceptance.
 The first extraction is validated on Linux with Neovim 0.12.4, Python 3.14.4,
 Bubblewrap 0.11.1, Git 2.53.0 and tmux 3.6. This is not a claim that older Neovim,
 macOS, Windows or every real backend/account workflow is supported.
+
+## Optional pinned Codex runtime audit
+
+The default suite runs the Codex opt-in/environment regression and skips the
+installed runtime cases. To opt in explicitly with CLI **0.163.0**:
+
+```sh
+python3 -I -B tests/run.py --codex /absolute/path/to/codex nvim_ai_codex_runtime
+```
+
+This uses synthetic credentials and a loopback Responses SSE provider. It does
+not load account credentials or make paid model requests. An explicit unsupported
+version or sandbox failure fails the audit rather than skipping it. The audit
+checks command confinement while the engine can reach its provider. Direct,
+symlink and proc-root credential reads must fail; model-command output must not
+return the synthetic credential to provider history, including after worker exit
+and exact-thread resume. Edit,
+matching completion, frozen review, interruption and exact-thread resume after
+worker exit use the production conversation controller and Codex turn/store.
+The test-only launcher redirects the generated profile to the local provider;
+it introduces no public provider override. The separate confinement/hostile
+configuration probes still use the production sandbox and worker directly.
+Logs contain synthetic protocol evidence and retained-state metadata, never
+account credentials or the contents of the retained databases and rollouts.
+
+The Linux workflow has a `codex_runtime` dispatch input, default false. When
+selected it verifies the pinned release checksum and runs the same audit on the
+disposable runner with its existing Bubblewrap profile. The current development
+host cannot create Codex's nested namespace; do not weaken either sandbox or
+change host policy to make this test pass. See the
+[runtime evidence](../docs/validation/2026-10-20-managed-codex-runtime.md).
+
+
+`ai_chat_codex` drives the production editor/controller/publisher with a confined
+synthetic Codex peer: passive setup/health, backend independence, startup errors,
+terminal-gated review, Accept/Reject, blocked source drift, partial decisions,
+local correction, Freeze and exact-thread continuation. Unsupported CRLF and
+missing-final-newline corrections retain the draft and leave disk untouched;
+supported LF correction bytes survive resume and explicit approval.
+`nvim_ai_chat_ui.ChatCodexUITest` exercises real composer and review keys. To
+capture only that scenario (the fixture isolates HOME/XDG and tmux itself):
+
+```sh
+DRAFT_CHAT_CAPTURE_DIR=/tmp/draft-codex-captures \
+  python3 -I -B tests/nvim_ai_chat_ui.py ChatCodexUITest -q
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-codex-captures/codex-chat.ansi \
+  /tmp/draft-codex-captures/codex-chat.png --columns 140
+python3 -I -B tests/fixtures/ai/render_chat_capture.py \
+  /tmp/draft-codex-captures/codex-review.ansi \
+  /tmp/draft-codex-captures/codex-review.png --columns 140
+```

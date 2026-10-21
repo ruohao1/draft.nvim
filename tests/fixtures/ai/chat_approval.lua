@@ -1,6 +1,6 @@
 -- Disposable production runtime with a confined scripted ACP peer, never a writer substitute.
-return function(root, settings)
-  local f = { root = root, audit = {}, owners = {}, proposals = {}, clients = {} }
+return function(root, settings, backend, case)
+  local f = { root = root, audit = {}, owners = {}, proposals = {}, clients = {}, waiters = {} }
   f.project, f.peer = root .. "/project with spaces", root .. "/opencode"
   vim.fn.mkdir(f.project, "p", "0700")
   f.paths = { "first.txt", "second.txt", "third.txt" }
@@ -29,18 +29,50 @@ return function(root, settings)
       if data then
         bytes = bytes .. data
         if bytes:find("\n", 1, true) then
-          f.audit[#f.audit + 1] = vim.json.decode(bytes)
+          local event = vim.json.decode(bytes)
+          f.audit[#f.audit + 1] = event
           client:read_stop()
-          client:close()
+          if event.waiting then
+            f.waiters[#f.waiters + 1] = client
+          else
+            client:close()
+          end
         end
       elseif not client:is_closing() then
         client:close()
       end
     end)
   end))
+  function f.release()
+    for _, client in ipairs(f.waiters) do
+      if not client:is_closing() then
+        client:write("continue\n", function()
+          if not client:is_closing() then
+            client:close()
+          end
+        end)
+      end
+    end
+    f.waiters = {}
+  end
+  if backend == "codex" then
+    fixture =
+      assert(vim.api.nvim_get_runtime_file("tests/fixtures/ai/conversation_codex.py", false)[1])
+    local text = table.concat(vim.fn.readfile(fixture, "b"), "\n")
+    text = text
+      :gsub('CASE = "answer"', function()
+        return "CASE = " .. vim.json.encode(case or "edit")
+      end)
+      :gsub("AUDIT_PORT = 0", "AUDIT_PORT = " .. server:getsockname().port)
+    vim.fn.writefile(vim.split(text, "\n", { plain = true }), f.peer, "b")
+    f.auth_file = root .. "/synthetic auth 二.json"
+    vim.fn.writefile({ '{"OPENAI_API_KEY":"synthetic-key"}' }, f.auth_file)
+    assert(vim.uv.fs_chmod(f.auth_file, 384))
+  end
   local factory, system = require("ai.conversation_controller"), vim.system
   local create = factory.new
   factory.new = function(config)
+    f.configuration = vim.deepcopy(config)
     local owner, reason = create(config)
     if owner then
       f.owners[#f.owners + 1] = owner
@@ -55,7 +87,7 @@ return function(root, settings)
     end
     return system(command, ...)
   end
-  f.runtime = require("draft").setup({
+  local configured = {
     staged = vim.tbl_deep_extend("force", {
       enabled = true,
       root = f.project,
@@ -64,8 +96,20 @@ return function(root, settings)
       provider = {
         fixture = { options = { testCase = "edit", auditPort = server:getsockname().port } },
       },
-    }, settings or {}),
-  })
+    }, backend == "codex" and {} or settings or {}),
+  }
+  if backend == "codex" then
+    configured.chat = vim.tbl_extend("force", {
+      backend = "codex",
+      model = "openai/gpt-5.4",
+      codex = f.peer,
+      auth_file = f.auth_file,
+      root = f.project,
+    }, settings or {})
+    configured.staged.opencode = root .. "/missing-opencode"
+    configured.staged.auth_file = root .. "/must-not-inherit-auth.json"
+  end
+  f.runtime = require("draft").setup(configured)
   function f.owner()
     return f.owners[#f.owners]
   end
@@ -111,6 +155,7 @@ return function(root, settings)
     return assert(vim.fn.maparg(lhs, "n", false, true).callback)
   end
   function f.cleanup()
+    f.release()
     local owner = f.owner()
     if owner and owner:snapshot().phase ~= "closed" then
       owner:dispatch({ kind = "close" }, owner:snapshot().view_revision)

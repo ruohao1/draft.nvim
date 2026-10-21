@@ -503,5 +503,39 @@ class ChatApprovalUITest(ChatTerminal):
         self.phase("closed")
 
 
+class ChatCodexUITest(ChatTerminal):
+    fixture_script = "chat_codex_ui.lua"
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(lambda: self.evaluate("pcall(chat_approval_fixture.cleanup)"))
+
+    def test_codex_composer_and_frozen_review_keys(self):
+        project = self.root / "project with spaces"
+        self.keys("i")
+        self.literal("Propose edits to the selected files.")
+        self.keys("Escape")
+        self.assertIn("Codex · review before write", self.capture("codex-chat"))
+        self.assertEqual(self.evaluate("#chat_approval_fixture.audit"), "0")
+        self.keys("C-s")
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().phase") == "review",
+                  "Codex stopped with a frozen proposal")
+        self.wait(lambda: "FROZEN STAGED PROPOSAL" in self.evaluate("vim.wo.winbar"),
+                  "Codex frozen panels")
+        screen = self.capture("codex-review")
+        self.assertIn("original text", screen)
+        self.assertIn("proposed text", screen)
+        for name in ("first.txt", "second.txt", "third.txt"):
+            self.assertEqual((project / name).read_bytes(), b"original text\n")
+        self.keys("a")
+        self.wait(lambda: (project / "first.txt").read_bytes() == b"proposed text\n", "explicit approval")
+        self.wait(lambda: "second.txt" in self.evaluate("vim.wo.winbar"), "next file")
+        self.keys("r")
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().review.files[2].state") == "rejected",
+                  "explicit rejection")
+        self.assertEqual((project / "second.txt").read_bytes(), b"original text\n")
+        self.assertEqual((project / "third.txt").read_bytes(), b"original text\n")
+
+
 if __name__ == "__main__":
     unittest.main()
