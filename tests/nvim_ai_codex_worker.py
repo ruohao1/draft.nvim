@@ -153,7 +153,7 @@ class CodexWorkerTest(unittest.TestCase):
                                ("fixture/flood", {"count": 5, "size": 8 * 1024 * 1024})):
             with self.subTest(method=method, params=params):
                 worker = self.spawn(wire="codex")
-                worker.request(method, {})
+                worker.request(method, params)
                 with self.assertRaisesRegex(acp.ProtocolError, "budget"):
                     deadline = time.monotonic() + 5
                     while True:

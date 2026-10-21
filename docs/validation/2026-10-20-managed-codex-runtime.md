@@ -278,9 +278,14 @@ The exact corrected head and its complete default/installed results are recorded
 in the implementation PR and linked CI run. No skipped or failed installed run
 establishes runtime acceptance.
 
-Minor deferred from review: the worker aggregate-byte fixture drops its request
-parameters and repeats message-count coverage. Production byte limits remain;
-independent aggregate-byte regression coverage needs a follow-up correction.
+Independent follow-up review on 2026-10-21 found no blocking production defects.
+All eight targeted suites passed (105 Python tests plus both Lua suites). It
+confirmed the aggregate-byte fixture dropped its request parameters and repeated
+message-count coverage. The follow-up now passes those parameters through. With
+only the in-memory byte limit raised from 32 MiB to 1 GiB, the old test passed;
+the corrected five-frame, 8 MiB case fails because the byte budget is no longer
+enforced. Production code is unchanged. Final normal-suite results are recorded
+in the implementation PR.
 
 
 ### Restricted-profile acceptance findings
