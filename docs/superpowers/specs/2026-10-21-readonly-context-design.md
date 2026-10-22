@@ -1,6 +1,6 @@
 # Read-only context for managed conversations
 
-Date: 2026-10-21. Proposed contract for
+Date: 2026-10-21. Revised 2026-10-23 after independent review. Proposed contract for
 [ISQ-462](https://linear.app/isqrd/issue/ISQ-462/define-read-only-context-attachments-independently-of-editable-scope).
 Base: `48ea226505309ea04160bcc30fe6ea42259b34a9`.
 Branch: `feat/isq-462-readonly-context`.
@@ -105,7 +105,9 @@ Use the existing dynamic Markdown fence rule so captured backticks cannot end
 the displayed block. A metadata field never becomes a path to load or a tool
 instruction. User edits to a block are ordinary prompt text, not trusted provenance.
 
-Snapshot the buffer identity, changedtick and capture-relevant options. After
+Snapshot the buffer identity, changedtick and capture-relevant buffer/window
+options. Selection preflight and extraction must use the same window context and
+options, including those affecting virtual columns and padding. After
 opening/focusing the composer, recheck those values, canonical source identity,
 conversation owner/revision and composer stamp before appending. A conflicting
 autocommand, source edit, rename, close or owner replacement refuses the whole
@@ -120,12 +122,33 @@ noneditable file does not enter those writer guards.
 
 ## Diagnostic snapshots
 
-Read `vim.diagnostic.get(bufnr)` only when the explicit diagnostic action runs.
-Use the same named-buffer/root rules as text capture. Include all cached namespaces
-for that buffer, not every buffer in Neovim, and make no LSP or linter request.
+On the explicit diagnostic action, use `vim.diagnostic.count(bufnr)` to sum all
+cached records across every namespace for the current buffer. Refuse a cache with
+more than **1,000 records before calling `vim.diagnostic.get(bufnr)`**, even when
+only one record would match the requested line range. A smaller range cannot
+bypass this whole-cache limit; the user must reduce the cached diagnostics or
+attach relevant text instead. Zero cached records needs no retrieval.
+
+For an eligible cache, call `get(bufnr)` once, then filter by starting line and
+serialize the allowed fields. Count and retrieval run synchronously without
+yielding, opening the composer or requesting fresh diagnostics between them.
+Refuse API errors, invalid counts or a returned count inconsistent with preflight;
+do not retry acquisition automatically. Use the same named-buffer/root rules as
+text capture. Include all cached namespaces for that buffer, not every buffer in
+Neovim, and make no LSP or linter request.
 The API exposes cached records with positions and producer information; it does
 not provide a general guarantee that they match the current buffer version.
 [Pinned Neovim diagnostic API](https://github.com/neovim/neovim/blob/v0.12.4/runtime/doc/diagnostic.txt).
+
+This acquisition policy limits record count, **not total allocation or latency**.
+In Neovim 0.12.4, `count` traverses the cache and builds a temporary list of record
+references. `get` then deep-copies eligible records, including arbitrary nested
+`user_data`, before Draft can discard fields. Even one record can contain a large
+nested payload. The first version accepts this public-API limitation; omitting
+fields from the outgoing message does not prevent their local acquisition cost.
+Document the limit in both usage documents. A hard allocation ceiling would need
+a different acquisition design and is outside this slice.
+[Pinned count/get implementation](https://github.com/neovim/neovim/blob/v0.12.4/runtime/lua/vim/diagnostic.lua#L1494).
 
 Label every block `Cached diagnostics; freshness unverified`, even for an unmodified
 buffer. Include capture time and buffer-modified state. Source changes after capture
@@ -155,9 +178,23 @@ that separately with the text action.
   still fit. A tiny rectangular selection spanning more than that source budget
   is refused with guidance to select fewer lines. Do not scan an unbounded buffer
   merely to discover that the final message is too large.
-- Bound each diagnostic snapshot to **100 matching records**, then apply the same
-  complete-message byte limit. These are fixed first-version limits, not new setup
-  options. More than 100 matching records requires a smaller explicit line range.
+- Before `getregion()` or equivalent visual text extraction, independently prove
+  that the **expanded selection fits 32,768 bytes**. Count selected UTF-8 bytes,
+  virtual padding, partial tab/wide-character replacement spaces and line
+  separators, including a linewise trailing newline. Source bytes alone do not
+  bound this expansion. Reject an excessive row count before enumerating region
+  positions; even empty rows require separators. Use bounded position metadata
+  such as `getregionpos(..., { eol = true })` or equivalent nontext accounting.
+  Stop as soon as the budget is exceeded; never allocate padding just to measure
+  it. If the size cannot be established safely, refuse and ask for a smaller
+  selection. Accepted captures retain exact visual semantics. The complete-message
+  check still applies after adding the draft, metadata and fences.
+- Apply the separate **1,000 cached-record acquisition cap** above before reading
+  diagnostic payloads. Bound output to **100 matching records**, then apply the
+  same complete-message byte limit. These are fixed first-version limits, not new
+  setup options. A smaller explicit line range can resolve an output-count refusal
+  only when the whole cache is eligible. Neither record cap is a byte limit on
+  Neovim's temporary diagnostic data.
 - Retain the existing 1 MiB encoded command, 64-turn and 32 MiB conversation limits.
   The normal exact-envelope preflight remains in force after context is appended.
 - All refusals preserve the existing composer and source buffers. They must not
@@ -204,11 +241,11 @@ attachment recovery store.
 
 | Existing boundary | Required work |
 | --- | --- |
-| New `lua/ai/chat_context.lua`; existing `lua/ai/context.lua`, `lua/ai/chat.lua` | Put bounded capture/rendering in one chat-specific helper. Reuse exact visual capture and expose the existing physical-source resolver from `ai.context` for shared path resolution. The chat coordinator keeps owner/composer race checks. Saved-source capture and native delivery lifecycle stay unchanged. |
+| New `lua/ai/chat_context.lua`; existing `lua/ai/context.lua`, `lua/ai/chat.lua` | Put source/expanded-text preflight, diagnostic count preflight and rendering in one chat-specific helper. Reuse exact visual capture after preflight and expose the existing physical-source resolver from `ai.context` for shared path resolution. The chat coordinator keeps owner/composer race checks. Saved-source capture and native delivery lifecycle stay unchanged. |
 | `lua/ai/chat_view.lua`, `lua/ai/init.lua` | Preserve atomic composer append, clarify editable files, register diagnostic action and whole-buffer attach behavior. |
 | Both concrete turn adapters under `scripts/` | Clarify the fixed context/authority preamble; preserve message transport and all sandbox/publication interfaces. |
 | Existing selection, chat, backend and UI fixtures | Verify unchanged authority as well as displayed text. Add focused capture cases and a diagnostic fixture using synthetic data. |
-| `README.md`, `doc/draft.txt`, validation record | Document both actions, unsaved/snapshot limits and native-mode distinction; capture the changed composer/header in Neovim. |
+| `README.md`, `doc/draft.txt`, validation record | Document both actions, unsaved/snapshot limits, the diagnostic acquisition limitation and native-mode distinction; capture the changed composer/header in Neovim. |
 
 The implementation must demonstrate:
 
@@ -223,7 +260,12 @@ The implementation must demonstrate:
 4. Refuse outside-root and symlink paths, special/unnamed buffers, and capture races
    involving buffer edits, renames, composer autocmd edits or owner replacement.
 5. Test combined-message boundaries at 32,768 bytes, metadata overhead, multibyte
-   overflow, the 1 MiB source-span bound, and exactly 100/101 matching diagnostics.
+   overflow and the 1 MiB source-span bound. Verify virtual padding, partial tabs,
+   wide/combining characters, exclusive selections and large row counts against
+   the expanded-text preflight. The review's 100-line, 200-source-byte selection
+   expanding to 100,199 bytes must refuse before calling `getregion()`. Assert
+   that refused captures leave the composer intact and do not materialize the
+   oversized region; checking only the final error is insufficient.
 6. Capture multiple diagnostic namespaces, line-filter them, preserve source/code
    and cached-freshness labeling even for positions beyond the current buffer, and
    omit nested payloads. Empty or malformed sets leave the draft intact; later
@@ -231,6 +273,12 @@ The implementation must demonstrate:
 7. Exercise pending-review follow-up, safe retry, Hide, Close and New with snapshots.
    Prove no automatic resubmission, fresh read grant, scope expansion or unselected
    publication occurs, including for malicious path-like text inside an attachment.
+8. Test exactly 1,000/1,001 cached diagnostics with only one range match. Above the
+   acquisition cap, assert zero `get` calls and no composer change. For eligible
+   caches, test 100/101 matching records, count/retrieval failure or disagreement,
+   and a small synthetic nested payload to show that it is copied by Neovim but
+   omitted from serialization. Do not claim a hard acquisition-memory bound from
+   these tests or stress the editor with a huge payload.
 
 Use the isolated test runner and synthetic providers. Existing installed-runtime
 evidence covers the unchanged sandbox implementation; text plumbing tests must
