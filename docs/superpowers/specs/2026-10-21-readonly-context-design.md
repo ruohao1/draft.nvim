@@ -1,12 +1,13 @@
 # Read-only context for managed conversations
 
-Date: 2026-10-21. Revised 2026-10-23 after independent review. Proposed contract for
+Date: 2026-10-21. Revised and approved 2026-10-23 after independent review. Contract for
 [ISQ-462](https://linear.app/isqrd/issue/ISQ-462/define-read-only-context-attachments-independently-of-editable-scope).
 Base: `48ea226505309ea04160bcc30fe6ea42259b34a9`.
 Branch: `feat/isq-462-readonly-context`.
 
-Status: ready for user review; not approved or implemented. The implementation
-plan will follow approval and stay on this branch with the implementation PR.
+Status: approved by the user for implementation planning on 2026-10-23; not
+implemented. The [implementation plan](../plans/2026-10-23-readonly-context.md)
+stays on this branch with the implementation PR and awaits its execution review.
 No separate plan-only or design-only PR is proposed.
 
 ## Intended result
@@ -18,8 +19,8 @@ filesystem access or permission to publish changes.
 
 The requested constraints are fixed editable scope, explicit add/preview/remove,
 no provider work until Send, and reuse of Draft's composer and guarded publisher.
-The proposed first version includes unsaved text from named file buffers. This
-is a stated design assumption for review, not permission to save those buffers.
+The approved first version includes unsaved text from named file buffers.
+Capturing context does not save those buffers.
 
 Example: select `src/parser.lua` for editing, then attach an unsaved selection
 from `src/types.lua`. The prompt contains the selected text from `types.lua`;
@@ -29,7 +30,7 @@ only `parser.lua` is copied into the worker workspace or admitted to publication
 
 | Approach | Consequence |
 | --- | --- |
-| Extend the existing text-in-composer attachment | Recommended. The composer is the preview and editor; message text and selected-file authority already travel separately. No new protocol or attachment store. |
+| Extend the existing text-in-composer attachment | Selected. The composer is the preview and editor; message text and selected-file authority already travel separately. No new protocol or attachment store. |
 | Add structured attachment records and a management panel | Would enable individual refresh/removal controls, but adds identity, persistence and retry semantics before they are needed. |
 | Mount additional read-only files into the worker | Gives tools file access and expands sandbox/resume policy. A path mention alone must not do this; defer until a separate use case requires it. |
 
