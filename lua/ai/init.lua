@@ -12,7 +12,12 @@ local bindings = {
   { "NvimAIClose", "ax", "close", "AI: close companion" },
   { "NvimAIChat", "at", "chat_open", "Draft: chat (review before write)" },
   { "NvimAIChatNew", false, "chat_new", "Draft: start a new conversation after close" },
-  { "NvimAIChatAttach", false, "chat_attach", "Draft: attach selected saved lines to composer" },
+  {
+    "NvimAIChatAttach",
+    false,
+    "chat_attach",
+    "Draft: attach a read-only buffer snapshot to composer",
+  },
   { "NvimAIChatSend", false, "chat_send", "Draft: explicitly send composer" },
   { "NvimAIChatHide", false, "chat_hide", "Draft: hide conversation without stopping it" },
   { "NvimAIChatCancel", false, "chat_cancel", "Draft: cancel turn or pending review" },

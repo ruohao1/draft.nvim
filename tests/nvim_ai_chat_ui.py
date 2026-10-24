@@ -143,18 +143,19 @@ class ChatUITest(ChatTerminal):
         self.wait(lambda: self.evaluate("#vim.api.nvim_list_wins()") == "1", "source after hide")
         self.keys("g", "g", "V", "\\", "a", "t")
         self.wait(lambda: self.evaluate("vim.bo.filetype") == "draft-chat-input", "selection composer")
-        expected = ('Explain this declaration.\n\nSelection from "parser.lua" (lines 1-1):\n'
-                    '```\nlocal function parse(text)\n```')
         read_draft = "table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\\n')"
-        self.assertEqual(json.loads(self.evaluate("vim.json.encode(" + read_draft + ")")), expected)
+        expected = json.loads(self.evaluate("vim.json.encode(" + read_draft + ")"))
+        self.assertTrue(expected.startswith('Explain this declaration.\n\nRead-only context snapshot from "parser.lua" (lines 1-1; line):\n'))
+        self.assertIn("modified: no; buffer text (LF)", expected)
+        self.assertTrue(expected.endswith("```\nlocal function parse(text)\n```"))
         self.assertEqual(self.evaluate("vim.api.nvim_get_mode().mode"), "n")
         self.assertEqual(self.evaluate("vim.g.chat_fixture_prompts"), "0")
         self.keys("u")
         self.wait(lambda: self.evaluate("vim.api.nvim_get_current_line()") == "Explain this declaration.",
                   "undo attachment preserves previous draft")
         self.keys("C-r")
-        self.wait(lambda: "Selection from" in self.evaluate(read_draft), "redo attachment")
-        self.wait(lambda: "Selection attached." in self.capture("chat-selection-context"),
+        self.wait(lambda: "Read-only context snapshot" in self.evaluate(read_draft), "redo attachment")
+        self.wait(lambda: "Context attached." in self.capture("chat-selection-context"),
                   "attachment preview")
         self.keys("q")
         self.command("NvimAIChat")

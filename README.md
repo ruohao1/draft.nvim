@@ -185,7 +185,7 @@ limits](docs/validation/2026-10-20-managed-codex-runtime.md).
 | --- | --- |
 | `:NvimAIChat [files...]` | Open or focus the current conversation |
 | `:NvimAIChatNew [files...]` | Start after confirmed close; confirm discarding an unsent draft |
-| `:[range]NvimAIChatAttach` | Append saved selected lines to the composer without sending |
+| `:[range]NvimAIChatAttach` | Append a read-only buffer snapshot to the composer without sending |
 | `:NvimAIChatSend` | Submit the composer once, when the owner permits |
 | `:NvimAIChatHide` | Hide without stopping or submitting |
 | `:NvimAIChatCancel` | Cancel generation; confirm discarding a pending review |
@@ -318,18 +318,28 @@ paths reuses the closed conversation's selection. Save dirty selected buffers
 before sending. A refused send preserves your draft. Native and standalone staged
 work remain excluded even while chat is hidden or idle, until close is confirmed.
 
-To include a passage in your next message, return to a selected source file and
-run `:12,20NvimAIChatAttach`. With `keymaps = true`, select text using `v`, `V` or
-Ctrl-V and press `<leader>at` to capture the exact selection, including partial
-lines or a rectangular block. The range command attaches whole lines; a visual
-`:'<,'>NvimAIChatAttach` command also uses whole lines.
+To include read-only context, return to a named file buffer inside the conversation's
+project root. Run `:NvimAIChatAttach` for the whole buffer or
+`:12,20NvimAIChatAttach` for whole lines. With `keymaps = true`, select text using
+v, V or Ctrl-V and press `<leader>at` for the exact selection, including partial
+lines or a rectangle. The Visual `:'<,'>NvimAIChatAttach` command uses whole lines.
 
-The composer retains your existing text and appends the passage, its relative
-path and line range. Edit, delete or undo that text normally; only Ctrl-S or
-`:NvimAIChatSend` submits it. It is a snapshot at attachment time, so attach it
-again if the source changes. Attachments use the existing 32 KiB message limit.
-Dirty buffers, stale disk contents and files outside the conversation's scope
-are refused. Attaching never saves a source file or changes the editable scope.
+The snapshot includes the relative path, range, capture time and modified state.
+It uses current buffer text, including unsaved edits and new named files.
+The composer keeps your existing text. Edit, delete or undo the snapshot normally;
+only Ctrl-S or `:NvimAIChatSend` submits it. Later source changes do not update
+snapshots. Remove and reattach context to refresh it.
+
+Capture requires a normal UTF-8 buffer with a canonical in-root path. Symlink
+aliases, outside-root paths, binary text and unsupported controls are refused.
+The source span is limited to 1 MiB, even for a small rectangle. Expanded visual
+text must fit 32,768 bytes before extraction. The complete draft, including
+metadata, fences and separators, must also fit 32,768 bytes; refusal leaves it intact.
+
+The header lists **Editable files**. Context paths grant no additional file access
+or editing authority. Attaching never saves a source, starts a provider or changes
+the editable files. Save dirty editable files before Send. To change that set,
+Close and start a New conversation.
 
 The default right column becomes a bottom layout below 100 columns. Editors
 smaller than 40 columns or 12 rows hide chat; resize and reopen explicitly.
