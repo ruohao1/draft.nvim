@@ -245,6 +245,13 @@ for line in sys.stdin:
             persist()
             selected = sorted(Path("/tmp/project").rglob("*.txt"))
             audit({"workspace": {str(path.relative_to("/tmp/project")): path.read_text() for path in selected}})
+            if CASE in ("context-probe", "context-unselected-write"):
+                audit({"workspace_files": sorted(str(path.relative_to("/tmp/project"))
+                    for path in Path("/tmp/project").rglob("*") if path.is_file())})
+                if CASE == "context-unselected-write":
+                    Path("/tmp/project/context-only.txt").write_text("attempted unselected write")
+                    for path in selected:
+                        path.write_text("selected fixture edit")
             if CASE in ("edit", "edit-held", "forced-exit") and "Preserve manual correction" not in params["input"][0]["text"]:
                 for path in selected:
                     path.write_bytes(b"revised text\n" if path.read_bytes() == b"proposed text\n" else b"proposed text\n")
