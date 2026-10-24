@@ -20,7 +20,7 @@ User approved revision `39d4218b4fc4f99355f08f115d28698ce1c901c5` for planning o
 2026-10-23 after the independent review cleared both capture-resource findings.
 Work on `feat/isq-462-readonly-context`, based on main `48ea226505309ea04160bcc30fe6ea42259b34a9`.
 Track [ISQ-462](https://linear.app/isqrd/issue/ISQ-462/define-read-only-context-attachments-independently-of-editable-scope).
-This plan awaits user review; implementation has not started. Keep it with the
+User approved this plan and Native execution on 2026-10-24; implementation is in progress. Keep it with the
 implementation PR. Recommend Native execution with a final independent review:
 the four tasks share the capture/coordinator interfaces and are best done in order.
 
@@ -95,7 +95,7 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
   post-focus check. This verifies source identity/options, not disk contents or
   conversation ownership. No capture survives in a hidden store after append.
 
-- [ ] Write `test_buffer_snapshot_fidelity` in the new Lua suite using real named
+- [x] Write `test_buffer_snapshot_fidelity` in the new Lua suite using real named
   buffers. Use `capture_text` directly and assert the following cases:
 
   ```lua
@@ -114,21 +114,21 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
   editor LF text. Assert labels contain relative path, kind, line span, UTC capture
   time and modified state. Whole-buffer metadata also exposes final newline yes/no
   so the closing-fence separator cannot disguise missing final newline.
-- [ ] Run `python3 -I -B tests/run.py ai_chat_context`; expect failure because the
+- [x] Run `python3 -I -B tests/run.py ai_chat_context`; expect failure because the
   capture module is absent, not because the fixture or environment is broken.
-- [ ] Export the resolver and implement `capture_text`/`unchanged`. Compare the
+- [x] Export the resolver and implement `capture_text`/`unchanged`. Compare the
   normalized absolute name to its physical resolution and require the root prefix
   before reading buffer lines. Reuse `ai.review.reducer.is_text(bytes)` for UTF-8
   validation plus the contract's control-character check; do not use or weaken
   `staged_sources.valid_text`/`text_buffer`, which enforce editable-file rules.
   Keep rendering private to the helper and source revalidation separate from it.
-- [ ] Add `test_source_identity_and_guards`: existing/unsaved/new named buffers;
+- [x] Add `test_source_identity_and_guards`: existing/unsaved/new named buffers;
   literal `$`, spaces, `%` and Unicode names; symlinks pointing both inside and
   outside root; unnamed/special/unloaded/binary/non-UTF-8 buffers; invalid UTF-8,
   NUL, CR, DEL and controls. Assert canonical refusal or exact literal attribution.
   Change buffer text/name/encoding/EOL and capture-relevant window options after
   capture: `assert(not context.unchanged(capture.guard))`. No disk-content reads.
-- [ ] Add `test_preflight_before_materialization` with counted/wrapped extraction
+- [x] Add `test_preflight_before_materialization` with counted/wrapped extraction
   APIs. Include exactly 1 MiB versus 1 MiB+1 source spans, a small selected range
   in a larger buffer, and a tiny rectangle whose enclosing span exceeds 1 MiB.
 
@@ -144,7 +144,7 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
   partial tabs, wide/combining characters and exclusive endpoints. Test 32,768
   and 32,769 expanded bytes independently from final block overhead: extraction
   may be bounded yet the completed block still correctly refuses.
-- [ ] Implement preflight before calling the existing extractor. Use buffer byte
+- [x] Implement preflight before calling the existing extractor. Use buffer byte
   offsets to cap the source span before fetching lines. Bound row count using
   required separators before enumerating positions. Use `getregionpos` with
   `eol=true` and the same window/options to account for selected byte spans,
@@ -152,9 +152,9 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
   allocate padding to measure it. Include combining bytes and linewise final LF.
   Stop on overflow or an unprovable size. Only then call `ai.context.selection`;
   retain its own post-extraction checks and the final rendered-block byte check.
-- [ ] Run `python3 -I -B tests/run.py ai_chat_context ai_context`; expect both suites
+- [x] Run `python3 -I -B tests/run.py ai_chat_context ai_context`; expect both suites
   to pass, including unchanged native context behavior. Run `stylua --check lua tests`.
-- [ ] Commit `feat: capture bounded read-only buffer context` with these files only.
+- [x] Commit `feat: capture bounded read-only buffer context` with these files only.
 
 ### Task 2: Attach snapshots through the existing composer
 
