@@ -20,7 +20,9 @@ User approved revision `39d4218b4fc4f99355f08f115d28698ce1c901c5` for planning o
 2026-10-23 after the independent review cleared both capture-resource findings.
 Work on `feat/isq-462-readonly-context`, based on main `48ea226505309ea04160bcc30fe6ea42259b34a9`.
 Track [ISQ-462](https://linear.app/isqrd/issue/ISQ-462/define-read-only-context-attachments-independently-of-editable-scope).
-User approved this plan and Native execution on 2026-10-24; implementation is in progress. Keep it with the
+User approved this plan and Native execution on 2026-10-24. All four tasks are complete;
+both independent-review findings are fixed, and the post-fix full suite passed 76/76.
+See the [validation record](../../validation/2026-10-23-readonly-context.md). Keep it with the
 implementation PR. Recommend Native execution with a final independent review:
 the four tasks share the capture/coordinator interfaces and are best done in order.
 
@@ -171,7 +173,7 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
   in the view. A private coordinator `append_context(capture, state, visual)` may
   share show/revalidation/append with Task 3; it introduces no public API or state.
 
-- [ ] Update `ai_chat_selection` expectations for named unselected/dirty buffers
+- [x] Update `ai_chat_selection` expectations for named unselected/dirty buffers
   and no-range whole-buffer attachment. Add `test_attach_is_local_and_undoable`:
 
   ```lua
@@ -187,9 +189,9 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
   `vim.g.chat_fixture_commands`; use them only as observations, not a replacement
   for Task 4's production-controller authority checks. Preserve exact visual
   cases and snapshot immutability after later source changes.
-- [ ] Run `python3 -I -B tests/run.py ai_chat_selection ai_chat_view draft_setup`;
+- [x] Run `python3 -I -B tests/run.py ai_chat_selection ai_chat_view draft_setup`;
   expect old no-range/selected-only behavior and header assertions to fail.
-- [ ] Replace attach-only saved-source/disk comparison with `capture_text`.
+- [x] Replace attach-only saved-source/disk comparison with `capture_text`.
   Keep saved-source capture for opening and sending intact. Capture visual marks
   before leaving Visual mode; retain whole-line command ranges. Record the owner
   reference, view revision and composer stamp before capture. After showing
@@ -199,7 +201,7 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
   Change the header to `Editable files:` and the command description to buffer
   snapshots. Notice: `Context attached. Edit or remove it in the composer. No
   editable files were added; Ctrl-S sends.`
-- [ ] Add `test_focus_races_preserve_newer_state`: BufEnter/WinEnter handlers edit
+- [x] Add `test_focus_races_preserve_newer_state`: BufEnter/WinEnter handlers edit
   or rename the source, change its options, alter the composer or replace/close
   the owner. Assert attach returns nil, the handler's draft/source bytes remain,
   and no command is dispatched. Add `test_complete_message_byte_budget`:
@@ -215,12 +217,12 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
 
   Include metadata/fence overhead, long backtick runs, multibyte overflow and
   multiple attachments through the public action. No truncation or partial append.
-- [ ] Update both usage documents and command tables: no-range whole-buffer,
+- [x] Update both usage documents and command tables: no-range whole-buffer,
   exact Visual/ranged behavior, unsaved/new named in-root buffers, explicit
   snapshot labeling, source/message bounds, manual refresh and fixed editable
   scope. Remove the old claim that dirty context or every stale disk buffer is
   refused; retain the requirement to save dirty **editable** files before Send.
-- [ ] Run `python3 -I -B tests/run.py ai_chat_context ai_chat_selection ai_chat_view draft_setup ai_chat ai_runtime`;
+- [x] Run `python3 -I -B tests/run.py ai_chat_context ai_chat_selection ai_chat_view draft_setup ai_chat ai_runtime`;
   expect all selected suites to pass. Commit `feat: attach buffer snapshots to managed chat`.
 
 ### Task 3: Attach cached diagnostic snapshots
@@ -237,7 +239,7 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
 - Share Task 2's guarded append. A no-match result returns a local notice through
   the current refusal/notice path and leaves draft, scope and owner usable.
 
-- [ ] Write `test_diagnostic_acquisition_and_output_caps` with synthetic
+- [x] Write `test_diagnostic_acquisition_and_output_caps` with synthetic
   namespaces and counters around `vim.diagnostic.count/get`:
 
   ```lua
@@ -248,9 +250,9 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
   -- Within an eligible cache: 100 matching records fit; 101 refuse, never truncate.
   -- A zero cache needs no get; API errors/bad counts/count mismatch leave the draft.
   ```
-- [ ] Run `python3 -I -B tests/run.py ai_chat_diagnostics draft_setup`; expect
+- [x] Run `python3 -I -B tests/run.py ai_chat_diagnostics draft_setup`; expect
   failure because diagnostic capture/command are absent.
-- [ ] Implement synchronous count preflight, one get, returned-count validation,
+- [x] Implement synchronous count preflight, one get, returned-count validation,
   start-line filtering and deterministic sorting. Serialize only one-based line,
   byte column, severity, optional source/code and message. Validate integer
   nonnegative positions, known severity and allowed field types/text; missing
@@ -259,25 +261,25 @@ Modify `lua/ai/context.lua` only to export its existing physical-source resolver
   and charge aggregate rendered bytes. Reject an oversized matching set atomically.
   Keep an in-code note: `shortcut: diagnostic count scans the cache and get copies
   nested data; replace acquisition if a hard memory/latency bound is required`.
-- [ ] Add `test_cached_diagnostics_are_attributed_text`: two namespaces, duplicates,
+- [x] Add `test_cached_diagnostics_are_attributed_text`: two namespaces, duplicates,
   missing/Unicode source and numeric/string code, multiline messages, stale
   positions beyond EOF, malformed/negative positions and invalid text. Preserve
   duplicates, sort by position/severity/source/code/message with a deterministic
   type order for numeric versus string codes. Assert starting-line rather than
   end-position overlap filtering and exact `Cached diagnostics; freshness unverified`.
   A small nested sentinel must be copied by the API but absent from `block`.
-- [ ] Add `test_diagnostic_action_is_passive`: execute the public command on an
+- [x] Add `test_diagnostic_action_is_passive`: execute the public command on an
   unsaved unselected named buffer; assert zero provider/auth/LSP requests, no
   source text implicitly included, unchanged editable selection, normal edit/
   remove/undo, and no mutation after a later diagnostic/source update. Zero matches,
   malformed input and overflow retain the existing draft. Exercise the same
   post-focus source/composer races through the shared coordinator.
-- [ ] Wire registration, range decoding and runtime dispatch. Update both usage
+- [x] Wire registration, range decoding and runtime dispatch. Update both usage
   documents with capture time/modified/freshness labels, allowlisted fields,
   whole-cache versus matching-record caps, start-line filtering, and the remaining
   allocation/latency limitation. A smaller range must not be suggested as a fix
   for a cache exceeding 1,000 records.
-- [ ] Run `python3 -I -B tests/run.py ai_chat_context ai_chat_diagnostics ai_chat_selection draft_setup`;
+- [x] Run `python3 -I -B tests/run.py ai_chat_context ai_chat_diagnostics ai_chat_selection draft_setup`;
   expect all selected suites to pass. Commit `feat: attach cached diagnostics to managed chat`.
 
 ### Task 4: Verify backend authority, lifetime and the visible workflow
@@ -301,7 +303,7 @@ Reuse `tests/fixtures/ai/chat_approval.lua` and `render_chat_capture.py` unchang
   channel at prompt receipt; the latter also attempts an unselected workspace
   write named `context-only.txt`. No new production diagnostics or transport.
 
-- [ ] Write `test_context_is_text_on_both_backends` in the production-controller
+- [x] Write `test_context_is_text_on_both_backends` in the production-controller
   suite, parameterized over `opencode`/`codex`. Attach a unique snapshot marker
   referring to an actual unselected `context-only.txt`, then verify:
 
@@ -318,44 +320,44 @@ Reuse `tests/fixtures/ai/chat_approval.lua` and `render_chat_capture.py` unchang
   correction text. Use the malicious-write fixture to verify selected-only review/
   publication and unchanged real unselected files, whether the turn refuses or
   excludes the extra file. Do not rely on the explanatory preamble as enforcement.
-- [ ] Run `python3 -I -B tests/run.py nvim_ai_conversation_controller` with the new
+- [x] Run `python3 -I -B tests/run.py nvim_ai_conversation_controller` with the new
   fake-peer cases; expect failure on the missing preamble/observations.
-- [ ] Append the exact context-authority sentence above to both fixed preambles.
+- [x] Append the exact context-authority sentence above to both fixed preambles.
   Implement only the fixture observations needed by these tests. Keep the
   production controller, source capture, protocol, sandboxes and publisher unchanged.
-- [ ] Add `test_public_context_keeps_editable_scope` to the new Lua integration
+- [x] Add `test_public_context_keeps_editable_scope` to the new Lua integration
   suite using the existing production fixture for each backend. Attach unsaved
   unselected text plus diagnostics; assert no launch before Send, the sent message
   equals the visible draft, selected paths stay fixed, and only selected files
   reach a frozen proposal. Dirty selected sources still refuse Send and preserve
   the composed context. Also exercise draft preparation during an active turn
   and explicit follow-up while a proposal is pending.
-- [ ] Extend the existing recovery journey with `test_retry_keeps_captured_bytes`:
+- [x] Extend the existing recovery journey with `test_retry_keeps_captured_bytes`:
   induce a synthetic pre-submission safe failure after local Send cleared the
   draft; edit the context source/cache; explicit empty-draft Retry sends the stored
   old message once. Hide/reopen preserves unsent text; completed Close retains its
   read-only history/draft; New requires current confirmations and starts empty.
   The next ordinary turn does not append previous context automatically. Unsafe
   failure stays ineligible for Retry. No new retained attachment state is introduced.
-- [ ] Update the actual-key TUI attachment test for the new labels and add a
+- [x] Update the actual-key TUI attachment test for the new labels and add a
   diagnostic preview case using synthetic cached records. Verify `Editable files:`
   at wide/narrow widths, unsaved attribution, edit/undo/redo, Hide/reopen and one
   explicit send. Export the two named PNGs from real ANSI captures using the
   existing capture helper; inspect the images before committing. The runner
   intentionally strips ambient capture variables: follow the isolated manual
   capture setup in `tests/README.md`, rather than weakening its environment policy.
-- [ ] Run `python3 -I -B tests/run.py ai_chat_readonly_context ai_chat_recovery nvim_ai_conversation_controller nvim_ai_codex_turn nvim_ai_conversation_protocol nvim_ai_chat_ui`;
+- [x] Run `python3 -I -B tests/run.py ai_chat_readonly_context ai_chat_recovery nvim_ai_conversation_controller nvim_ai_codex_turn nvim_ai_conversation_protocol nvim_ai_chat_ui`;
   expect all selected suites to pass. Document exact commands/results and screenshot
   paths in the validation record, including the diagnostic allocation limitation.
   Link it from `tests/README.md`. Commit `feat: preserve context authority across managed backends`.
 
 ## Branch Verification and Delivery
 
-- [ ] Run `python3 -I -B tests/run.py`, `stylua --check lua tests` and
+- [x] Run `python3 -I -B tests/run.py`, `stylua --check lua tests` and
   `git diff --check`; require zero failed suites and no formatting/whitespace errors.
   Record actual skips separately from passes. Use a supported host for sandbox
   fixtures; do not relax ownership, socket or namespace checks to get a green run.
-- [ ] Review the full branch against all eight spec acceptance classes, including
+- [x] Review the full branch against all eight spec acceptance classes, including
   both usage documents and screenshots. Obtain the requested independent final
   review; fix confirmed findings and rerun the affected checks.
 - [ ] Push the implementation and open one PR containing the approved spec, this

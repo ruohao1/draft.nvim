@@ -172,7 +172,13 @@ local function visual_preflight(guard, marks)
     end
     local a, b = segment[1], segment[2]
     local line = lines[a[2] - first + 1]
-    if a[2] ~= b[2] or a[3] > #line + 1 or b[3] > #line + 1 or a[3] > b[3] then
+    if
+      a[2] ~= b[2]
+      or a[3] > #line + 1
+      or b[3] > #line + 1
+      or a[3] > b[3]
+      or (a[3] == b[3] and a[4] > b[4])
+    then
       return nil, "Visual selection size cannot be established safely"
     end
     local finish = glyph_end(line, b[3])
@@ -182,10 +188,11 @@ local function visual_preflight(guard, marks)
     else
       -- Partial boundary glyphs become spaces, not their original UTF-8 bytes.
       if a[4] > 0 and a[3] <= #line then
-        local cells = vim.fn.virtcol({ a[2], a[3] }, true, guard.win)
-        bytes = bytes
-          - (glyph_end(line, a[3]) - a[3] + 1)
-          + math.max(0, cells[2] - cells[1] + 1 - a[4])
+        local after = glyph_end(line, a[3]) + 1
+        -- virtualedit can report only the cursor cell inside a tab.
+        local start_cell = vim.fn.virtcol({ a[2], a[3] }, true, guard.win)[1]
+        local next_cell = vim.fn.virtcol({ a[2], after }, true, guard.win)[1]
+        bytes = bytes - (after - a[3]) + math.max(0, next_cell - start_cell - a[4])
       end
       if b[4] > 0 then
         bytes = bytes - math.max(0, finish - b[3] + 1) + b[4]

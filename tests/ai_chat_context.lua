@@ -83,6 +83,69 @@ local ok, reason = xpcall(function()
   vim.wo.virtualedit = "all"
   assert(not context.capture_text(root, padded, marks(padded, "\22", { 1, 1 }, { 100, 2, 999 })))
   assert(calls == 0, "Oversized virtual padding must refuse before getregion")
+  local reversed = buffer("exclusive-reversed", { "before", "", "你", "after" })
+  vim.wo.virtualedit, vim.o.selection = "all", "exclusive"
+  vim.api.nvim_win_set_cursor(0, { 2, 0 })
+  vim.cmd("normal! 3lvj0")
+  local reversed_marks = {
+    mode = "v",
+    first = vim.fn.getpos("v"),
+    last = vim.fn.getpos("."),
+    inclusive = false,
+  }
+  local observed_getregion = vim.fn.getregion
+  vim.fn.getregion = function()
+    calls = calls + 1
+    error("Native getregion would terminate Neovim for this reversed-offset shape")
+  end
+  reset_counts()
+  local refused = context.capture_text(root, reversed, reversed_marks)
+  vim.fn.getregion = observed_getregion
+  vim.cmd("normal! \27")
+  vim.o.selection = "inclusive"
+  assert(not refused and calls == 0, "Reversed virtual offsets must refuse before getregion")
+
+  local tabs = vim.fn["repeat"]({ "\t" }, 4000)
+  tabs[1], tabs[#tabs] = "a", "a"
+  local expanded_tabs = buffer("partial-tab-budget", tabs)
+  vim.bo[expanded_tabs].tabstop = 8
+  vim.wo.virtualedit = "all"
+  reset_counts()
+  assert(
+    not context.capture_text(
+      root,
+      expanded_tabs,
+      marks(expanded_tabs, "\22", { 1, 2, 1 }, { 4000, 2, 9 })
+    )
+  )
+  assert(calls == 0, "Partial tabs must fit the budget before getregion")
+
+  vim.api.nvim_buf_set_lines(expanded_tabs, 0, -1, false, { "a", "\tx", "b" })
+  for _, case in ipairs({ { "", 6, 2 }, { "4,8", 2, 6 } }) do
+    vim.bo[expanded_tabs].vartabstop = case[1]
+    local fitting = assert(
+      context.capture_text(
+        root,
+        expanded_tabs,
+        marks(expanded_tabs, "\22", { 1, 2, 1 }, { 3, 2, 9 })
+      )
+    )
+    has(
+      fitting.block,
+      ticks
+        .. "\n"
+        .. string.rep(" ", 9)
+        .. "\n"
+        .. string.rep(" ", case[2])
+        .. "x"
+        .. string.rep(" ", case[3])
+        .. "\n"
+        .. string.rep(" ", 9)
+        .. "\n"
+        .. ticks
+    )
+  end
+
   local rows = buffer("many-rows", vim.fn["repeat"]({ "" }, 32770))
   reset_counts()
   assert(not context.capture_text(root, rows, marks(rows, "\22", { 1, 1 }, { 32770, 1 })))

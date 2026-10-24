@@ -52,12 +52,42 @@ production change. Final task checks:
 | `python3 -I -B tests/run.py ai_chat_context ai_chat_selection ai_chat_view draft_setup ai_chat ai_runtime ai_chat_controller` | 7/7 suites passed |
 | `python3 -I -B tests/run.py ai_chat_context ai_chat_diagnostics ai_chat_selection draft_setup` | 4/4 suites passed |
 | `python3 -I -B tests/run.py ai_chat_readonly_context ai_chat_recovery nvim_ai_conversation_controller nvim_ai_codex_turn nvim_ai_conversation_protocol nvim_ai_chat_ui` | 6/6 suites passed; controller 41 tests, Codex turn 15, protocol 16, terminal UI 13 |
+| `python3 -I -B tests/run.py` after both review fixes | 76/76 suites passed; zero failures |
 | `stylua --check lua tests` | Passed |
 | `git diff --check` | Passed |
 
 The isolated runner removes ambient credentials and uses disposable HOME/XDG
 directories and tmux sockets. Sandbox ownership and namespace checks remain
 enabled. Task 4 logs: `.test-results/run-tr60bft4/`.
+Post-fix full-suite logs: `.test-results/run-tcz4lk92/`.
+Twenty opt-in installed-provider unittest cases and one Lua installed-OpenCode
+artifact audit were skipped as configured. They are not counted as executed proofs.
+
+## Independent review and fixes
+
+A fresh independent reviewer inspected the complete branch at
+`f8afd583a295e1e05317fe120ef6ec22d4ef3b7f` against base
+`48ea226505309ea04160bcc30fe6ea42259b34a9`. The review found two preflight
+issues and no minor findings:
+
+1. With `virtualedit=all`, a partial tab's cursor cell was mistaken for its
+   full display width. An 8,000-byte source could reach extraction and allocate
+   39,999 bytes before refusal. Preflight now measures the cells from the glyph
+   start to the next glyph, including the full tab width.
+2. A valid exclusive selection could produce reversed end-of-line virtual
+   offsets. Neovim 0.12.4's extractor terminated on that shape with E41.
+   Preflight now refuses reversed offsets before invoking the extractor.
+
+The coordinator treated the second finding as critical because an editor exit
+risks unsaved work. Each regression failed before its fix
+(`run-vbcrtokk` and `run-pdq7dw4k`), then passed together with capture and
+selection checks (3/3 in `run-5nlsgg17`). Both original independent
+reproducers now return refusal with **zero extraction calls**. Fitting partial
+tabs, variable tab stops, wide/combining text and exclusive selections still pass.
+The fatal-case regression traps extraction so a failure cannot kill the test editor.
+
+The final fix pass uses regression evidence and a complete suite run; it does not
+claim a second independent approval of the changed head.
 
 ## Terminal evidence
 
@@ -103,7 +133,7 @@ headless split changes. GDB located the crash; diagnostic cache operations
 remain real. Statusline presentation is therefore covered by the terminal test,
 not these headless suites. No production workaround or sandbox relaxation was added.
 
-No native-mode behavior, installed-runtime audit, real account login or paid
-provider call was exercised for this change. Existing installed-runtime evidence
+No installed-runtime audit, real account login or paid provider call was run.
+Native behavior is unchanged; its default regression suites were included. Existing installed-runtime evidence
 does not validate the new composer feature. Already sent context can remain in
 conversation/provider history; removing a draft is not provider-side erasure.
