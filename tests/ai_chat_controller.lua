@@ -159,9 +159,14 @@ local ok, reason = xpcall(function()
   compose("First explicit question.")
   vim.api.nvim_set_current_win(source_win)
   vim.cmd("1NvimAIChatAttach")
-  local first_prompt =
-    'First explicit question.\n\nSelection from "example.txt" (lines 1-1):\n```\noriginal text\n```'
-  assert(text("draft-chat-input") == first_prompt)
+  local first_prompt = text("draft-chat-input")
+  assert(
+    vim.startswith(
+      first_prompt,
+      'First explicit question.\n\nRead-only context snapshot from "example.txt" (lines 1-1; line):'
+    )
+  )
+  assert(first_prompt:find("original text", 1, true))
   assert(#audit == 0 and #processes == 0, "Attaching context must not start the controller")
   assert(vim.uv.fs_chmod(source_path, 384))
   vim.cmd("NvimAIChatSend")

@@ -42,6 +42,7 @@ for _, name in ipairs({
   "NvimAIChat",
   "NvimAIChatNew",
   "NvimAIChatAttach",
+  "NvimAIChatDiagnostics",
   "NvimAIChatSend",
   "NvimAIChatHide",
   "NvimAIChatCancel",

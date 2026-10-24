@@ -12,7 +12,18 @@ local bindings = {
   { "NvimAIClose", "ax", "close", "AI: close companion" },
   { "NvimAIChat", "at", "chat_open", "Draft: chat (review before write)" },
   { "NvimAIChatNew", false, "chat_new", "Draft: start a new conversation after close" },
-  { "NvimAIChatAttach", false, "chat_attach", "Draft: attach selected saved lines to composer" },
+  {
+    "NvimAIChatAttach",
+    false,
+    "chat_attach",
+    "Draft: attach a read-only buffer snapshot to composer",
+  },
+  {
+    "NvimAIChatDiagnostics",
+    false,
+    "chat_diagnostics",
+    "Draft: attach cached diagnostics to composer",
+  },
   { "NvimAIChatSend", false, "chat_send", "Draft: explicitly send composer" },
   { "NvimAIChatHide", false, "chat_hide", "Draft: hide conversation without stopping it" },
   { "NvimAIChatCancel", false, "chat_cancel", "Draft: cancel turn or pending review" },
@@ -172,6 +183,7 @@ function M.setup(options)
     "open",
     "new",
     "attach",
+    "diagnostics",
     "send",
     "hide",
     "cancel",
@@ -946,7 +958,12 @@ function M.setup(options)
     if method == "review" then
       command_options.bang = true
     end
-    if method == "prompt" or method == "native_prompt" or method == "chat_attach" then
+    if
+      method == "prompt"
+      or method == "native_prompt"
+      or method == "chat_attach"
+      or method == "chat_diagnostics"
+    then
       command_options.range = true
     end
     if method == "backend" or method == "grants" then
@@ -966,7 +983,7 @@ function M.setup(options)
         argument = { bang = args.bang }
       elseif method == "prompt" or method == "native_prompt" then
         argument = args.range > 0 and "x" or "n"
-      elseif method == "chat_attach" then
+      elseif method == "chat_attach" or method == "chat_diagnostics" then
         argument = args.range > 0 and { line1 = args.line1, line2 = args.line2 } or nil
       elseif method == "chat_open" or method == "chat_new" then
         argument = #args.fargs > 0 and args.fargs or nil

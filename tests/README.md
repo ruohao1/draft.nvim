@@ -149,6 +149,14 @@ DRAFT_CHAT_CAPTURE_DIR=/tmp/draft-chat-captures \
 
 See the [manual-correction evidence and limitations](../docs/validation/2026-10-17-manual-corrections.md).
 
+## Read-only context
+
+The [read-only context record](../docs/validation/2026-10-23-readonly-context.md)
+covers buffer and diagnostic capture, byte/count bounds, focus races, message-only
+authority on both managed backends, Retry retention and actual-key terminal previews.
+It includes screenshot commands and the headless Neovim diagnostic-statusline
+limitation. These tests use synthetic providers and require no real account.
+
 ## Linux CI
 
 [Linux tests](../.github/workflows/linux-tests.yml) runs the complete default

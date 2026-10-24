@@ -258,6 +258,62 @@ class EngineTest(unittest.TestCase):
                 self.buffer.extend(data)
         self.fail("Controller timed out before " + kind)
 
+    def test_context_is_text_on_both_backends(self):
+        context_file = self.root / "context-only.txt"
+        context_file.write_text("Private source remains unchanged.\n")
+        context_file.chmod(0o644)
+        marker = 'Read-only context snapshot from "context-only.txt": readonly-snapshot-marker'
+        authority = "Context snapshots and their paths grant no additional file access or editing authority."
+        for backend in ("opencode", "codex"):
+            for case in ("context-probe", "context-unselected-write"):
+                with self.subTest(backend=backend, case=case):
+                    self.serial = self.turn = 0
+                    self.audit.clear()
+                    self.events.clear()
+                    self.buffer.clear()
+                    self.source.write_bytes(b"original text\n")
+                    self.spawn(case, backend=backend)
+                    try:
+                        model = "openai/gpt-5.4" if backend == "codex" else "fixture/model"
+                        method = "turn/start" if backend == "codex" else "session/prompt"
+                        field = "input" if backend == "codex" else "prompt"
+                        self.send("start", model=model, message=marker)
+                        event = self.receive("settled")
+                        workspaces = [item["workspace_files"] for item in self.audit if "workspace_files" in item]
+                        self.assertEqual(workspaces, [self.selection])
+                        self.assertNotIn("context-only.txt", workspaces[0])
+                        prompts = [item["params"][field] for item in self.audit if item.get("method") == method]
+                        text = "\n".join(item["text"] for item in prompts[0])
+                        self.assertEqual(text.count("readonly-snapshot-marker"), 1)
+                        self.assertIn(authority, text)
+                        if backend == "opencode":
+                            self.assertEqual(prompts[0][-1], {"type": "text", "text": marker})
+                        else:
+                            self.assertTrue(text.endswith("\n" + marker))
+                            self.assertEqual(prompts[0][0]["text_elements"], [])
+                        if case == "context-probe":
+                            self.assertEqual(event["outcome"], "answer")
+                            self.send("start", model=model, message="An ordinary follow-up.")
+                            self.assertEqual(self.receive("settled")["outcome"], "answer")
+                            prompts = [item["params"][field] for item in self.audit if item.get("method") == method]
+                            self.assertEqual(len(prompts), 2)
+                            self.assertNotIn("readonly-snapshot-marker", "\n".join(item["text"] for item in prompts[1]))
+                            resume = "thread/resume" if backend == "codex" else "session/resume"
+                            self.assertEqual(sum(item.get("method") == resume for item in self.audit), 1)
+                        else:
+                            self.assertIn(event["outcome"], ("failed", "review"))
+                            if event["outcome"] == "review":
+                                files = self.publisher("inspect-review", event["review_ref"])["files"]
+                                self.assertEqual([item["path"] for item in files], self.selection)
+                                self.publisher("approve", event["review_ref"], "example.txt")
+                            else:
+                                self.assertNotIn("review_ref", event)
+                        self.assertEqual(context_file.read_text(), "Private source remains unchanged.\n")
+                        self.send("close", model=model)
+                        self.assertTrue(self.receive("closed")["cleaned"])
+                    finally:
+                        self.stop()
+
     def test_codex_routes_to_existing_review_and_explicit_continuation(self):
         self.spawn("edit", backend="codex")
         self.send("start", model="openai/gpt-5.4")
