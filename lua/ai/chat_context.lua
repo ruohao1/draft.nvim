@@ -211,14 +211,17 @@ local function render(guard, bytes, kind, first, last, whole)
     return nil, "Context and its fences exceed the 32 KiB message limit"
   end
   local fence = string.rep(string.char(96), size)
+  local location = first and string.format("lines %d-%d", first, last) or "all lines"
+  local label = kind == "diagnostics" and "Cached diagnostics; freshness unverified"
+    or "buffer text (LF)"
   local header = string.format(
-    "Read-only context snapshot from %s (lines %d-%d; %s):\nCaptured: %s; modified: %s; buffer text (LF)\n",
+    "Read-only context snapshot from %s (%s; %s):\nCaptured: %s; modified: %s; %s\n",
     vim.json.encode(guard.name:sub(#guard.root + 2)),
-    first,
-    last,
+    location,
     kind,
     os.date("!%Y-%m-%dT%H:%M:%SZ"),
-    guard.options.modified and "yes" or "no"
+    guard.options.modified and "yes" or "no",
+    label
   )
   if whole then
     header = header .. "Final newline: " .. (guard.options.endofline and "yes" or "no") .. "\n"
@@ -267,6 +270,134 @@ function M.capture_text(root, buf, marks)
     return nil, "Source changed during context capture"
   end
   return render(guard, bytes, kind, first, last, marks == nil)
+end
+
+function M.capture_diagnostics(root, buf, range)
+  if buf ~= vim.api.nvim_get_current_buf() then
+    return nil, "Capture requires the current file buffer"
+  end
+  local guard, reason = source_guard(root, buf, vim.api.nvim_get_current_win())
+  if not guard then
+    return nil, reason
+  end
+  if
+    range ~= nil
+    and (
+      type(range) ~= "table"
+      or not integer(range.line1, 1)
+      or not integer(range.line2, 1)
+      or range.line1 > range.line2
+      or range.line2 > vim.api.nvim_buf_line_count(buf)
+    )
+  then
+    return nil, "Invalid diagnostic line range"
+  end
+  -- shortcut: diagnostic count scans the cache and get copies nested data;
+  -- replace acquisition if a hard memory/latency bound is required.
+  local ok, counts = pcall(vim.diagnostic.count, buf)
+  if not ok or type(counts) ~= "table" then
+    return nil, "Cannot count cached diagnostics"
+  end
+  local total = 0
+  for severity, count in pairs(counts) do
+    if not integer(severity, 1) or severity > 4 or not integer(count, 0) then
+      return nil, "Invalid cached diagnostic counts"
+    end
+    total = total + count
+  end
+  if total > 1000 then
+    return nil, "More than 1,000 cached diagnostics; reduce the cache or attach text instead"
+  end
+  if total == 0 then
+    return nil, "No cached diagnostics for this buffer"
+  end
+  local got, records = pcall(vim.diagnostic.get, buf)
+  if not got or type(records) ~= "table" or not vim.islist(records) or #records ~= total then
+    return nil, "Cached diagnostic retrieval failed or changed since count"
+  end
+  local selected, bytes = {}, 0
+  for _, record in ipairs(records) do
+    if
+      type(record) ~= "table"
+      or not integer(record.lnum, 0)
+      or not integer(record.col, 0)
+      or not integer(record.severity, 1)
+      or record.severity > 4
+    then
+      return nil, "Invalid cached diagnostic position or severity"
+    end
+    if not range or (record.lnum + 1 >= range.line1 and record.lnum + 1 <= range.line2) then
+      if #selected == 100 then
+        return nil, "More than 100 matching diagnostics; select fewer lines"
+      end
+      if
+        type(record.message) ~= "string"
+        or (record.source ~= nil and type(record.source) ~= "string")
+        or (record.code ~= nil and type(record.code) ~= "number" and type(record.code) ~= "string")
+        or (
+          type(record.code) == "number"
+          and (record.code ~= record.code or math.abs(record.code) == math.huge)
+        )
+      then
+        return nil, "Invalid cached diagnostic fields"
+      end
+      for _, field in ipairs({ "source", "code", "message" }) do
+        local value = record[field]
+        if type(value) == "string" then
+          if not valid_text(value) then
+            return nil,
+              "Diagnostic fields must be valid UTF-8 text within 32 KiB, without control characters"
+          end
+          bytes = bytes + #value
+        end
+      end
+      if bytes > MAX_MESSAGE then
+        return nil, "Diagnostic text exceeds the 32 KiB message limit"
+      end
+      selected[#selected + 1] = record
+    end
+  end
+  if #selected == 0 then
+    return nil, "No cached diagnostics start in this line range"
+  end
+  local order = { ["nil"] = 1, number = 2, string = 3 }
+  table.sort(selected, function(a, b)
+    for _, key in ipairs({ "lnum", "col", "severity", "source", "code", "message" }) do
+      if type(a[key]) ~= type(b[key]) then
+        return order[type(a[key])] < order[type(b[key])]
+      end
+      if a[key] ~= b[key] then
+        return a[key] < b[key]
+      end
+    end
+    return false
+  end)
+  local lines, rendered_bytes = {}, 0
+  local severity = { "ERROR", "WARN", "INFO", "HINT" }
+  for _, record in ipairs(selected) do
+    local line =
+      string.format("%d:%d %s", record.lnum + 1, record.col + 1, severity[record.severity])
+    for _, key in ipairs({ "source", "code", "message" }) do
+      if record[key] ~= nil then
+        line = line .. " " .. key .. "=" .. vim.json.encode(record[key])
+      end
+    end
+    rendered_bytes = rendered_bytes + #line + 1
+    if rendered_bytes > MAX_MESSAGE then
+      return nil, "Rendered diagnostics exceed the 32 KiB message limit"
+    end
+    lines[#lines + 1] = line
+  end
+  if not M.unchanged(guard) then
+    return nil, "Source changed during diagnostic capture"
+  end
+  return render(
+    guard,
+    table.concat(lines, "\n"),
+    "diagnostics",
+    range and range.line1,
+    range and range.line2
+  )
 end
 
 return M

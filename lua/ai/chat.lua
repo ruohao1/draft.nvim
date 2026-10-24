@@ -381,6 +381,19 @@ function M.new(options)
     return append_context(capture, target, selection == "x")
   end
 
+  function chat:diagnostics(range)
+    local target, reason = context_target()
+    if not target then
+      return nil, reason
+    end
+    local capture, why =
+      context.capture_diagnostics(target.root, vim.api.nvim_get_current_buf(), range)
+    if not capture then
+      return refusal(why)
+    end
+    return append_context(capture, target, false)
+  end
+
   local function submit(kind)
     local state, reason = snapshot()
     if not state then

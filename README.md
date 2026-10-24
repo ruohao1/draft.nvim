@@ -186,6 +186,7 @@ limits](docs/validation/2026-10-20-managed-codex-runtime.md).
 | `:NvimAIChat [files...]` | Open or focus the current conversation |
 | `:NvimAIChatNew [files...]` | Start after confirmed close; confirm discarding an unsent draft |
 | `:[range]NvimAIChatAttach` | Append a read-only buffer snapshot to the composer without sending |
+| `:[range]NvimAIChatDiagnostics` | Append cached diagnostics to the composer without sending |
 | `:NvimAIChatSend` | Submit the composer once, when the owner permits |
 | `:NvimAIChatHide` | Hide without stopping or submitting |
 | `:NvimAIChatCancel` | Cancel generation; confirm discarding a pending review |
@@ -326,6 +327,8 @@ lines or a rectangle. The Visual `:'<,'>NvimAIChatAttach` command uses whole lin
 
 The snapshot includes the relative path, range, capture time and modified state.
 It uses current buffer text, including unsaved edits and new named files.
+Line boundaries use LF; whole-buffer snapshots label the final-newline flag.
+A CRLF file therefore appears as editor text, not a byte-for-byte disk copy.
 The composer keeps your existing text. Edit, delete or undo the snapshot normally;
 only Ctrl-S or `:NvimAIChatSend` submits it. Later source changes do not update
 snapshots. Remove and reattach context to refresh it.
@@ -340,6 +343,24 @@ The header lists **Editable files**. Context paths grant no additional file acce
 or editing authority. Attaching never saves a source, starts a provider or changes
 the editable files. Save dirty editable files before Send. To change that set,
 Close and start a New conversation.
+
+
+Run `:NvimAIChatDiagnostics` in a named in-root buffer to append its cached
+diagnostics from every namespace. Use `:12,20NvimAIChatDiagnostics` to include
+records whose **starting line** is in that range. It does not request LSP/linter
+updates or implicitly include source text. Each block says
+**Cached diagnostics; freshness unverified**, with capture time and modified state.
+It includes one-based line and byte column, severity, optional source/code, and
+message. Nested producer data is omitted. Duplicates remain; stale positions
+beyond the current buffer are kept without moving them to other lines.
+
+A cache with more than 1,000 records is refused before retrieval. A smaller range
+does not bypass this limit: reduce the cache or attach relevant text instead.
+An eligible cache can contribute at most 100 matching records, subject to the
+complete 32 KiB message limit. No matches leave the draft unchanged. Neither
+overflow nor invalid data is truncated. The count API scans the cache; retrieval
+copies nested producer data before Draft omits it. These limits do **not** impose
+a hard total memory or latency bound.
 
 The default right column becomes a bottom layout below 100 columns. Editors
 smaller than 40 columns or 12 rows hide chat; resize and reopen explicitly.
