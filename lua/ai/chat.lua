@@ -1,6 +1,7 @@
 -- One runtime-owned conversation; editor actions never own writer authority.
 local M = {}
 local sources = require("ai.staged_sources")
+local context = require("ai.chat_context")
 
 function M.new(options)
   local chat = {}
@@ -296,13 +297,61 @@ function M.new(options)
     return construct(files)
   end
 
-  function chat:attach(selection)
+  local function context_target()
     local state, reason = snapshot()
     if not state then
       return refusal(reason)
     end
     if state.phase == "closed" or state.phase == "closing" or state.recovery_required then
       return refusal("Open an eligible conversation with :NvimAIChatNew before attaching context")
+    end
+    local text, why, stamp = view:draft()
+    if not text then
+      return refusal(why)
+    end
+    return {
+      owner = owner,
+      view = view,
+      revision = state.view_revision,
+      stamp = stamp,
+      root = state.root,
+    }
+  end
+
+  local function append_context(capture, target, visual)
+    if frozen then
+      frozen.waiting_for_normal = nil
+    end
+    if visual then
+      vim.cmd("normal! \27")
+    end
+    if not show(true) then
+      return nil
+    end
+    local _, _, now = view:draft()
+    if
+      owner ~= target.owner
+      or view ~= target.view
+      or owner:snapshot().view_revision ~= target.revision
+      or now ~= target.stamp
+      or not context.unchanged(capture.guard)
+    then
+      return refusal("Conversation, draft or source changed while attaching; capture again")
+    end
+    local appended, reason = view:append_draft(capture.block)
+    if not appended then
+      return refusal(reason)
+    end
+    view:notice(
+      "Context attached. Edit or remove it in the composer. No editable files were added; Ctrl-S sends."
+    )
+    return true
+  end
+
+  function chat:attach(selection)
+    local target, reason = context_target()
+    if not target then
+      return nil, reason
     end
     local buf, marks = vim.api.nvim_get_current_buf()
     if selection == "x" then
@@ -322,78 +371,27 @@ function M.new(options)
         first = { buf, selection.line1, 1, 0 },
         last = { buf, selection.line2, 2147483647, 0 },
       }
-    else
-      return refusal("Select text with Visual <leader>at or use :[range]NvimAIChatAttach")
+    elseif selection ~= nil then
+      return refusal("Use a whole buffer, line range or Visual selection")
     end
-    local file = vim.api.nvim_buf_get_name(buf)
-    if
-      file:sub(1, #state.root + 1) ~= state.root .. "/"
-      or not vim.list_contains(state.selection, file:sub(#state.root + 2))
-    then
-      return refusal("Context must come from a file already selected for this conversation")
-    end
-    local captured, why = sources.capture({ file }, state.root)
-    if not captured then
+    local capture, why = context.capture_text(target.root, buf, marks)
+    if not capture then
       return refusal(why)
     end
-    local item = captured.files[1]
-    local function saved()
-      local fd = vim.uv.fs_open(item.file, "r", 0)
-      if not fd then
-        return false
-      end
-      local bytes = vim.uv.fs_read(fd, 1024 * 1024 + 1, 0)
-      vim.uv.fs_close(fd)
-      return bytes == item.oldText and sources.unchanged(captured)
+    return append_context(capture, target, selection == "x")
+  end
+
+  function chat:diagnostics(range)
+    local target, reason = context_target()
+    if not target then
+      return nil, reason
     end
-    if not saved() then
-      return refusal("Source changed on disk or in a buffer; reload or save it, then select again")
+    local capture, why =
+      context.capture_diagnostics(target.root, vim.api.nvim_get_current_buf(), range)
+    if not capture then
+      return refusal(why)
     end
-    local region, region_reason = require("ai.context").selection(buf, marks)
-    if not region then
-      return refusal(region_reason)
-    end
-    if region.bytes:find("\0", 1, true) then
-      return refusal("Select text without NUL bytes for the composer")
-    end
-    local fence_size = 3
-    for run in region.bytes:gmatch("`+") do
-      fence_size = math.max(fence_size, #run + 1)
-    end
-    local fence_text = string.rep("`", fence_size)
-    local context = string.format(
-      "Selection from %s (lines %d-%d):\n%s\n",
-      vim.json.encode(item.path),
-      region.first,
-      region.last,
-      fence_text
-    ) .. region.bytes .. (region.bytes:sub(-1) == "\n" and "" or "\n") .. fence_text
-    local current = owner
-    local _, _, stamp = view:draft()
-    if frozen then
-      frozen.waiting_for_normal = nil
-    end
-    if selection == "x" then
-      vim.cmd("normal! \27")
-    end
-    if not show(true) then
-      return nil
-    end
-    local _, _, now = view:draft()
-    if
-      owner ~= current
-      or owner:snapshot().view_revision ~= state.view_revision
-      or now ~= stamp
-      or not saved()
-    then
-      return refusal("Conversation, draft or source changed while attaching; select again")
-    end
-    local appended, append_reason = view:append_draft(context)
-    if not appended then
-      return refusal(append_reason)
-    end
-    view:notice("Selection attached. Edit or remove it in the composer; Ctrl-S sends.")
-    return true
+    return append_context(capture, target, false)
   end
 
   local function submit(kind)

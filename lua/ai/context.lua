@@ -49,6 +49,8 @@ local function physical_source(name)
   end
 end
 
+M.physical_source = physical_source
+
 local function source_path(identity, bufnr)
   local name = vim.api.nvim_buf_get_name(bufnr)
   if name == "" then

@@ -96,6 +96,13 @@ for sequence, raw in enumerate(sys.stdin, 1):
                 time.sleep(1)
     elif method == 'session/prompt':
         assert message['params']['sessionId'] == session
+        if case in ('context-probe', 'context-unselected-write'):
+            paths = sorted(path for path in Path('/tmp/project').rglob('*') if path.is_file())
+            audit({'workspace_files': [str(path.relative_to('/tmp/project')) for path in paths]})
+            if case == 'context-unselected-write':
+                Path('/tmp/project/context-only.txt').write_text('attempted unselected write')
+                for path in paths:
+                    path.write_text('selected fixture edit')
         if case in ('edit', 'held-edit'):
             text = message['params']['prompt'][-1]['text']
             paths = sorted(path for path in Path('/tmp/project').rglob('*') if path.is_file())

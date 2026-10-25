@@ -4,6 +4,11 @@ local root = assert(vim.uv.fs_mkdtemp("/tmp/draft-chat-recovery-XXXXXX"))
 local make =
   dofile(assert(vim.api.nvim_get_runtime_file("tests/fixtures/ai/chat_approval.lua", false)[1]))
 local f
+local select = vim.ui.select
+vim.diagnostic.config({ signs = false, virtual_text = false, underline = false })
+-- Neovim's headless statusline redraw is isolated; terminal tests retain it.
+vim.api.nvim_del_augroup_by_name("nvim.diagnostic.status")
+local ns = vim.api.nvim_create_namespace("context-retry")
 local ok, reason = xpcall(function()
   local auth = root .. "/auth.json"
   f = make(root, {
@@ -11,9 +16,27 @@ local ok, reason = xpcall(function()
     provider = { fixture = { options = { testCase = "answer" } } },
   })
   f.compose("Retry this question once credentials exist.")
+  f.runtime:chat_hide()
+  local context = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_buf_set_name(context, f.project .. "/context-only.txt")
+  vim.api.nvim_set_current_buf(context)
+  vim.api.nvim_buf_set_lines(context, 0, -1, false, { "original snapshot marker" })
+  vim.diagnostic.set(ns, context, { { lnum = 0, col = 0, message = "original diagnostic marker" } })
+  assert(f.runtime:chat_attach())
+  f.runtime:chat_hide()
+  vim.api.nvim_set_current_buf(context)
+  assert(f.runtime:chat_diagnostics())
+  local captured = f.text("draft-chat-input")
+  f.runtime:chat_hide()
+  assert(f.runtime:chat_open())
+  assert(f.text("draft-chat-input") == captured)
   vim.cmd("NvimAIChatSend")
   f.phase("failed")
   assert(f.snapshot().retry_safe and not f.snapshot().recovery_required)
+  assert(f.text("draft-chat-input") == "", "Accepted local Send clears the draft")
+  vim.api.nvim_buf_set_lines(context, 0, -1, false, { "new source marker" })
+  vim.diagnostic.set(ns, context, { { lnum = 0, col = 0, message = "new diagnostic marker" } })
+
   local conversation = f.snapshot().conversation_id
   assert(#f.audit == 0, "missing credentials must fail before starting OpenCode")
   vim.fn.writefile(
@@ -46,11 +69,9 @@ local ok, reason = xpcall(function()
   for _, event in ipairs(f.audit) do
     if event.method == "session/prompt" then
       prompts = prompts + 1
-      assert(
-        vim
-          .inspect(event.params.prompt)
-          :find("Retry this question once credentials exist.", 1, true)
-      )
+      assert(event.params.prompt[#event.params.prompt].text == captured)
+      assert(not vim.inspect(event.params.prompt):find("new source marker", 1, true))
+      assert(not vim.inspect(event.params.prompt):find("new diagnostic marker", 1, true))
     end
   end
   assert(prompts == 1, "explicit safe Retry must submit exactly one prompt")
@@ -78,6 +99,7 @@ local ok, reason = xpcall(function()
     if event.method == "session/prompt" then
       prompts = prompts + 1
       if prompts == 2 then
+        assert(not vim.inspect(event.params.prompt):find("original snapshot marker", 1, true))
         assert(
           vim.inspect(event.params.prompt):find("Use this explicitly revised question.", 1, true)
         )
@@ -85,8 +107,29 @@ local ok, reason = xpcall(function()
     end
   end
   assert(sessions == 1 and resumes == 1 and prompts == 2)
+  f.compose("Unsent retained context.")
+  f.runtime:chat_hide()
+  vim.api.nvim_set_current_buf(context)
+  assert(f.runtime:chat_attach())
+  local retained = f.text("draft-chat-input")
   vim.cmd("NvimAIChatClose")
   f.phase("closed")
+  f.rendered("Draft · closed")
+  assert(f.text("draft-chat-input") == retained)
+  assert(not vim.bo[f.buffer("draft-chat-input")].modifiable)
+  assert(f.snapshot().turns[1].prompt == captured)
+  local decisions = 0
+  vim.ui.select = function(items, options, callback)
+    assert(options.prompt:find("Discard the unsent draft", 1, true))
+    decisions = decisions + 1
+    callback(items[decisions == 1 and 1 or 2])
+  end
+  vim.cmd("NvimAIChatNew")
+  assert(f.snapshot().phase == "closed" and f.text("draft-chat-input") == retained)
+  vim.cmd("NvimAIChatNew")
+  assert(decisions == 2 and f.snapshot().conversation_id ~= conversation)
+  assert(f.snapshot().turn_id == 0 and f.text("draft-chat-input") == "")
+  vim.ui.select = select
   print("ok - safe Retry revalidates sources, submits once and resumes only the existing session")
   f.cleanup()
   f = nil
@@ -121,5 +164,6 @@ end, debug.traceback)
 if f then
   f.cleanup()
 end
+vim.ui.select = select
 vim.fn.delete(root, "rf")
 assert(ok, reason)
