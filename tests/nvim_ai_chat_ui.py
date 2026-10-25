@@ -141,21 +141,33 @@ class ChatUITest(ChatTerminal):
         self.literal("Explain this declaration.")
         self.keys("Escape", "q")
         self.wait(lambda: self.evaluate("#vim.api.nvim_list_wins()") == "1", "source after hide")
-        self.keys("g", "g", "V", "\\", "a", "t")
+        self.command("edit context-only.lua")
+        self.keys("i")
+        self.literal("local function inspect(text)")
+        self.keys("Escape", "g", "g", "V", "\\", "a", "t")
         self.wait(lambda: self.evaluate("vim.bo.filetype") == "draft-chat-input", "selection composer")
-        expected = ('Explain this declaration.\n\nSelection from "parser.lua" (lines 1-1):\n'
-                    '```\nlocal function parse(text)\n```')
         read_draft = "table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\\n')"
-        self.assertEqual(json.loads(self.evaluate("vim.json.encode(" + read_draft + ")")), expected)
+        expected = json.loads(self.evaluate("vim.json.encode(" + read_draft + ")"))
+        self.assertTrue(expected.startswith('Explain this declaration.\n\nRead-only context snapshot from "context-only.lua" (lines 1-1; line):\n'))
+        self.assertIn("modified: yes; buffer text (LF)", expected)
+        self.assertTrue(expected.endswith("```\nlocal function inspect(text)\n```"))
         self.assertEqual(self.evaluate("vim.api.nvim_get_mode().mode"), "n")
         self.assertEqual(self.evaluate("vim.g.chat_fixture_prompts"), "0")
         self.keys("u")
         self.wait(lambda: self.evaluate("vim.api.nvim_get_current_line()") == "Explain this declaration.",
                   "undo attachment preserves previous draft")
         self.keys("C-r")
-        self.wait(lambda: "Selection from" in self.evaluate(read_draft), "redo attachment")
-        self.wait(lambda: "Selection attached." in self.capture("chat-selection-context"),
+        self.wait(lambda: "Read-only context snapshot" in self.evaluate(read_draft), "redo attachment")
+        self.wait(lambda: "Context attached." in self.capture("chat-selection-context"),
                   "attachment preview")
+        self.command("resize 16")
+        self.keys("g", "g", "z", "t")
+        self.wait(lambda: "Editable files: parser.lua" in self.capture("chat-readonly-context"),
+                  "editable files in wide context preview")
+        self.tm("resize-window", "-t", "draft", "-x", "70", "-y", "42")
+        self.wait(lambda: self.evaluate("vim.o.columns") == "70", "narrow context")
+        self.wait(lambda: "Editable files: parser.lua" in self.capture("chat-readonly-context-narrow"),
+                  "editable files in narrow context preview")
         self.keys("q")
         self.command("NvimAIChat")
         self.assertEqual(json.loads(self.evaluate("vim.json.encode(" + read_draft + ")")), expected)
@@ -163,6 +175,63 @@ class ChatUITest(ChatTerminal):
         self.wait(lambda: self.evaluate("vim.g.chat_fixture_prompts") == "1", "explicit context send")
         self.assertEqual(json.loads(self.evaluate("vim.json.encode(vim.g.chat_fixture_message)")), expected)
         self.assertEqual((self.root / "parser.lua").read_text(), original)
+        self.assertFalse((self.root / "context-only.lua").exists())
+        self.command("NvimAIChatClose")
+
+    def test_cached_diagnostics_preview_is_editable_and_explicit(self):
+        self.keys("i")
+        self.literal("Explain these diagnostics.")
+        self.keys("Escape", "q")
+        self.command("edit context-only.lua")
+        self.keys("i")
+        self.literal("local result = missing_value")
+        self.keys("Escape")
+        self.command("lua vim.g.context_source = vim.api.nvim_get_current_buf(); "
+                     "vim.diagnostic.set(vim.api.nvim_create_namespace('context-preview'), 0, "
+                     "{{lnum=0, col=15, severity=1, source='lua', code='undefined-global', "
+                     "message='Undefined global missing_value'}})")
+        self.command("NvimAIChatDiagnostics")
+        self.wait(lambda: self.evaluate("vim.bo.filetype") == "draft-chat-input", "diagnostic composer")
+        read_draft = "table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\\n')"
+        captured = json.loads(self.evaluate("vim.json.encode(" + read_draft + ")"))
+        self.assertIn('from "context-only.lua"', captured)
+        self.assertIn("Cached diagnostics; freshness unverified", captured)
+        self.assertIn("modified: yes", captured)
+        self.assertIn('1:16 ERROR source="lua" code="undefined-global"', captured)
+        self.assertNotIn("local result =", captured)
+        self.assertEqual(self.evaluate("vim.g.chat_fixture_prompts"), "0")
+        self.keys("u")
+        self.wait(lambda: self.evaluate(read_draft) == "Explain these diagnostics.", "undo diagnostics")
+        self.keys("C-r")
+        self.wait(lambda: "freshness unverified" in self.evaluate(read_draft), "redo diagnostics")
+        self.keys("G", "o")
+        self.literal("Prioritize the error above.")
+        self.keys("Escape")
+        expected = captured + "\nPrioritize the error above."
+        self.assertEqual(json.loads(self.evaluate("vim.json.encode(" + read_draft + ")")), expected)
+        self.keys("u")
+        self.wait(lambda: json.loads(self.evaluate("vim.json.encode(" + read_draft + ")")) == captured,
+                  "undo user edit")
+        self.keys("C-r")
+        self.wait(lambda: "Prioritize the error above." in self.evaluate(read_draft), "redo user edit")
+        self.command("resize 18")
+        self.keys("g", "g", "z", "t")
+        self.wait(lambda: "Editable files: parser.lua" in self.capture("chat-readonly-diagnostics"),
+                  "wide diagnostic preview")
+        self.assertIn("freshness unverified", self.capture("chat-readonly-diagnostics"))
+        self.tm("resize-window", "-t", "draft", "-x", "70", "-y", "42")
+        self.wait(lambda: self.evaluate("vim.o.columns") == "70", "narrow diagnostics")
+        self.wait(lambda: "Editable files: parser.lua" in self.capture("chat-readonly-diagnostics-narrow"),
+                  "narrow diagnostic header")
+        self.keys("q")
+        self.command("NvimAIChat")
+        self.assertEqual(json.loads(self.evaluate("vim.json.encode(" + read_draft + ")")), expected)
+        self.assertEqual(self.evaluate("vim.g.chat_fixture_prompts"), "0")
+        self.keys("C-s")
+        self.wait(lambda: self.evaluate("vim.g.chat_fixture_prompts") == "1", "explicit diagnostic send")
+        self.assertEqual(json.loads(self.evaluate("vim.json.encode(vim.g.chat_fixture_message)")), expected)
+        self.assertEqual(self.evaluate("vim.bo[vim.g.context_source].modified"), "true")
+        self.assertFalse((self.root / "context-only.lua").exists())
         self.command("NvimAIChatClose")
 
     def test_model_picker_keys_are_passive_and_preserve_history(self):
@@ -501,6 +570,40 @@ class ChatApprovalUITest(ChatTerminal):
         self.assertIn("Assistant · fixture/model", self.capture("conversation-acceptance"))
         self.command("NvimAIChatClose")
         self.phase("closed")
+
+
+class ChatCodexUITest(ChatTerminal):
+    fixture_script = "chat_codex_ui.lua"
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(lambda: self.evaluate("pcall(chat_approval_fixture.cleanup)"))
+
+    def test_codex_composer_and_frozen_review_keys(self):
+        project = self.root / "project with spaces"
+        self.keys("i")
+        self.literal("Propose edits to the selected files.")
+        self.keys("Escape")
+        self.assertIn("Codex · review before write", self.capture("codex-chat"))
+        self.assertEqual(self.evaluate("#chat_approval_fixture.audit"), "0")
+        self.keys("C-s")
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().phase") == "review",
+                  "Codex stopped with a frozen proposal")
+        self.wait(lambda: "FROZEN STAGED PROPOSAL" in self.evaluate("vim.wo.winbar"),
+                  "Codex frozen panels")
+        screen = self.capture("codex-review")
+        self.assertIn("original text", screen)
+        self.assertIn("proposed text", screen)
+        for name in ("first.txt", "second.txt", "third.txt"):
+            self.assertEqual((project / name).read_bytes(), b"original text\n")
+        self.keys("a")
+        self.wait(lambda: (project / "first.txt").read_bytes() == b"proposed text\n", "explicit approval")
+        self.wait(lambda: "second.txt" in self.evaluate("vim.wo.winbar"), "next file")
+        self.keys("r")
+        self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().review.files[2].state") == "rejected",
+                  "explicit rejection")
+        self.assertEqual((project / "second.txt").read_bytes(), b"original text\n")
+        self.assertEqual((project / "third.txt").read_bytes(), b"original text\n")
 
 
 if __name__ == "__main__":

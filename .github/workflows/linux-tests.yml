@@ -4,6 +4,11 @@ on:
   pull_request:
   push:
   workflow_dispatch:
+    inputs:
+      codex_runtime:
+        description: "Run the pinned Codex audit with a local synthetic provider"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -95,6 +100,25 @@ jobs:
 
       - name: Run every provider-free suite
         run: /usr/bin/python3 -I -B tests/run.py
+
+      - name: Prepare pinned Codex for the optional runtime audit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.codex_runtime }}
+        run: |
+          archive="$RUNNER_TEMP/codex-0.163.0.tar.gz"
+          curl --fail --location --retry 3 \
+            https://github.com/openai/codex/releases/download/rust-v0.163.0/codex-x86_64-unknown-linux-musl.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' \
+            beb339e8ecd9ba057a6bb2dc81ad8ca474812edfbf0fc5056ca818797648dde4 \
+            "$archive" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/draft-codex"
+          tar --extract --gzip --file "$archive" --no-same-owner --no-same-permissions \
+            --directory "$RUNNER_TEMP/draft-codex" codex-x86_64-unknown-linux-musl
+          echo "DRAFT_TEST_CODEX_PATH=$RUNNER_TEMP/draft-codex/codex-x86_64-unknown-linux-musl" >> "$GITHUB_ENV"
+
+      - name: Run the optional Codex runtime audit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.codex_runtime }}
+        run: /usr/bin/python3 -I -B tests/run.py --codex "$DRAFT_TEST_CODEX_PATH" nvim_ai_codex_runtime
 
       - name: Upload test logs
         if: ${{ always() }}

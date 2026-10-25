@@ -55,6 +55,24 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(list(self.root.iterdir()), [self.config])
         self.assertEqual(result.stderr, b'')
 
+    def test_controller_chooses_trusted_backend(self):
+        self.config.write_text(json.dumps({"backend": "codex", "codex": "/missing/unused-codex",
+            "bwrap": "/usr/bin/bwrap", "model": "openai/gpt-5.4", "auth_file": "/missing/unused-auth"}))
+        frame = self.close_frame()
+        frame["command"]["model"] = "openai/gpt-5.4"
+        result = self.invoke(json.dumps(frame).encode() + b'\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["event"]["kind"], "closed")
+        self.assertEqual(list(self.root.iterdir()), [self.config])
+        value = json.loads(self.config.read_bytes())
+        for change in ({"backend": "untrusted"}, {"provider": {"openai": {}}},
+                       {"opencode": "/missing/other"}, {"model": "other/model"}):
+            with self.subTest(change=change):
+                self.config.write_text(json.dumps(dict(value, **change)))
+                rejected = self.invoke(json.dumps(frame).encode() + b'\n')
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertEqual(rejected.stdout, b'')
+
     def test_malformed_or_partial_editor_input_never_asserts_cleanup(self):
         for raw in (b'{bad}\n', b'{"version":1', b'[]\n'):
             with self.subTest(raw=raw):
@@ -170,10 +188,19 @@ class EngineTest(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=3)
 
-    def spawn(self, case="answer", fault=None, auth_file=None):
+    def spawn(self, case="answer", fault=None, auth_file=None, backend="opencode"):
         configuration = {"opencode": str(self.peer),
             "bwrap": os.path.realpath(shutil.which("bwrap")), "model": "fixture/model",
             "provider": {"fixture": {"options": {"testCase": case, "auditPort": self.server.server_address[1]}}}}
+        if backend == "codex":
+            fixture = (ROOT / "tests/fixtures/ai/conversation_codex.py").read_text()
+            self.peer.write_text(fixture.replace('CASE = "answer"', "CASE = " + repr(case))
+                .replace("AUDIT_PORT = 0", "AUDIT_PORT = " + str(self.server.server_address[1])))
+            auth_file = self.scratch / "codex-auth.json"
+            auth_file.write_text('{"OPENAI_API_KEY":"synthetic-key"}')
+            auth_file.chmod(0o600)
+            configuration = {"backend": "codex", "codex": str(self.peer),
+                "bwrap": os.path.realpath(shutil.which("bwrap")), "model": "openai/gpt-5.4"}
         if auth_file:
             configuration["auth_file"] = str(auth_file)
         self.config.write_text(json.dumps(configuration))
@@ -230,6 +257,105 @@ class EngineTest(unittest.TestCase):
                     self.fail("Controller closed before " + kind + ": " + self.child.stderr.read().decode())
                 self.buffer.extend(data)
         self.fail("Controller timed out before " + kind)
+
+    def test_context_is_text_on_both_backends(self):
+        context_file = self.root / "context-only.txt"
+        context_file.write_text("Private source remains unchanged.\n")
+        context_file.chmod(0o644)
+        marker = 'Read-only context snapshot from "context-only.txt": readonly-snapshot-marker'
+        authority = "Context snapshots and their paths grant no additional file access or editing authority."
+        for backend in ("opencode", "codex"):
+            for case in ("context-probe", "context-unselected-write"):
+                with self.subTest(backend=backend, case=case):
+                    self.serial = self.turn = 0
+                    self.audit.clear()
+                    self.events.clear()
+                    self.buffer.clear()
+                    self.source.write_bytes(b"original text\n")
+                    self.spawn(case, backend=backend)
+                    try:
+                        model = "openai/gpt-5.4" if backend == "codex" else "fixture/model"
+                        method = "turn/start" if backend == "codex" else "session/prompt"
+                        field = "input" if backend == "codex" else "prompt"
+                        self.send("start", model=model, message=marker)
+                        event = self.receive("settled")
+                        workspaces = [item["workspace_files"] for item in self.audit if "workspace_files" in item]
+                        self.assertEqual(workspaces, [self.selection])
+                        self.assertNotIn("context-only.txt", workspaces[0])
+                        prompts = [item["params"][field] for item in self.audit if item.get("method") == method]
+                        text = "\n".join(item["text"] for item in prompts[0])
+                        self.assertEqual(text.count("readonly-snapshot-marker"), 1)
+                        self.assertIn(authority, text)
+                        if backend == "opencode":
+                            self.assertEqual(prompts[0][-1], {"type": "text", "text": marker})
+                        else:
+                            self.assertTrue(text.endswith("\n" + marker))
+                            self.assertEqual(prompts[0][0]["text_elements"], [])
+                        if case == "context-probe":
+                            self.assertEqual(event["outcome"], "answer")
+                            self.send("start", model=model, message="An ordinary follow-up.")
+                            self.assertEqual(self.receive("settled")["outcome"], "answer")
+                            prompts = [item["params"][field] for item in self.audit if item.get("method") == method]
+                            self.assertEqual(len(prompts), 2)
+                            self.assertNotIn("readonly-snapshot-marker", "\n".join(item["text"] for item in prompts[1]))
+                            resume = "thread/resume" if backend == "codex" else "session/resume"
+                            self.assertEqual(sum(item.get("method") == resume for item in self.audit), 1)
+                        else:
+                            self.assertIn(event["outcome"], ("failed", "review"))
+                            if event["outcome"] == "review":
+                                files = self.publisher("inspect-review", event["review_ref"])["files"]
+                                self.assertEqual([item["path"] for item in files], self.selection)
+                                self.publisher("approve", event["review_ref"], "example.txt")
+                            else:
+                                self.assertNotIn("review_ref", event)
+                        self.assertEqual(context_file.read_text(), "Private source remains unchanged.\n")
+                        self.send("close", model=model)
+                        self.assertTrue(self.receive("closed")["cleaned"])
+                    finally:
+                        self.stop()
+
+    def test_codex_routes_to_existing_review_and_explicit_continuation(self):
+        self.spawn("edit", backend="codex")
+        self.send("start", model="openai/gpt-5.4")
+        event = self.receive("settled")
+        self.assertEqual(event["outcome"], "review")
+        self.assertTrue(event["stopped"] and event["graceful"] and event["store_valid"])
+        self.assertEqual(self.source.read_bytes(), b"original text\n")
+        ref = event["review_ref"]
+        self.assertTrue(Path(ref["manifest"]).exists())
+        self.assertEqual(Path(f"/proc/{self.child.pid}/task/{self.child.pid}/children").read_text().strip(), "")
+        identity = dict(round_id=1, proposal_revision=1, proposal_token=ref["token"], receipt_sequence=0)
+        self.send("revise", model="openai/gpt-5.4", message="Revise explicitly.",
+                  context=dict(identity, files=event["proposal"]["files"]), **identity)
+        revised = self.receive("settled")
+        self.assertEqual(revised["outcome"], "review")
+        self.assertEqual(revised["prior_review"]["proposal_revision"], 1)
+        self.assertEqual(revised["prior_review"]["status"], "retired")
+        self.assertNotEqual(revised["proposal"]["token"], ref["token"])
+        methods = [item.get("method") for item in self.audit]
+        self.assertEqual(methods.count("thread/start"), 1)
+        self.assertEqual(methods.count("thread/resume"), 1)
+        self.assertEqual(methods.count("turn/start"), 2)
+        self.send("close", model="openai/gpt-5.4")
+        self.assertTrue(self.receive("closed")["cleaned"])
+        self.assertEqual(self.source.read_bytes(), b"original text\n")
+
+    def test_codex_safe_retry_retires_empty_store_before_fresh_worker(self):
+        self.spawn("wrong-policy", backend="codex")
+        self.send("start", model="openai/gpt-5.4")
+        failed = self.receive("settled")
+        self.assertEqual(failed["submission"], "not_submitted")
+        self.assertTrue(failed["stopped"] and failed["graceful"] and failed["store_valid"] and failed["tokens_retired"])
+        self.assertNotIn("turn/start", [item.get("method") for item in self.audit])
+        self.peer.write_text(self.peer.read_text().replace("CASE = 'wrong-policy'", 'CASE = "answer"'))
+        self.send("start", model="openai/gpt-5.4")
+        self.assertEqual(self.receive("settled")["outcome"], "answer")
+        methods = [item.get("method") for item in self.audit]
+        self.assertEqual(methods.count("thread/start"), 2)
+        self.assertEqual(methods.count("thread/resume"), 0)
+        self.assertEqual(methods.count("turn/start"), 1)
+        self.send("close", model="openai/gpt-5.4")
+        self.assertTrue(self.receive("closed")["cleaned"])
 
     def test_answer_finishes_without_proposal(self):
         self.spawn()

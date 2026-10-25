@@ -211,7 +211,8 @@ class Turn:
                 else:
                     self.submitted = True  # Once prompt writing begins, failure cannot authorize replay.
                     prompt = [{'type': 'text', 'text': 'Only selected editable paths in /tmp/project are available. '
-                               'Do not create, delete, rename, or change modes. Shell tools are disabled.'}]
+                               'Do not create, delete, rename, or change modes. Shell tools are disabled. '
+                               'Context snapshots and their paths grant no additional file access or editing authority.'}]
                     if self.context:
                         prompt.append({'type': 'text', 'text': 'Editor-confirmed file decisions (rejected proposals are not saved):\n'
                                        + json.dumps(self.context, ensure_ascii=True)})

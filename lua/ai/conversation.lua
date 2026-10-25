@@ -1,4 +1,4 @@
--- Editor-owned conversation state. No ACP, filesystem, writer or UI operations.
+-- Editor-owned conversation state. No agent, filesystem, writer or UI operations.
 -- The injected trusted driver owns effects; construction/observation are passive.
 -- The chat coordinator observes this owner; the production adapter owns effects.
 -- send(command, receive, disconnected) returns promptly, except the trusted
@@ -157,6 +157,7 @@ local STARTUP = {
   resume = "Resuming the conversation (up to 15 seconds)",
   model = "Confirming the selected model (up to 15 seconds)",
   mode = "Confirming edit mode (up to 15 seconds)",
+  compatibility = "Checking command sandbox support (up to 15 seconds)",
 }
 local DIAGNOSTICS = {
   sources = "Saved file validation failed. Save and check the selected files and their permissions.",
@@ -351,6 +352,7 @@ end
 function M.new(options)
   if
     not plain(options)
+    or (options.backend ~= nil and not ({ codex = true, opencode = true })[options.backend])
     or not path(options.root, true)
     or not selection(options.selection)
     or not model(options.model)
@@ -360,6 +362,23 @@ function M.new(options)
     return nil, "Invalid conversation scope, model or driver"
   end
   local owner, listeners = {}, {}
+  local backend = options.backend or "opencode"
+  local startup, diagnostics = vim.deepcopy(STARTUP), vim.deepcopy(DIAGNOSTICS)
+  if backend == "codex" then
+    for key, value in pairs(startup) do
+      startup[key] = value:gsub("OpenCode", "Codex")
+    end
+    startup.session = "Opening a Codex thread (up to 15 seconds)"
+    for key, value in pairs(diagnostics) do
+      diagnostics[key] = value:gsub("OpenCode", "Codex"):gsub("1%.18%.34", "0.163.0")
+    end
+    diagnostics.credentials =
+      "Codex credentials could not be loaded. Check chat.auth_file: an owned 0600 API-key or saved ChatGPT token file is required."
+    diagnostics.model =
+      "Codex did not advertise or confirm the selected model. Check chat.model, then close chat."
+    diagnostics.compatibility =
+      "Codex compatibility check failed. Use Codex 0.163.0 on a Linux host supporting its nested sandbox; run :checkhealth draft."
+  end
   local driver = options.driver
   local lease, sequence, notifying, dispatching = 0, 0, false, false
   local sending, draining, queue, queue_bytes = false, false, {}, 0
@@ -378,6 +397,7 @@ function M.new(options)
     view_revision = 1,
     phase = "idle",
     root = options.root,
+    backend = backend,
     selection = vim.deepcopy(options.selection),
     desired_model = options.model,
     provider = model(options.model),
@@ -716,10 +736,10 @@ function M.new(options)
       end
       lease = lease + 1
     elseif event.kind == "startup" and state.phase == "starting" then
-      if type(event.stage) ~= "string" or not STARTUP[event.stage] then
+      if type(event.stage) ~= "string" or not startup[event.stage] then
         return fail("Invalid startup progress; explicit recovery required")
       end
-      state.startup = STARTUP[event.stage]
+      state.startup = startup[event.stage]
     elseif
       event.kind == "submitted"
       and state.phase == "starting"
@@ -810,7 +830,7 @@ function M.new(options)
       end
       turn.status = "failed"
       if event.diagnostic then
-        state.reason = DIAGNOSTICS[event.diagnostic] .. " " .. state.reason
+        state.reason = diagnostics[event.diagnostic] .. " " .. state.reason
       end
       lease = lease + 1
     elseif

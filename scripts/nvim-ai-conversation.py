@@ -6,6 +6,7 @@ import importlib.util
 import os
 from pathlib import Path
 import select
+import re
 import sys
 
 
@@ -24,16 +25,24 @@ review = helper("nvim-ai-review")
 storage = helper("nvim-ai-conversation-store")
 turns = helper("nvim-ai-conversation-turn")
 reviews = helper("nvim-ai-conversation-review")
-FAILURES = (OSError, ValueError, RuntimeError, turns.staging.Refused, reviews.staging.Refused)
+codex_storage = helper("nvim-ai-codex-store")
+codex_turns = helper("nvim-ai-codex-turn")
+FAILURES = (OSError, ValueError, RuntimeError, turns.staging.Refused, reviews.staging.Refused,
+            codex_turns.staging.Refused)
 
 
 def configuration(path):
     value = protocol.decode_json(review._private_bytes(path, protocol.MAX_COMMAND))
-    if (not isinstance(value, dict) or not {"opencode", "bwrap", "model"} <= value.keys()
-            or set(value) - {"opencode", "bwrap", "model", "auth_file", "provider"}
+    if not isinstance(value, dict):
+        raise protocol.Refused("Invalid trusted controller configuration")
+    backend = value.get("backend", "opencode")
+    required = {"bwrap", "model", "codex", "auth_file"} if backend == "codex" else {"bwrap", "model", "opencode"}
+    allowed = required | {"backend"} if backend == "codex" else required | {"backend", "auth_file", "provider"}
+    if (backend not in ("opencode", "codex") or not required <= value.keys() or value.keys() - allowed
             or not protocol.model(value["model"])
-            or not all(protocol.path(value[key], True) for key in ("opencode", "bwrap"))
+            or not all(protocol.path(value[key], True) for key in (backend, "bwrap"))
             or ("auth_file" in value and not protocol.path(value["auth_file"], True))
+            or (backend == "codex" and re.fullmatch(r"openai/[a-zA-Z0-9_.-]{1,200}", value["model"]) is None)
             or ("provider" in value and (not isinstance(value["provider"], dict)
                  or set(value["provider"]) != {value["model"].split("/", 1)[0]}))):
         raise protocol.Refused("Invalid trusted controller configuration")
@@ -140,12 +149,15 @@ class Controller:
             self.transcript_bytes += len(command["message"].encode())
             if command["turn_id"] > 64 or self.transcript_bytes > protocol.MAX_OUTPUT:
                 raise protocol.Refused("Conversation turn or transcript budget exceeded")
+            if self.turn is not None and getattr(self.turn, "retired_store", False):
+                self.store, self.session = None, None
             if self.store is None:
-                self.store = storage.Store()
+                self.store = codex_storage.Store() if self.config.get("backend") == "codex" else storage.Store()
                 self.reviews = reviews.ReviewRegistry(command["root"], command["selection"])
             if self.turn is not None and self.turn.store_valid:
                 self.session = self.turn.session
-            self.turn = turns.Turn(self.config, self.store, self.pipe, session=self.session)
+            adapter = codex_turns if self.config.get("backend") == "codex" else turns
+            self.turn = adapter.Turn(self.config, self.store, self.pipe, session=self.session)
             self.turn.on_write_wait = self.write_wait
             try:
                 selected = self.reviews.begin_revision(command) if command["kind"] == "revise" else None

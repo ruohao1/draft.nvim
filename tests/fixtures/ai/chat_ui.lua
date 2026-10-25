@@ -7,10 +7,14 @@ vim.cmd.cd(vim.fn.fnameescape(vim.env.DRAFT_CHAT_UI_ROOT))
 vim.cmd.edit("parser.lua")
 vim.bo.filetype = "lua"
 vim.g.chat_fixture_prompts = 0
+vim.g.chat_fixture_commands = {}
 require("ai.conversation_controller").new = function(config)
   local sequence = 0
   local driver = {}
   function driver:send(command, receive)
+    local commands = vim.g.chat_fixture_commands
+    commands[#commands + 1] = vim.deepcopy(command)
+    vim.g.chat_fixture_commands = commands
     local function emit(event)
       sequence = sequence + 1
       receive(vim.tbl_extend("force", event, {

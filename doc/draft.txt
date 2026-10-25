@@ -113,6 +113,8 @@ tmux_project_pairs      Opt into the legacy session-pair routing convention.
                         Stale/mismatched pairs refuse launch.
 staged                  Session-only staging preferences. Explicit enabled/model/
                         auth_file choices override saved preferences. See below.
+chat                    Optional complete managed-chat configuration. Omit it to
+                        keep staged OpenCode preferences. See |draft-chat-codex|.
 status.redraw           Optional status redraw callback. The default uses
                         Neovim's redrawstatus command.
 
@@ -162,7 +164,9 @@ COMMANDS                                                        *draft-commands*
 :NvimAIChatNew [files...]
                         Start a new conversation after confirmed close.
 :[range]NvimAIChatAttach
-                        Append saved selected lines to the composer, without sending.
+                        Append a read-only buffer snapshot to the composer, without sending.
+:[range]NvimAIChatDiagnostics
+                        Append cached diagnostics to the composer, without sending.
 :NvimAIChatSend        Explicitly submit the composer.
 :NvimAIChatHide        Hide without cancelling, closing or sending.
 :NvimAIChatCancel      Cancel generation or confirm discarding pending review.
@@ -189,18 +193,48 @@ model discovery or submission. Explicit paths select 1-16 saved files, at most
 1 MiB combined, under the same file requirements as |draft-staged-review|.
 Selection and root stay fixed until close; arguments cannot silently rebind them.
 
-To include context, return to a selected source file and run
-:12,20NvimAIChatAttach. With keymaps=true, select text using v, V or Ctrl-V and
-press <leader>at to attach the exact selection. The range command always uses
-whole lines, including :'<,'>NvimAIChatAttach after a character/block selection.
+To include read-only context, return to a named file buffer inside the
+conversation's project root. Run :NvimAIChatAttach for the whole buffer or
+:12,20NvimAIChatAttach for whole lines. With keymaps=true, select text using
+v, V or Ctrl-V and press <leader>at for the exact selection, including partial
+lines or a rectangle. The Visual :'<,'>NvimAIChatAttach command uses whole lines.
 
-The composer keeps its existing text and appends the passage, relative path and
-line range. Edit, delete or undo it normally; only Ctrl-S or :NvimAIChatSend
-submits it. Context is a snapshot at attachment time; attach again if the source
-changes. The combined draft must fit the existing 32 KiB limit. Dirty buffers,
-stale disk contents and files outside the conversation's scope are refused.
-Attaching does not save source files or change the editable scope. Open a
-conversation first; attachment does not create one or start a provider.
+The snapshot includes the relative path, range, capture time and modified state.
+It uses current buffer text, including unsaved edits and new named files.
+Line boundaries use LF; whole-buffer snapshots label the final-newline flag.
+A CRLF file therefore appears as editor text, not a byte-for-byte disk copy.
+The composer keeps its existing text. Edit, delete or undo the snapshot normally;
+only Ctrl-S or :NvimAIChatSend submits it. Later source changes do not update
+snapshots. Remove and reattach context to refresh it.
+
+Capture requires a normal UTF-8 buffer with a canonical in-root path. Symlink
+aliases, outside-root paths, binary text and unsupported controls are refused.
+The source span is limited to 1 MiB, even for a small rectangle. Expanded visual
+text must fit 32,768 bytes before extraction. The complete draft, including
+metadata, fences and separators, must also fit 32,768 bytes; refusal leaves it intact.
+
+The header lists Editable files. Context paths grant no additional file access
+or editing authority. Attaching never saves a source, starts a provider or changes
+the editable files. Save dirty editable files before Send. To change that set,
+Close and start a New conversation. Open a conversation before attaching context.
+
+
+Run :NvimAIChatDiagnostics in a named in-root buffer to append its cached
+diagnostics from every namespace. Use :12,20NvimAIChatDiagnostics to include
+records whose starting line is in that range. It does not request LSP/linter
+updates or implicitly include source text. Each block says
+Cached diagnostics; freshness unverified, with capture time and modified state.
+It includes one-based line and byte column, severity, optional source/code, and
+message. Nested producer data is omitted. Duplicates remain; stale positions
+beyond the current buffer are kept without moving them to other lines.
+
+A cache with more than 1,000 records is refused before retrieval. A smaller range
+does not bypass this limit: reduce the cache or attach relevant text instead.
+An eligible cache can contribute at most 100 matching records, subject to the
+complete 32 KiB message limit. No matches leave the draft unchanged. Neither
+overflow nor invalid data is truncated. The count API scans the cache; retrieval
+copies nested producer data before Draft omits it. These limits do not impose
+a hard total memory or latency bound.
 
 Chat checks file permissions when opening and before each Send. Unsupported
 modes, such as 0600, identify the file and supported modes before submission.
@@ -218,9 +252,9 @@ stop waiting. Failures include a recovery action. Retry is offered only when the
 controller proves it safe; an unsubmitted request alone does not prove this.
 
 :NvimAIStatus reports the active chat's phase and startup step or failure reason.
-:checkhealth draft shows the same chat state, with native-companion checks labeled
-separately. Opening chat checks no account access; readiness is checked on explicit
-Send. Diagnostics exclude credentials and conversation text. Recorded startup
+:checkhealth draft shows the same chat state and defers native account probes
+while managed chat is configured or open. Opening chat checks no account access;
+readiness is checked on explicit Send. Diagnostics exclude credentials and conversation text. Recorded startup
 timings and limitations are in docs/validation/2026-10-03-chat-startup.md.
 
 Chat-buffer keys: Ctrl-S send (normal/insert); q hide (normal); gi compose;
@@ -251,6 +285,53 @@ outcomes from writer receipts, separately from the assistant's text, including
 pending, accepted, rejected, cancelled, blocked and uncertain states.
 
 Return to chat with f or :NvimAIChat. Closing only the diff tab makes no decision.
+
+MANAGED CODEX                                              *draft-chat-codex*
+
+Managed Codex requires a checkout containing this integration; the tagged
+v0.1.0-beta.1 release provides OpenCode chat. On the first setup call:
+>
+  require("draft").setup({
+    chat = {
+      backend = "codex",
+      model = "openai/<advertised-codex-model>",
+      auth_file = "/absolute/path/to/codex/auth.json",
+      -- codex = "/absolute/path/to/codex",
+    },
+  })
+<
+Use the existing chat commands, frozen diff and explicit Accept/Reject. A chat
+configuration is complete: no staged credentials, provider options or saved
+preferences are inherited. Omit chat for the existing OpenCode defaults, or use
+backend="opencode" with explicit model/auth/provider options. Both forms accept
+root, python and bwrap; only the selected backend CLI is required. Backend
+identity is fixed until close. Native companions and standalone staging retain
+their existing behavior.
+
+Send requires Codex 0.163.0, an advertised openai/model and a Linux host supporting
+its nested command sandbox. It checks readiness and command credential
+unreadability before submitting a prompt;
+unsupported hosts receive no unconfined or native fallback. Opening/hiding chat,
+setup, status and health do not import credentials or start app-server. Model
+selection remains an explicit next-turn action with :NvimAIChatModel.
+
+On first Send, Draft imports only an explicitly configured, owned, single-link
+0600 auth file containing an OpenAI API key or saved ChatGPT login tokens. The
+private copy can retain refresh writes across workers; the original stays
+unchanged. Commands can read system tools and selected copies; the private
+credential and conversation store are outside their readable filesystem.
+No global/project config import, credential export or login occurs.
+Close removes safely owned private state; unsafe state requires recovery.
+Synthetic local-provider tests validate the installed runtime. Real-account
+access and actual token refresh remain unverified.
+
+A turn-start acknowledgement cannot expose a proposal. Matching terminal
+completion, settled process exit and state/source validation precede the frozen
+diff. Cancel requires a matching interrupted terminal for eligible continuation.
+Retry requires positive pre-submission cleanup evidence and an explicit action;
+failed resume never starts a new thread or replays a request automatically.
+See docs/validation/2026-10-20-managed-codex-runtime.md for supported-runner proof
+and the development host's pre-prompt nested-sandbox refusal.
 
 MANUAL CORRECTIONS                                      *draft-chat-corrections*
 

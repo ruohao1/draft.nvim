@@ -23,7 +23,10 @@ assert(
   "unsupported Neovim must fail clearly"
 )
 assert(vim.fn.exists(":NvimAIOpen") == 0, "version refusal must precede registration")
-local options = { staged = { enabled = false } }
+local options = {
+  staged = { enabled = false },
+  chat = { backend = "codex", model = "openai/gpt-5.4", auth_file = "/missing/private-auth.json" },
+}
 local runtime = assert(draft.setup(options))
 assert(options.keymaps == nil, "setup must not mutate caller options")
 assert(draft.setup() == runtime, "setup must be idempotent")
@@ -39,6 +42,7 @@ for _, name in ipairs({
   "NvimAIChat",
   "NvimAIChatNew",
   "NvimAIChatAttach",
+  "NvimAIChatDiagnostics",
   "NvimAIChatSend",
   "NvimAIChatHide",
   "NvimAIChatCancel",
@@ -76,6 +80,28 @@ assert(
   "setup created runtime state"
 )
 vim.system = system
+local backends, native_probes = require("ai.backends"), 0
+local native_health = backends.health
+backends.health = function()
+  native_probes = native_probes + 1
+  return { installed = false, executable = "", version = "", auth = "unknown", error = "" }
+end
+local report = {}
+for _, level in ipairs({ "start", "ok", "info", "warn", "error" }) do
+  report[level] = function() end
+end
+require("draft.health").check({
+  report = report,
+  system = function()
+    return { code = 0, signal = 0, stdout = "tmux 3.7" }
+  end,
+})
+backends.health = native_health
+assert(
+  native_probes == 0,
+  "Configured chat health must not probe native credentials before opening"
+)
+assert(package.loaded["ai.chat"] == nil, "Health must not construct the chat UI")
 assert(runtime:shutdown())
 runtime = assert(draft.setup({ keymaps = true }))
 for _, key in ipairs(keys) do
