@@ -203,27 +203,34 @@ assert all(checks.values()), checks
         self.assertEqual(len(self.provider.requests), 1)
         self.stop("confined-completed")
 
-    def test_commands_cannot_read_credentials(self):
+    def test_commands_cannot_read_credentials_or_model_cache(self):
+        cache = self.codex_home / "models_cache.json"
+        cache.write_bytes(b"opaque synthetic model cache")
+        cache.chmod(0o600)
+        self.store.check()
         checks = """import json, pathlib
-secret = pathlib.Path('/home/agent/.codex/auth.json')
-alias = pathlib.Path('/tmp/project/auth-link')
-alias.symlink_to(secret)
 checks = {}
-for name, path in [('direct', secret), ('alias', alias),
-                   ('proc_root', pathlib.Path('/proc/self/root/home/agent/.codex/auth.json'))]:
-    try:
-        checks[name] = not path.read_bytes()
-    except (PermissionError, FileNotFoundError):
-        checks[name] = True
-alias.unlink()
+for filename in ('auth.json', 'models_cache.json'):
+    secret = pathlib.Path('/home/agent/.codex') / filename
+    alias = pathlib.Path('/tmp/project/private-link')
+    alias.symlink_to(secret)
+    for name, path in [('direct', secret), ('alias', alias),
+                       ('proc_root', pathlib.Path('/proc/self/root') / str(secret).lstrip('/'))]:
+        try:
+            checks[filename + '/' + name] = not path.read_bytes()
+        except (PermissionError, FileNotFoundError):
+            checks[filename + '/' + name] = True
+    alias.unlink()
 print(json.dumps(checks))
 """
         result = self.rpc("command/exec", {"command": ["/usr/bin/python3", "-I", "-B", "-c", checks],
             "cwd": "/tmp/project", "timeoutMs": 5000})
         self.assertEqual(result["exitCode"], 0, result)
         self.assertTrue(all(json.loads(result["stdout"]).values()),
-                        "Command can read the private credential file directly or through an alias")
-        self.stop("credential-reads-denied")
+                        "Command can read private credentials or model cache directly or through an alias")
+        self.stop("private-state-reads-denied")
+        self.store.close()
+        self.assertFalse(self.store.root.exists())
 
     def test_model_command_cannot_return_credentials(self):
         thread = None

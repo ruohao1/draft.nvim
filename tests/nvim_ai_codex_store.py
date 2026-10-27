@@ -91,6 +91,7 @@ class StoreTest(unittest.TestCase):
         self.seed()
         values = self.store.check()
         self.assertIn("state_5.sqlite", values)
+        self.assertIn("models_cache.json", values)
         self.assertIn(ROLLOUT, values)
         with (self.store.path / ROLLOUT).open("ab") as output:
             output.write(b"tampered")
@@ -110,7 +111,9 @@ class StoreTest(unittest.TestCase):
                             "Store tried to open payload contents")
             return original_open(path, flags, *args, **kwargs)
         with mock.patch.object(storage.os, "open", side_effect=metadata_open):
-            self.assertIn(ROLLOUT, self.store.check())
+            values = self.store.check()
+            self.assertIn(ROLLOUT, values)
+            self.assertIn("models_cache.json", values)
 
     def test_missing_rollout_and_forced_exit_cannot_resume(self):
         worker = self.start()
@@ -157,9 +160,11 @@ class StoreTest(unittest.TestCase):
 
     def test_links_modes_and_unknown_entries_refuse_cleanup_before_deletion(self):
         self.seed()
-        target = self.store.path / ROLLOUT
-        for case in ("extra", "mode", "auth-mode", "symlink", "hardlink", "fifo", "depth"):
+        for case in ("extra", "mode", "auth-mode", "symlink", "hardlink", "fifo", "depth",
+                     "cache-mode", "cache-symlink", "cache-hardlink"):
             with self.subTest(case=case):
+                target = self.store.path / ("models_cache.json" if case.startswith("cache-") else ROLLOUT)
+                case = case.removeprefix("cache-")
                 extra = self.store.path / "unapproved-secret-name"
                 backup = self.parent / "saved-rollout"
                 if case == "extra":

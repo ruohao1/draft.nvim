@@ -105,11 +105,16 @@ class TurnTest(unittest.TestCase):
     def methods(self):
         return [entry["method"] for entry in self.audit if "method" in entry]
 
-    def test_generated_permissions_survive_start_and_resume(self):
+    def test_model_cache_and_permissions_survive_start_resume_and_close(self):
         self.start()
         self.assertEqual(self.finish()["outcome"], "answer")
+        self.assertIn("models_cache.json", self.store.check())
         self.start(session=self.turn.session)
         self.assertEqual(self.finish()["outcome"], "answer")
+        self.assertIn("models_cache.json", self.store.check())
+        self.store.close()
+        self.assertFalse(self.store.root.exists())
+        self.assertEqual(self.source.read_bytes(), b"original text\n")
         for entry in self.audit:
             if entry.get("method") in ("command/exec", "thread/start", "thread/resume", "turn/start"):
                 self.assertNotIn("sandbox", entry["params"])

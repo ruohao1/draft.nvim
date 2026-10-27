@@ -51,6 +51,8 @@ class ProfileTest(unittest.TestCase):
         denied = storage.FILES | {"sessions", "thread-writer-locks"}
         filesystem = {"/": "read", "/tmp/project": "write"}
         filesystem.update({"/home/agent/.codex/" + name: "deny" for name in denied})
+        self.assertEqual(profile["permissions"]["draft"]["filesystem"].get(
+            "/home/agent/.codex/models_cache.json"), "deny")
         self.assertEqual(profile["permissions"], {"draft": {
             "filesystem": filesystem, "network": {"enabled": False}}})
 
