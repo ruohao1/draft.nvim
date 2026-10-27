@@ -65,6 +65,11 @@ return function(root, settings, backend, case)
       end)
       :gsub("AUDIT_PORT = 0", "AUDIT_PORT = " .. server:getsockname().port)
     vim.fn.writefile(vim.split(text, "\n", { plain = true }), f.peer, "b")
+    if case ~= "missing-host" then
+      local host = root .. "/codex-code-mode-host"
+      vim.fn.writefile({ "#!/bin/sh", "exit 0" }, host)
+      assert(vim.uv.fs_chmod(host, 448))
+    end
     f.auth_file = root .. "/synthetic auth 二.json"
     vim.fn.writefile({ '{"OPENAI_API_KEY":"synthetic-key"}' }, f.auth_file)
     assert(vim.uv.fs_chmod(f.auth_file, 384))

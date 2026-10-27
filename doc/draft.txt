@@ -304,9 +304,17 @@ Use the existing chat commands, frozen diff and explicit Accept/Reject. A chat
 configuration is complete: no staged credentials, provider options or saved
 preferences are inherited. Omit chat for the existing OpenCode defaults, or use
 backend="opencode" with explicit model/auth/provider options. Both forms accept
-root, python and bwrap; only the selected backend CLI is required. Backend
+root, python and bwrap; only the selected backend runtime is required. Backend
 identity is fixed until close. Native companions and standalone staging retain
 their existing behavior.
+
+Install the native Codex 0.163.0 CLI and its matching codex-code-mode-host in
+the same directory. The complete codex-package release archive contains both
+under bin/; point chat.codex at bin/codex. The single-CLI archive is insufficient.
+Draft validates both executables and mounts them separately read-only. A missing
+or unsafe companion stops Send before prompt submission and preserves the draft.
+The companion must be a regular executable, owned by you or root, with no symlink
+or group/world write access.
 
 Send requires Codex 0.163.0, an advertised openai/model and a Linux host supporting
 its nested command sandbox. It checks readiness and command credential
@@ -322,8 +330,8 @@ unchanged. Commands can read system tools and selected copies; the private
 credential and conversation store are outside their readable filesystem.
 No global/project config import, credential export or login occurs.
 Close removes safely owned private state; unsafe state requires recovery.
-Synthetic local-provider tests validate the installed runtime. Real-account
-access and actual token refresh remain unverified.
+Synthetic local-provider tests validate the installed runtime. Live review/approval
+and actual token refresh remain separate acceptance checks.
 
 A turn-start acknowledgement cannot expose a proposal. Matching terminal
 completion, settled process exit and state/source validation precede the frozen
@@ -331,7 +339,8 @@ diff. Cancel requires a matching interrupted terminal for eligible continuation.
 Retry requires positive pre-submission cleanup evidence and an explicit action;
 failed resume never starts a new thread or replays a request automatically.
 See docs/validation/2026-10-20-managed-codex-runtime.md for supported-runner proof
-and the development host's pre-prompt nested-sandbox refusal.
+and the development host's pre-prompt nested-sandbox refusal. The code-mode
+companion checks are in docs/validation/2026-10-27-codex-companion.md.
 
 MANUAL CORRECTIONS                                      *draft-chat-corrections*
 

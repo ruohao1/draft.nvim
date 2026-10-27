@@ -237,7 +237,9 @@ print(json.dumps(checks))
         for phase in ("new", "resumed"):
             if phase == "resumed":
                 self.launch()
-            self.provider.enqueue(self.fixture.command("cat /home/agent/.codex/auth.json 2>/dev/null || true"))
+            self.provider.enqueue(self.fixture.command(
+                "if cat /home/agent/.codex/auth.json 2>/dev/null; then exit 1; fi; "
+                "printf 'credential read denied\\n'"))
             self.provider.enqueue(self.fixture.answer("Credential read attempt finished."))
             previous = thread
             thread = self.thread(previous)
@@ -246,6 +248,15 @@ print(json.dumps(checks))
             turn = self.turn(thread, "Run the synthetic credential-isolation check.")
             self.assertEqual(self.terminal(thread, turn)["status"], "completed")
             self.assertEqual(len(self.provider.requests), 2 if phase == "new" else 4)
+            outputs = [item for item in self.provider.requests[-1]["input"]
+                       if item.get("type") == "custom_tool_call_output"]
+            self.assertTrue(outputs, "The model command must execute through code mode")
+            content = outputs[-1]["output"]
+            self.assertIsInstance(content, list, content)
+            self.assertTrue(content[0]["text"].startswith("Script completed\n"), content)
+            command = json.loads(content[-1]["text"])
+            self.assertEqual(command["exit_code"], 0, command)
+            self.assertEqual(command["output"], "credential read denied\n")
             self.assertTrue("synthetic-codex-key" not in json.dumps(self.provider.requests[-1]["input"]),
                             "Command exposed the synthetic credential to provider history: " + phase)
             self.stop("model-credential-output-denied-" + phase)

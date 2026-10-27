@@ -74,6 +74,12 @@ class TurnTest(unittest.TestCase):
         self.peer.write_text(fixture.replace('CASE = "answer"', "CASE = " + repr(case))
                             .replace("AUDIT_PORT = 0", "AUDIT_PORT = " + str(self.server.server_address[1])))
         self.peer.chmod(0o700)
+        host = self.peer.with_name("codex-code-mode-host")
+        if case == "missing-host":
+            host.unlink(missing_ok=True)
+        else:
+            host.write_text("#!/bin/sh\nexit 0\n")
+            host.chmod(0o700)
         config = {"backend": "codex", "codex": str(self.peer), "auth_file": str(self.auth),
                   "bwrap": os.path.realpath(shutil.which("bwrap")), "model": model}
         self.turn = turns.Turn(config, self.store, None, session=session)
@@ -122,6 +128,17 @@ class TurnTest(unittest.TestCase):
             if entry.get("method") == "command/exec":
                 self.assertEqual(entry["params"]["command"],
                                  ["/usr/bin/test", "!", "-r", "/home/agent/.codex/auth.json"])
+
+    def test_missing_companion_never_starts_a_worker_or_submits(self):
+        self.start("missing-host")
+        event = self.finish()
+        self.assertEqual(event["outcome"], "failed")
+        self.assertIsNone(self.turn.worker)
+        self.assertEqual(self.methods(), [])
+        self.assertFalse(self.turn.submitted)
+        self.assertEqual(self.source.read_bytes(), b"original text\n")
+        self.store.close()
+        self.assertFalse(self.store.root.exists())
 
     def test_completion_is_not_start_ack(self):
         self.start("edit-held")

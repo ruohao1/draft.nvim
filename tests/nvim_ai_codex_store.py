@@ -44,6 +44,9 @@ class StoreTest(unittest.TestCase):
         self.peer = self.parent / "codex"
         shutil.copyfile(ROOT / "tests/fixtures/ai/conversation_codex.py", self.peer)
         self.peer.chmod(0o700)
+        host = self.peer.with_name("codex-code-mode-host")
+        host.write_text("#!/bin/sh\nexit 0\n")
+        host.chmod(0o700)
         self.serial = 0
 
     def cleanup(self):

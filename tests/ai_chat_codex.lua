@@ -151,6 +151,7 @@ local ok, reason = xpcall(function()
       hint = "chat.auth_file",
     },
     { name = "wrong-version", hint = "Codex 0.163.0" },
+    { name = "missing-host", hint = "codex-code-mode-host" },
     { name = "missing-model", hint = "Codex" },
     { name = "unsupported", hint = "sandbox" },
   }) do

@@ -21,9 +21,9 @@ def answer(text):
 
 
 def command(script, call_id="fixture-command"):
-    return response({"type": "function_call", "call_id": call_id, "name": "exec_command",
-                     "arguments": json.dumps({"cmd": script, "workdir": "/tmp/project",
-                                              "yield_time_ms": 1000})})
+    arguments = json.dumps({"cmd": script, "workdir": "/tmp/project", "yield_time_ms": 1000})
+    return response({"type": "custom_tool_call", "call_id": call_id, "name": "exec",
+                     "input": "text(await tools.exec_command(" + arguments + "));"})
 
 
 class Provider:

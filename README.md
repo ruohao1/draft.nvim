@@ -153,9 +153,17 @@ Use the same `:NvimAIChat`, Send, diff, Accept/Reject and Edit/Freeze workflow.
 `chat` is a complete configuration: it does not inherit staged credentials,
 provider options or saved preferences. Omit `chat` to keep the existing OpenCode
 setup, or set `backend = "opencode"` with its own model/auth/provider options.
-Both forms accept `root`, `python` and `bwrap`; only the chosen CLI is required.
+Both forms accept `root`, `python` and `bwrap`; only the chosen backend runtime is required.
 The backend stays fixed until that conversation closes. Native companions and
 standalone staging retain their existing behavior.
+
+Install the native **Codex 0.163.0** CLI and its matching
+`codex-code-mode-host` in the same directory. The complete `codex-package`
+release archive contains both under `bin/`; point `chat.codex` at `bin/codex`.
+The single-CLI archive is insufficient. Draft validates both executable files
+and mounts them separately read-only. A missing or unsafe companion stops Send
+before any prompt is submitted; the draft remains available. The companion
+must be a regular executable, owned by you or root, with no symlink or group/world write access.
 
 Codex requires an explicit `openai/model` from its advertised catalog. Send checks
 CLI **0.163.0**, the model and nested command sandbox before submitting the turn.
@@ -172,14 +180,16 @@ between stopped workers. Commands can read system tools and selected copies; the
 private credential and conversation store are outside their readable filesystem. It does not copy global/project configuration, export
 credentials or initiate login. Close removes safely owned private state; unsafe
 state requires recovery. Installed-runtime checks use synthetic credentials and
-a local provider; real-account access and actual token refresh remain unverified.
+a local provider. Live review/approval and actual token refresh remain separate
+acceptance checks.
 
 A start acknowledgement never opens a diff. Draft waits for matching terminal
 completion, process exit and state/source validation. Cancel needs a matching
 interrupted terminal event before continuation is eligible. Retry is explicit
 and requires proven pre-submission cleanup; failed resume never starts a new
 thread or replays the request automatically. See the [runtime evidence and host
-limits](docs/validation/2026-10-20-managed-codex-runtime.md).
+limits](docs/validation/2026-10-20-managed-codex-runtime.md) and the
+[code-mode companion validation](docs/validation/2026-10-27-codex-companion.md).
 
 | Command | Purpose |
 | --- | --- |
