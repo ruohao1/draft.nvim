@@ -372,6 +372,8 @@ function M.new(options)
     for key, value in pairs(diagnostics) do
       diagnostics[key] = value:gsub("OpenCode", "Codex"):gsub("1%.18%.34", "0.163.0")
     end
+    diagnostics.launch =
+      "Codex could not start in its sandbox. Install Codex 0.163.0 with its matching codex-code-mode-host beside the native executable; run :checkhealth draft."
     diagnostics.credentials =
       "Codex credentials could not be loaded. Check chat.auth_file: an owned 0600 API-key or saved ChatGPT token file is required."
     diagnostics.model =

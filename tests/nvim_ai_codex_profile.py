@@ -32,6 +32,22 @@ class ProfileTest(unittest.TestCase):
         self.source = self.parent / "credential space 二.json"
         self.store = storage.Store(self.parent)
         self.addCleanup(self.store.close)
+        self.bin = self.parent / "provider space 二"
+        self.bin.mkdir(mode=0o700)
+        self.binary = self.bin / "codex"
+        self.host = self.bin / "codex-code-mode-host"
+        for path in (self.binary, self.host):
+            path.write_text("#!/bin/sh\nexit 0\n")
+            path.chmod(0o700)
+
+    def sandbox(self):
+        if not self.store.initialized:
+            self.store.initialize(self.credential({"OPENAI_API_KEY": "synthetic-api-key"}))
+        self.task = Path(tempfile.mkdtemp(dir=self.parent))
+        (self.task / "staging").mkdir(mode=0o700)
+        return runtime.sandbox({"model": "openai/gpt-5.4",
+            "bwrap": os.path.realpath(shutil.which("bwrap")), "codex": str(self.binary)},
+            self.task, self.store)
 
     def credential(self, value):
         self.source.write_text(json.dumps(value))
@@ -39,12 +55,8 @@ class ProfileTest(unittest.TestCase):
         return str(self.source)
 
     def test_command_profile_masks_private_state_without_widening_writes(self):
-        self.store.initialize(self.credential({"OPENAI_API_KEY": "synthetic-api-key"}))
-        task = self.parent / "turn"
-        (task / "staging").mkdir(mode=0o700, parents=True)
-        runtime.sandbox({"model": "openai/gpt-5.4", "bwrap": os.path.realpath(shutil.which("bwrap")),
-                         "codex": os.path.realpath(shutil.which("true"))}, task, self.store)
-        profile = tomllib.loads((task / "agent/codex.toml").read_text())
+        self.sandbox()
+        profile = tomllib.loads((self.task / "agent/codex.toml").read_text())
         self.assertEqual(profile.get("default_permissions"), "draft")
         self.assertNotIn("sandbox_mode", profile)
         self.assertNotIn("sandbox_workspace_write", profile)
@@ -55,6 +67,41 @@ class ProfileTest(unittest.TestCase):
             "/home/agent/.codex/models_cache.json"), "deny")
         self.assertEqual(profile["permissions"], {"draft": {
             "filesystem": filesystem, "network": {"enabled": False}}})
+
+    def test_only_the_sibling_companion_is_mounted_read_only(self):
+        argv, _ = self.sandbox()
+        mounts = [(argv[i + 1], argv[i + 2]) for i, arg in enumerate(argv) if arg == "--ro-bind"]
+        self.assertIn((str(self.binary), "/opt/codex"), mounts)
+        self.assertIn((str(self.host), "/opt/codex-code-mode-host"), mounts)
+        self.assertEqual([source for source, _ in mounts if source.startswith(str(self.bin))],
+                         [str(self.binary), str(self.host)])
+        self.assertNotIn(str(self.bin), argv)
+
+    def test_missing_companion_is_refused_before_runtime_creation(self):
+        self.host.unlink()
+        with self.assertRaises((runtime.Refused, OSError)):
+            self.sandbox()
+        self.assertFalse((self.task / "agent").exists())
+
+    def test_unsafe_companions_are_refused(self):
+        self.host.unlink()
+        for case in ("writable", "not-executable", "symlink", "directory", "fifo"):
+            with self.subTest(case=case):
+                if case == "symlink":
+                    self.host.symlink_to(self.binary)
+                elif case == "directory":
+                    self.host.mkdir()
+                elif case == "fifo":
+                    os.mkfifo(self.host, mode=0o700)
+                else:
+                    self.host.write_text("#!/bin/sh\nexit 0\n")
+                    self.host.chmod(0o777 if case == "writable" else 0o600)
+                try:
+                    with self.assertRaises((runtime.Refused, OSError)):
+                        self.sandbox()
+                    self.assertFalse((self.task / "agent").exists())
+                finally:
+                    self.host.rmdir() if case == "directory" else self.host.unlink()
 
     def test_private_api_key_import(self):
         source = self.credential({"OPENAI_API_KEY": "synthetic-api-key"})

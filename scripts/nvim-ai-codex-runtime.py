@@ -22,6 +22,8 @@ def sandbox(config, task, store):
     if not isinstance(model, str) or re.fullmatch(r"openai/[a-zA-Z0-9_.-]{1,200}", model) is None:
         raise Refused("Codex requires an explicit openai/model")
     store.check()
+    codex = staging.executable(config["codex"])
+    host = staging.executable(str(Path(codex).with_name("codex-code-mode-host")))
     agent = task / "agent"
     for name in ("home", "codex-tmp"):
         (agent / name).mkdir(mode=0o700, parents=True)
@@ -59,7 +61,8 @@ def sandbox(config, task, store):
              "--bind", str(agent / "codex-tmp"), "/home/agent/.codex/tmp",
              "--ro-bind", str(agent / "codex.toml"), "/home/agent/.codex/config.toml",
              "--bind", str(task / "staging"), "/tmp/project",
-             "--ro-bind", staging.executable(config["codex"]), "/opt/codex",
+             "--ro-bind", codex, "/opt/codex",
+             "--ro-bind", host, "/opt/codex-code-mode-host",
              "--chdir", "/tmp/project", "--", "/opt/codex", "app-server", "--listen", "stdio://"]
     env = {"PATH": "/usr/bin:/bin", "HOME": "/home/agent", "CODEX_HOME": "/home/agent/.codex",
            "LANG": "C.UTF-8", "SHELL": "/bin/sh", "TERM": "dumb"}

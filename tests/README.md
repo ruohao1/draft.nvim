@@ -318,7 +318,9 @@ macOS, Windows or every real backend/account workflow is supported.
 ## Optional pinned Codex runtime audit
 
 The default suite runs the Codex opt-in/environment regression and skips the
-installed runtime cases. To opt in explicitly with CLI **0.163.0**:
+installed runtime cases. To opt in, install the native CLI **0.163.0** and its
+matching `codex-code-mode-host` beside it. The complete `codex-package` release
+archive provides both under `bin/`; the single-CLI archive does not:
 
 ```sh
 python3 -I -B tests/run.py --codex /absolute/path/to/codex nvim_ai_codex_runtime
@@ -330,7 +332,10 @@ version or sandbox failure fails the audit rather than skipping it. The audit
 checks command confinement while the engine can reach its provider. Direct,
 symlink and proc-root credential reads must fail; model-command output must not
 return the synthetic credential to provider history, including after worker exit
-and exact-thread resume. Edit,
+and exact-thread resume. Scripted model commands use custom `exec` to invoke
+`tools.exec_command` through the companion. Credential isolation requires a
+successful nested command and its expected output, so a tool-host failure cannot
+pass as a denied read. Edit,
 matching completion, frozen review, interruption and exact-thread resume after
 worker exit use the production conversation controller and Codex turn/store.
 The test-only launcher redirects the generated profile to the local provider;
@@ -340,7 +345,8 @@ Logs contain synthetic protocol evidence and retained-state metadata, never
 account credentials or the contents of the retained databases and rollouts.
 
 The Linux workflow has a `codex_runtime` dispatch input, default false. When
-selected it verifies the pinned release checksum and runs the same audit on the
+selected it verifies the complete package checksum, extracts only `bin/codex`
+and `bin/codex-code-mode-host`, and runs the same audit on the
 disposable runner with its existing Bubblewrap profile. The current development
 host cannot create Codex's nested namespace; do not weaken either sandbox or
 change host policy to make this test pass. See the

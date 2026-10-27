@@ -196,6 +196,9 @@ class EngineTest(unittest.TestCase):
             fixture = (ROOT / "tests/fixtures/ai/conversation_codex.py").read_text()
             self.peer.write_text(fixture.replace('CASE = "answer"', "CASE = " + repr(case))
                 .replace("AUDIT_PORT = 0", "AUDIT_PORT = " + str(self.server.server_address[1])))
+            host = self.peer.with_name("codex-code-mode-host")
+            host.write_text("#!/bin/sh\nexit 0\n")
+            host.chmod(0o700)
             auth_file = self.scratch / "codex-auth.json"
             auth_file.write_text('{"OPENAI_API_KEY":"synthetic-key"}')
             auth_file.chmod(0o600)
