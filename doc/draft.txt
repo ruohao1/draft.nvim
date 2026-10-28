@@ -193,6 +193,11 @@ model discovery or submission. Explicit paths select 1-16 saved files, at most
 1 MiB combined, under the same file requirements as |draft-staged-review|.
 Selection and root stay fixed until close; arguments cannot silently rebind them.
 
+The compact header shows the phase and next-turn model. Message labels follow
+standard theme highlights; provider text stays literal. Current recovery guidance
+appears after the latest reply. Send is shown by the composer only when available.
+The full task guide is docs/usage.md.
+
 To include read-only context, return to a named file buffer inside the
 conversation's project root. Run :NvimAIChatAttach for the whole buffer or
 :12,20NvimAIChatAttach for whole lines. With keymaps=true, select text using
@@ -264,7 +269,12 @@ pending frozen diff. While you are typing, it waits for Escape and preserves
 your draft. Hidden chats and chats in another tab wait until :NvimAIChat reopens
 them. Each proposal opens automatically once; returning to chat does not bounce
 back to review. Use gd or :NvimAIChatReview to choose another file or reopen it.
-The preview is read-only. In normal mode, its frozen panels use:
+The preview is read-only. Saved and Proposed identify the two panels; Retained
+marks decided context carried into a later proposal. Titles show file position
+and decision before the path. On terminal resize, managed review balances only
+its two owned diff panes in the active tab. Background and repurposed tabs keep
+their layout. The compact footer shows primary actions; g? opens the action menu.
+In normal mode, the frozen panels use:
   a       Accept the displayed pending file; advance after the writer receipt.
   r       Reject the displayed pending file; stay on it while others are pending.
   ]f/[f   Next/previous file.

@@ -96,7 +96,11 @@ options, rejected confirmation and missing synthetic credentials never send a
 second prompt or replace the session. The approval case uses the production
 controller, confined fake ACP peer and real
 writer to exercise a/r/A/R/f/q, file navigation, revisions and partial receipts.
-It can capture the real terminal grids for review:
+The presentation cases also cover compact controls with laststatus=3, balanced
+managed diff panes after resize, and light/dark theme changes. They capture idle
+chat, conversations, failed startup and frozen review at wide/narrow sizes. The
+[presentation record](../docs/validation/2026-10-28-ui-presentation.md) links the
+current images. Capture the real terminal grids with:
 
 ```sh
 DRAFT_CHAT_CAPTURE_DIR=/tmp/draft-chat-captures \

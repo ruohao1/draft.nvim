@@ -84,10 +84,10 @@
 | State, safety and recovery | `docs/usage.md#safety-and-recovery`; retain a brief README caveat and link. Preserve data-retention, non-atomic publication and uncertain-outcome guidance. |
 | Detailed validation history | Existing `tests/README.md` and validation records; repair cross-links rather than duplicate the history. |
 
-- [ ] Write `docs/usage.md` and update the existing installation guide only where content has no current home. Reconcile all removed README sections against the table. Use the help file for command/option reference; do not paste a second full reference into the new guide.
-- [ ] Rewrite `README.md` to the design's 120–160-line target. Lead with purpose and a populated chat capture. Include essential chat/review keys, an accessible image description and a linked diff screenshot. Clearly label development visuals and fixture data. Keep MIT licensing and material limitations discoverable. Preserve the existing `requirements`, `install` and `start-with-opencode-chat` heading anchors, which the release guide and beta checklist use; repair any moved links.
-- [ ] Update affected wording in `doc/draft.txt`, the capture instructions in `tests/README.md`, and `CHANGELOG.md` using the repository's current changelog format. Add no new command or option.
-- [ ] Capture real terminal grids using the existing private tmux harness:
+- [x] Write `docs/usage.md` and update the existing installation guide only where content has no current home. Reconcile all removed README sections against the table. Use the help file for command/option reference; do not paste a second full reference into the new guide.
+- [x] Rewrite `README.md` to the design's 120–160-line target. Lead with purpose and a populated chat capture. Include essential chat/review keys, an accessible image description and a linked diff screenshot. Clearly label development visuals and fixture data. Keep MIT licensing and material limitations discoverable. Preserve the existing `requirements`, `install` and `start-with-opencode-chat` heading anchors, which the release guide and beta checklist use; repair any moved links.
+- [x] Update affected wording in `doc/draft.txt`, the capture instructions in `tests/README.md`, and `CHANGELOG.md` using the repository's current changelog format. Add no new command or option.
+- [x] Capture real terminal grids using the existing private tmux harness:
 
   ```sh
   DRAFT_CHAT_CAPTURE_DIR=/tmp/draft-presentation-captures python3 -I -B tests/nvim_ai_chat_ui.py -q
@@ -100,15 +100,14 @@
   referenced by historical validation records. Reuse the renderer; do not add Pillow as a plugin runtime
   dependency. Inspect every published image. Record themes, dimensions and fixture
   limits in `docs/validation/2026-10-28-ui-presentation.md`.
-- [ ] Check relative Markdown links/anchors and help tags, then read the README in rendered form. Walk through its install/first-edit instructions against the public commands in a clean fixture. Confirm the release pin cannot be mistaken for Codex support. Check `wc -l README.md` and `git diff --check`; length is a target, not permission to delete needed guidance.
-- [ ] Run `python3 -I -B tests/run.py` once for the integrated result and `stylua --check lua tests`. Record exact results and skips. Do not make live-provider or production-account claims from fixtures.
-- [ ] Obtain one independent whole-branch review of behavior, screenshots and documentation. Resolve material findings with focused checks. Commit the final docs/evidence as `docs: simplify the README and refresh UI examples` when authorized.
-- [ ] Prepare one implementation PR containing all three tasks and these planning documents. Report actual validation and limits. Publishing and merging remain separate from this planning request.
+- [x] Check relative Markdown links/anchors and help tags, then read the README in rendered form. Walk through its install/first-edit instructions against the public commands in a clean fixture. Confirm the release pin cannot be mistaken for Codex support. Check `wc -l README.md` and `git diff --check`; length is a target, not permission to delete needed guidance.
+- [x] Run `python3 -I -B tests/run.py` once for the integrated result and `stylua --check lua tests`. Record exact results and skips. Do not make live-provider or production-account claims from fixtures.
+- [x] Obtain one independent whole-branch review of behavior, screenshots and documentation. Resolve material findings with focused checks. Commit the final docs/evidence as `docs: simplify the README and refresh UI examples` when authorized.
+- [x] Prepare one implementation PR containing all three tasks and these planning documents. Report actual validation and limits. Publishing and merging remain separate from this planning request.
 
-## Planning handoff
+## Delivery status
 
-Implementation is authorized. Checked steps record completed work; the validation
-record will report the integrated result.
-The existing native execution workflow is suitable because the three tasks share
-presentation strings and screenshots. Start with Task 1 and review its wide/narrow
-captures before extending the same presentation to frozen review.
+The three tasks and independent review are complete. The
+[validation record](../../validation/2026-10-28-ui-presentation.md) reports exact
+checks and limits. Keep this design and plan with the implementation PR. Hosted
+CI and merge status are tracked on that PR.
