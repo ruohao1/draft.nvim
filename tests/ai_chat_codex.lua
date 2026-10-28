@@ -299,6 +299,50 @@ local ok, reason = xpcall(function()
   f = nil
   print("ok - Codex terminal, partial decisions, local correction and exact-thread resume")
 
+  f = make(directory("cancel-resume"), {}, "codex", "cancel")
+  local controllers = launches
+  f.compose("Stream an answer until I cancel.")
+  vim.cmd("NvimAIChatSend")
+  f.phase("generating")
+  f.rendered("Partial answer before cancellation.")
+  f.key("gc")()
+  f.phase("idle")
+  assert(f.snapshot().turns[1].status == "cancelled")
+  assert(not f.snapshot().recovery_required and f.snapshot().review == nil)
+  assert(#f.snapshot().rounds == 0 and requests("turn/interrupt") == 1)
+  for index = 1, 3 do
+    assert(bytes(index) == "original text\n", "Cancellation cannot publish source changes")
+  end
+  local peer = table.concat(vim.fn.readfile(f.peer, "b"), "\n")
+  local resumed, replacements = peer:gsub('CASE = "cancel"', 'CASE = "answer"')
+  assert(replacements == 1)
+  vim.fn.writefile(vim.split(resumed, "\n", { plain = true }), f.peer, "b")
+  f.compose("Continue with a new explicit request.")
+  vim.cmd("NvimAIChatSend")
+  f.phase("idle")
+  assert(f.snapshot().turn_id == 2 and f.snapshot().worker_generation == 2)
+  assert(f.snapshot().turns[1].status == "cancelled")
+  assert(f.snapshot().turns[2].status == "completed")
+  assert(f.snapshot().turns[2].text == "Bounded answer.")
+  assert(not f.snapshot().recovery_required and #f.snapshot().rounds == 0)
+  assert(launches == controllers + 1 and requests("turn/start") == 2)
+  assert(requests("thread/start") == 1 and requests("thread/resume") == 1)
+  local cancelled_thread
+  for _, event in ipairs(f.audit) do
+    if event.method == "turn/interrupt" then
+      cancelled_thread = event.params.threadId
+    elseif event.method == "thread/resume" then
+      assert(cancelled_thread and event.params.threadId == cancelled_thread)
+    end
+  end
+  for index = 1, 3 do
+    assert(bytes(index) == "original text\n")
+  end
+  f.cleanup()
+  assert(f.snapshot().phase == "closed")
+  f = nil
+  print("ok - Codex cancellation reaches the editor and resumes the same thread")
+
   f = make(directory("source-drift"), {}, "codex", "edit")
   f.compose("Propose edits.")
   vim.cmd("NvimAIChatSend")

@@ -269,7 +269,8 @@ class Turn:
         expected = "interrupted" if self.cancelling else "completed"
         if self.terminal != expected:
             raise protocol.Refused("Codex turn did not reach the required terminal status")
-        self.emit("stopping")
+        if not self.cancelling:
+            self.emit("stopping")
         self.diagnostic = "cleanup"
         self.store.stop(outcome="cancelled" if self.cancelling else "completed", session=self.session)
         self.stopped = self.graceful = self.store_valid = True
