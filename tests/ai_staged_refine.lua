@@ -143,6 +143,12 @@ local ok, err = xpcall(function()
         eq(state.files[1].state, "accepted")
         eq(state.files[2].state, "pending")
         eq(state.current_file, 2, "open the first pending diff, not retained context")
+        key("[f")
+        assert(
+          vim.wo.winbar:find("Retained", 1, true) and vim.wo.winbar:find("[accepted]", 1, true),
+          vim.wo.winbar
+        )
+        key("]f")
         eq(disk(1), "approved edit\n")
         eq(disk(2), "second original\n")
       end
@@ -160,6 +166,12 @@ local ok, err = xpcall(function()
     key("]f")
     local state = followup("refine-one")
     eq(state.files[1].state, "rejected")
+    key("[f")
+    assert(
+      vim.wo.winbar:find("Retained", 1, true) and vim.wo.winbar:find("[rejected]", 1, true),
+      vim.wo.winbar
+    )
+    key("]f")
     key("r")
     eq(staged.status().phase, "rejected")
     eq(staged.status().results.rejected, paths)

@@ -70,6 +70,9 @@ Neovim's global statusline. Other keys remain in the existing action menu/help.
 Standalone staging retains its different `f` meaning and available controls.
 Do not promise a control when that caller supplies no action callback.
 
+On terminal resize, rebalance a managed review only when its active tab still
+contains exactly its two frozen diff panes. Preserve background and repurposed tabs.
+
 Preserve automatic review timing, Escape deferral, return-to-chat behavior,
 per-file/batch decisions and all source checks. Shared title changes also cover
 standalone staging; native after-write review is outside this redesign.

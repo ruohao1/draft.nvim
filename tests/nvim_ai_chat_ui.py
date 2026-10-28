@@ -360,14 +360,14 @@ class ChatApprovalUITest(ChatTerminal):
         self.literal(text)
         self.keys("C-s", "Escape")
         self.phase("review")
-        self.wait(lambda: "FROZEN STAGED PROPOSAL" in self.evaluate("vim.wo.winbar"),
+        self.wait(lambda: "Proposed" in self.evaluate("vim.wo.winbar"),
                   "automatic frozen diff")
 
     def review(self, index=1):
         self.keys("g", "d")
         self.wait(lambda: "Open frozen proposal preview" in self.tm("capture-pane", "-p", "-t", "draft"), "review picker")
         self.keys(str(index), "Enter")
-        self.wait(lambda: "FROZEN STAGED PROPOSAL" in self.evaluate("vim.wo.winbar"), "frozen panels")
+        self.wait(lambda: "Proposed" in self.evaluate("vim.wo.winbar"), "frozen panels")
 
     def confirm(self, prompt):
         self.wait(lambda: prompt in self.tm("capture-pane", "-p", "-t", "draft"), prompt)
@@ -382,6 +382,33 @@ class ChatApprovalUITest(ChatTerminal):
                 return False
             return "Type number and <Enter>" not in screen
         self.wait(finished, "confirmation returned to editor")
+
+    def test_review_controls_survive_global_statusline_and_theme_changes(self):
+        self.send("Propose edits to the selected files.")
+        self.capture("presentation-review-wide")
+        self.command("set background=light | colorscheme peachpuff")
+        self.capture("presentation-review-light")
+        self.command("set background=dark | colorscheme habamax")
+        self.tm("resize-window", "-t", "draft", "-x", "70", "-y", "28")
+        self.wait(lambda: self.evaluate("vim.o.columns") == "70", "review narrow resize")
+        widths = json.loads(self.evaluate("vim.json.encode(vim.tbl_map(vim.api.nvim_win_get_width, vim.api.nvim_tabpage_list_wins(0)))"))
+        self.assertLessEqual(max(widths) - min(widths), 1, "resize must preserve readable review panes")
+        for setting in (2, 3):
+            self.command("set laststatus=" + str(setting))
+            for direction in ("h", "l"):
+                self.command("wincmd " + direction)
+                self.wait(lambda: "a accept" in self.capture("presentation-review-narrow"), "compact actions")
+                screen = self.capture("presentation-review-narrow")
+                self.assertIn("r reject", screen)
+                self.assertIn("f chat", screen)
+                self.assertEqual(self.evaluate("chat_approval_fixture.disk(1)"), "original text")
+        self.keys("g", "?")
+        self.wait(lambda: "Draft actions" in self.tm("capture-pane", "-p", "-t", "draft"), "review action menu")
+        self.keys("q", "Enter")
+        self.command("set laststatus=2")
+        self.keys("f")
+        self.wait(lambda: self.evaluate("vim.bo.filetype") == "draft-chat-input", "return from review")
+        self.assertEqual(self.evaluate("chat_approval_fixture.snapshot().phase"), "review")
 
     def test_automatic_diff_waits_for_typing_and_supports_narrow_navigation(self):
         def acknowledge_receipt():
@@ -477,7 +504,7 @@ class ChatApprovalUITest(ChatTerminal):
         self.wait(lambda: "Freeze proposal" in self.tm("capture-pane", "-p", "-t", "draft"), "correction actions menu")
         self.keys("3", "Enter")
         self.phase("review")
-        self.wait(lambda: "FROZEN STAGED PROPOSAL" in self.evaluate("vim.wo.winbar"), "replacement review")
+        self.wait(lambda: "Proposed" in self.evaluate("vim.wo.winbar"), "replacement review")
         self.assertNotEqual(self.evaluate("chat_approval_fixture.snapshot().review.token"), token)
         self.assertEqual(self.evaluate("chat_approval_fixture.snapshot().review.revision"), "2")
         self.assertEqual(self.evaluate("chat_approval_fixture.snapshot().review.files[1].state"), "accepted")
@@ -603,7 +630,7 @@ class ChatCodexUITest(ChatTerminal):
         self.keys("C-s")
         self.wait(lambda: self.evaluate("chat_approval_fixture.snapshot().phase") == "review",
                   "Codex stopped with a frozen proposal")
-        self.wait(lambda: "FROZEN STAGED PROPOSAL" in self.evaluate("vim.wo.winbar"),
+        self.wait(lambda: "Proposed" in self.evaluate("vim.wo.winbar"),
                   "Codex frozen panels")
         screen = self.capture("codex-review")
         self.assertIn("original text", screen)

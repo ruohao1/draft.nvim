@@ -405,15 +405,13 @@ show_file = function(state, index)
     vim.api.nvim_win_set_buf(win, buf)
     vim.api.nvim_win_call(win, function()
       local title = string.format(
-        "[%d/%d] [%s] %s · %s",
+        " %s · %d/%d [%s] ",
+        item.retained_decision and "Retained" or (position == 1 and "Saved" or "Proposed"),
         index,
         #state.files,
-        item.decision,
-        item.path,
-        item.retained_decision and "RETAINED DECISION · current saved context"
-          or (position == 1 and "SAVED SNAPSHOT" or "FROZEN STAGED PROPOSAL")
+        item.decision
       )
-      vim.wo.winbar = title:gsub("%%", "%%%%")
+      vim.wo.winbar = title:gsub("%%", "%%%%") .. "%<" .. item.path:gsub("%%", "%%%%")
       vim.wo.statusline = summary
       vim.wo.number, vim.wo.wrap = true, false
       vim.cmd("diffthis")
@@ -600,8 +598,18 @@ function M.open(frozen, captured, options)
       first = index
     end
   end
-  local navigation = vim.api.nvim_create_autocmd({ "TabLeave", "BufWinLeave" }, {
+  local navigation = vim.api.nvim_create_autocmd({ "TabLeave", "BufWinLeave", "VimResized" }, {
     callback = function(event)
+      if event.event == "VimResized" then
+        if
+          state.phase == "review_ready"
+          and visible_review(state, true)
+          and #vim.api.nvim_tabpage_list_wins(state.tab) == 2
+        then
+          vim.cmd("wincmd =")
+        end
+        return
+      end
       if
         (event.event == "TabLeave" and state.tab == vim.api.nvim_get_current_tabpage())
         or (event.event == "BufWinLeave" and state.panels and state.panels[event.buf])

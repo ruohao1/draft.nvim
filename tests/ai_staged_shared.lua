@@ -26,6 +26,70 @@ local ok, reason = xpcall(function()
   assert(vim.uv.fs_chmod(files[2], 420))
   print("ok - passive source capture explains unsupported permissions without changing files")
 
+  local literal = "é%{1+1}.txt"
+  local literal_path = root .. "/" .. literal
+  vim.fn.writefile({ "saved" }, literal_path)
+  assert(vim.uv.fs_chmod(literal_path, 420))
+  local literal_capture = assert(sources.capture({ literal_path }, root))
+  handle = assert(review.open({
+    root = root,
+    id = string.rep("c", 32),
+    proposal = root .. "/literal.json",
+    files = { { path = literal, oldText = "saved\n", newText = "proposed\n" } },
+  }, literal_capture, { defer = true }))
+  assert(handle:show(literal))
+  local panels = vim.api.nvim_tabpage_list_wins(0)
+  table.sort(panels, function(a, b)
+    return vim.api.nvim_win_get_position(a)[2] < vim.api.nvim_win_get_position(b)[2]
+  end)
+  for index, win in ipairs(panels) do
+    local title = vim.api.nvim_eval_statusline(
+      vim.wo[win].winbar,
+      { winid = win, use_winbar = true, maxwidth = 200 }
+    ).str
+    assert(title:find(index == 1 and "Saved" or "Proposed", 1, true), title)
+    assert(title:find("1/1", 1, true) and title:find("[pending]", 1, true), title)
+    assert(title:find(literal, 1, true), "literal filename was interpreted: " .. title)
+    assert(not vim.bo[vim.api.nvim_win_get_buf(win)].modifiable)
+    assert(
+      not vim.wo[win].statusline:find("a accept", 1, true),
+      "preview without callbacks must not advertise approval"
+    )
+  end
+  local review_tab, focus = vim.api.nvim_get_current_tabpage(), vim.api.nvim_get_current_win()
+  vim.cmd("vertical resize 20")
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  assert(
+    math.abs(vim.api.nvim_win_get_width(panels[1]) - vim.api.nvim_win_get_width(panels[2])) <= 1,
+    "resize must keep both review panes readable"
+  )
+  assert(vim.api.nvim_get_current_win() == focus)
+  vim.cmd("tabnew")
+  vim.cmd("vsplit")
+  vim.cmd("vertical resize 23")
+  local other_win, other_tab = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_tabpage()
+  local other_width = vim.api.nvim_win_get_width(other_win)
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  assert(
+    vim.api.nvim_get_current_tabpage() == other_tab
+      and vim.api.nvim_win_get_width(other_win) == other_width,
+    "background review cannot rebalance another tab"
+  )
+  vim.cmd("tabclose")
+  assert(vim.api.nvim_get_current_tabpage() == review_tab)
+  vim.cmd("vnew")
+  vim.cmd("vertical resize 23")
+  local extra, width = vim.api.nvim_get_current_win(), vim.api.nvim_win_get_width(0)
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  assert(
+    vim.api.nvim_get_current_win() == extra and vim.api.nvim_win_get_width(extra) == width,
+    "review cannot rebalance a repurposed tab"
+  )
+  vim.cmd("close")
+  assert(vim.fn.readfile(literal_path)[1] == "saved")
+  handle:retire()
+  print("ok - frozen titles distinguish panels and preserve literal Unicode filenames")
+
   for _, case in ipairs({
     { before = "", after = "\n", lines = { "" } },
     { before = "original text\n", after = "", lines = { "" } },
