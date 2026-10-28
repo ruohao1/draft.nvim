@@ -148,7 +148,13 @@ return function(root, settings, backend, case)
   function f.rendered(value)
     assert(
       vim.wait(1000, function()
-        return f.text():find(value, 1, true) ~= nil
+        local text = f.text()
+        for _, win in ipairs(vim.fn.win_findbuf(f.buffer("draft-chat"))) do
+          text = text
+            .. "\n"
+            .. vim.api.nvim_eval_statusline(vim.wo[win].winbar, { winid = win, use_winbar = true }).str
+        end
+        return text:find(value, 1, true) ~= nil
       end, 10),
       f.text()
     )

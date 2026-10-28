@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Chat now uses theme-aware message labels and a compact header. Current recovery
+  guidance follows the latest reply, and the composer shows Send only when available.
+
 - Managed Codex returns to idle after a confirmed cancellation, so a new Send
   can continue the same thread without unnecessary recovery.
 - Managed Codex now mounts its code-mode companion so model tools can edit selected

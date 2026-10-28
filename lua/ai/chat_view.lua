@@ -2,6 +2,7 @@
 local M = {}
 local MAX_BYTES, MAX_LINES, MAX_DRAFT = 2 * 1024 * 1024, 20000, 32768
 local serial = 0
+local namespace = vim.api.nvim_create_namespace("draft-chat")
 
 local function prefix(value, limit)
   local last = math.min(#value, limit)
@@ -15,7 +16,7 @@ end
 
 local function projection(snapshot, notice)
   local chunks, bytes, lines, omitted = {}, MAX_BYTES - 4096, MAX_LINES - 32, false
-  local function prepend(value)
+  local function prepend(value, group)
     value = tostring(value or "")
     local start = math.max(1, #value - bytes + 1)
     for i = #value, start, -1 do
@@ -32,8 +33,8 @@ local function projection(snapshot, notice)
     end
     omitted = omitted or start > 1
     local tail = value:sub(start)
-    if #tail > 0 and bytes > 0 and lines > 0 then
-      table.insert(chunks, 1, tail)
+    if bytes > 0 and lines > 0 and (#tail > 0 or value == "") then
+      table.insert(chunks, 1, { text = tail, group = start == 1 and group or nil })
       bytes, lines = math.max(0, bytes - #tail - 1), lines - 1
     elseif #value > 0 then
       omitted = true
@@ -45,7 +46,7 @@ local function projection(snapshot, notice)
     if round and round.turn_id == turn.id then
       for index = #round.files, 1, -1 do
         local file = round.files[index]
-        prepend(file.path .. " · " .. file.state)
+        prepend(file.path .. " · " .. file.state, "DiagnosticInfo")
       end
       prepend(
         "Review "
@@ -54,62 +55,103 @@ local function projection(snapshot, notice)
           .. round.revision
           .. " · "
           .. round.status
-          .. (round.origin == "manual" and " · manual correction" or "")
+          .. (round.origin == "manual" and " · manual correction" or ""),
+        "Title"
       )
       prepend("")
     end
     if turn.progress then
-      prepend("Tool: " .. turn.progress.title .. " [" .. turn.progress.status .. "]")
+      prepend("Tool: " .. turn.progress.title .. " [" .. turn.progress.status .. "]", "Comment")
     end
     prepend(turn.text)
-    prepend("Assistant · " .. (turn.model or turn.requested_model or "") .. " · " .. turn.status)
+    prepend(
+      "Assistant · " .. (turn.model or turn.requested_model or "") .. " · " .. turn.status,
+      "Title"
+    )
     prepend("")
     prepend(turn.prompt)
-    prepend("You · turn " .. turn.id)
+    prepend("You · turn " .. turn.id, "Identifier")
     prepend("")
   end
-  local header = {
-    "Draft · " .. (snapshot.phase or "idle") .. " · next: " .. (snapshot.desired_model or ""),
+
+  local text, highlights = {}, {}
+  local function append(value, group, max_lines)
+    for index, line in ipairs(vim.split(value, "\n", { plain = true })) do
+      if max_lines and index > max_lines then
+        break
+      end
+      if group and line ~= "" then
+        highlights[#highlights + 1] = { line = #text, group = group }
+      end
+      text[#text + 1] = line
+    end
+  end
+  append(
     (snapshot.backend == "codex" and "Codex" or "OpenCode") .. " · review before write",
-    "Editable files: " .. table.concat(snapshot.selection or {}, ", "),
-    "Ctrl-S send · q hide · gi compose · g? actions",
-    "gd review · gm model for next turn",
-  }
-  if snapshot.phase == "starting" and snapshot.startup then
-    header[#header + 1] = snapshot.startup .. ". :NvimAIChatCancel to stop."
+    "Comment"
+  )
+  append(
+    prefix("Editable files: " .. table.concat(snapshot.selection or {}, ", "), 1024),
+    "Comment",
+    6
+  )
+  if omitted then
+    append("[Earlier transcript omitted from this view]", "Comment")
+  end
+  for _, chunk in ipairs(chunks) do
+    append(chunk.text, chunk.group)
+  end
+
+  local notes, phase = {}, snapshot.phase or "idle"
+  if phase == "idle" and #(snapshot.turns or {}) == 0 then
+    notes[#notes + 1] = "Ask about the selected files, or request an edit."
+  elseif phase == "starting" then
+    notes[#notes + 1] = (snapshot.startup or "Starting") .. " · gc cancel"
+  elseif phase == "generating" then
+    notes[#notes + 1] = "gc cancel"
+  elseif phase == "stopping" then
+    notes[#notes + 1] = "Finishing this turn."
+  elseif phase == "cancelling" then
+    notes[#notes + 1] = "Cancelling; waiting for the worker to stop."
+  elseif phase == "closing" then
+    notes[#notes + 1] = "Closing; waiting for cleanup."
+  elseif phase == "editing" then
+    notes[#notes + 1] =
+      "Correction open. :NvimAIChatFreezeProposal creates a fresh review; it does not publish."
+  elseif phase == "freezing" then
+    notes[#notes + 1] = "Freezing correction. Review the replacement before accepting."
+  elseif phase == "publishing" then
+    notes[#notes + 1] = "Publishing; waiting for the file outcomes."
+  elseif phase == "closed" then
+    notes[#notes + 1] = "Conversation closed. g? actions to start a new one."
   end
   if snapshot.review and snapshot.review.status == "pending" then
-    header[#header + 1] =
-      "Send follows up on the pending proposal. Open its diff to accept or reject."
-  end
-  if snapshot.phase == "editing" then
-    header[#header + 1] =
-      "Correction open. :NvimAIChatFreezeProposal creates a fresh review; it does not publish."
-  elseif snapshot.phase == "freezing" then
-    header[#header + 1] = "Freezing correction. Review the replacement before accepting."
-  end
-  if snapshot.reason then
-    header[#header + 1] = tostring(snapshot.reason)
+    notes[#notes + 1] = "gd review · Proposal pending"
+    notes[#notes + 1] = "Send follows up; only acceptance writes files."
   end
   if snapshot.recovery_required then
-    header[#header + 1] = "Recovery required; close this conversation before starting another."
+    notes[#notes + 1] = "Recovery required; close this conversation before starting another."
+  elseif phase == "failed" and snapshot.retry_safe then
+    notes[#notes + 1] = "gr retry · gx close"
+  end
+  if snapshot.reason then
+    notes[#notes + 1] = prefix(tostring(snapshot.reason), 2000)
   end
   if notice then
-    header[#header + 1] = notice
+    notes[#notes + 1] = notice
   end
-  if omitted then
-    header[#header + 1] = "[Earlier transcript omitted from this view]"
+  if #notes > 0 then
+    append("")
+    -- Keep current guidance at the tail; provider text never supplies styling.
+    local group = "Comment"
+    if snapshot.recovery_required or phase == "failed" then
+      group = "DiagnosticError"
+    elseif snapshot.review and snapshot.review.status == "pending" then
+      group = "DiagnosticWarn"
+    end
+    append(prefix(table.concat(notes, "\n"), 2900), group, 23)
   end
-  -- Metadata is bounded separately; never interpret provider text as editor commands.
-  local heading = vim.split(prefix(table.concat(header, "\n"), 4096), "\n", { plain = true })
-  while #heading > 31 do
-    table.remove(heading)
-  end
-  return vim.split(
-    table.concat(heading, "\n") .. "\n" .. table.concat(chunks, "\n"),
-    "\n",
-    { plain = true }
-  )
+  return text, highlights
 end
 
 function M.new(options)
@@ -167,15 +209,30 @@ function M.new(options)
     local count = vim.api.nvim_buf_line_count(buf)
     local saved = win and vim.api.nvim_win_call(win, vim.fn.winsaveview)
     local follow = not saved or saved.lnum >= count
-    local text = projection(latest, message)
+    local text, highlights = projection(latest, message)
     if owned("input") then
       vim.bo[buffers.input].modifiable = latest.phase ~= "closed"
+      local input = window("input")
+      if input then
+        local can_send = (latest.phase == "idle" or latest.phase == "review")
+          and not latest.recovery_required
+        vim.wo[input].statusline = latest.phase == "closed" and " Read-only history"
+          or can_send and " Ctrl-S send · Enter newline"
+          or " Draft kept · Enter newline"
+      end
     end
     vim.bo[buf].modifiable = true
     local ok, reason = pcall(vim.api.nvim_buf_set_lines, buf, 0, -1, false, text)
     vim.bo[buf].modifiable = false
     if not ok then
       error(reason)
+    end
+    vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
+    for _, mark in ipairs(highlights) do
+      vim.api.nvim_buf_set_extmark(buf, namespace, mark.line, 0, {
+        end_row = mark.line + 1,
+        hl_group = mark.group,
+      })
     end
     if win then
       if follow then
@@ -189,7 +246,7 @@ function M.new(options)
         end)
       end
       vim.wo[win].winbar = (
-        " Draft · pre-write · "
+        " Draft · "
         .. (latest.phase or "idle")
         .. " · next: "
         .. (latest.desired_model or "")
@@ -307,10 +364,9 @@ function M.new(options)
       vim.wo[win].wrap = true
       vim.wo[win].signcolumn = "no"
       vim.wo[win].foldenable = false
-      vim.wo[win].statusline = kind == "input" and " Draft message"
-        or " Draft conversation · pre-write"
-      vim.wo[win].winbar = kind == "input" and " Compose · Ctrl-S send · Enter newline"
-        or " Draft"
+      vim.wo[win].statusline = kind == "input" and " Ctrl-S send · Enter newline"
+        or " g? actions · q hide"
+      vim.wo[win].winbar = kind == "input" and " Message" or " Draft"
     end
     tab, visible = vim.api.nvim_get_current_tabpage(), true
     return true

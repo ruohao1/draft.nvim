@@ -99,6 +99,12 @@ return parse
 
 class ChatUITest(ChatTerminal):
     def test_real_input_passive_reopen_and_resize(self):
+        self.wait(lambda: "Ask about the selected files" in self.capture("chat-idle-wide"), "idle guidance")
+        self.tm("resize-window", "-t", "draft", "-x", "70", "-y", "28")
+        self.wait(lambda: self.evaluate("vim.o.columns") == "70", "idle narrow resize")
+        self.wait(lambda: "Ask about the selected files" in self.capture("chat-idle-narrow"), "idle narrow guidance")
+        self.tm("resize-window", "-t", "draft", "-x", "140", "-y", "42")
+        self.wait(lambda: self.evaluate("vim.o.columns") == "140", "idle wide resize")
         self.keys("i")
         self.literal("What does this parser do?")
         self.keys("Enter")
@@ -116,9 +122,13 @@ class ChatUITest(ChatTerminal):
         self.keys("Escape")
         self.wait(lambda: self.evaluate("vim.api.nvim_get_mode().mode") == "n", "normal-mode capture")
         self.wait(lambda: "Two edge cases" in self.capture("conversation-wide"), "wide transcript")
+        self.command("set background=light | colorscheme peachpuff")
+        self.wait(lambda: self.evaluate("vim.o.background") == "light", "light theme")
+        self.capture("conversation-light")
+        self.command("set background=dark | colorscheme habamax")
         self.tm("resize-window", "-t", "draft", "-x", "70", "-y", "28")
         self.wait(lambda: self.evaluate("vim.o.columns") == "70", "narrow resize")
-        self.wait(lambda: "Draft · pre-write · idle · next: fixture/model" in self.capture("conversation-narrow"), "narrow rendered state")
+        self.wait(lambda: "Draft · idle · next: fixture/model" in self.capture("conversation-narrow"), "narrow rendered state")
         self.keys("q")
         self.wait(lambda: self.evaluate("#vim.api.nvim_list_wins()") == "1", "passive hide")
         self.command("NvimAIChat")
@@ -288,6 +298,10 @@ class ChatStartupUITest(ChatTerminal):
         self.assertIn(":NvimAIStageSetup", screen)
         self.assertEqual(self.evaluate("vim.api.nvim_get_current_line()"), "Keep this next question.")
         self.assertEqual(self.evaluate("chat_approval_fixture.snapshot().retry_safe"), "true")
+        self.tm("resize-window", "-t", "draft", "-x", "70", "-y", "28")
+        self.wait(lambda: self.evaluate("vim.o.columns") == "70", "failure narrow resize")
+        self.wait(lambda: "failed" in self.capture("chat-startup-auth-narrow"), "failure state remains visible")
+        self.assertEqual(self.evaluate("vim.api.nvim_get_current_line()"), "Keep this next question.")
 
     def test_startup_progress_and_explicit_cancellation(self):
         auth = self.root / "fixture-auth.json"
