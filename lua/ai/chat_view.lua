@@ -125,7 +125,7 @@ local function projection(snapshot, notice)
   elseif phase == "closed" then
     notes[#notes + 1] = "Conversation closed. g? actions to start a new one."
   end
-  if snapshot.review and snapshot.review.status == "pending" then
+  if phase == "review" and snapshot.review and snapshot.review.status == "pending" then
     notes[#notes + 1] = "gd review · Proposal pending"
     notes[#notes + 1] = "Send follows up; only acceptance writes files."
   end
@@ -146,7 +146,7 @@ local function projection(snapshot, notice)
     local group = "Comment"
     if snapshot.recovery_required or phase == "failed" then
       group = "DiagnosticError"
-    elseif snapshot.review and snapshot.review.status == "pending" then
+    elseif phase == "review" and snapshot.review and snapshot.review.status == "pending" then
       group = "DiagnosticWarn"
     end
     append(prefix(table.concat(notes, "\n"), 2900), group, 23)
@@ -245,12 +245,10 @@ function M.new(options)
           vim.fn.winrestview(saved)
         end)
       end
-      vim.wo[win].winbar = (
-        " Draft · "
-        .. (latest.phase or "idle")
-        .. " · next: "
-        .. (latest.desired_model or "")
-      ):gsub("%%", "%%%%")
+      vim.wo[win].winbar = (" Draft · " .. (latest.phase or "idle") .. " · next: "):gsub(
+        "%%",
+        "%%%%"
+      ) .. "%<" .. (latest.desired_model or ""):gsub("%%", "%%%%")
     end
   end
 
@@ -364,7 +362,7 @@ function M.new(options)
       vim.wo[win].wrap = true
       vim.wo[win].signcolumn = "no"
       vim.wo[win].foldenable = false
-      vim.wo[win].statusline = kind == "input" and " Ctrl-S send · Enter newline"
+      vim.wo[win].statusline = kind == "input" and " Draft kept · Enter newline"
         or " g? actions · q hide"
       vim.wo[win].winbar = kind == "input" and " Message" or " Draft"
     end

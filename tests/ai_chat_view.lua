@@ -142,6 +142,21 @@ local ok, reason = xpcall(function()
     assert(vim.api.nvim_get_current_win() == source_win)
     assert(view:draft() == "next explicit question\nsecond draft line")
   end
+  state.phase = "cancelling"
+  state.desired_model = "anthropic/claude-sonnet-4-5-20250929/%{1+1}"
+  view:update(state)
+  wait_text("Cancelling;")
+  local narrow_title = vim.api.nvim_eval_statusline(vim.wo[win].winbar, {
+    winid = win,
+    use_winbar = true,
+    maxwidth = vim.api.nvim_win_get_width(win),
+  }).str
+  assert(
+    narrow_title:find("Draft · cancelling · next:", 1, true),
+    "long model hid the current phase: " .. narrow_title
+  )
+  assert(narrow_title:find("%{1+1}", 1, true), narrow_title)
+  state.phase = "generating"
   state.desired_model, state.selection = "fixture/model", { "one.lua" }
   state.turns[1].text = "reply marker"
   view:update(state)
@@ -177,7 +192,23 @@ local ok, reason = xpcall(function()
     )
     assert(vim.bo[input].modifiable == (phase ~= "closed"))
   end
-  state.phase = "generating"
+  state.review = { status = "pending" }
+  for _, phase in ipairs({ "publishing", "cancelling", "closing", "generating", "review" }) do
+    state.phase = phase
+    view:update(state)
+    assert(vim.wait(1000, function()
+      return vim.wo[win].winbar:find(" · " .. phase .. " · ", 1, true) ~= nil
+    end, 10))
+    assert(
+      (transcript():find("gd review", 1, true) ~= nil) == (phase == "review"),
+      "pending receipt offered unavailable review in " .. phase
+    )
+    assert(
+      (transcript():find("Send follows up", 1, true) ~= nil) == (phase == "review"),
+      "pending receipt offered unavailable Send in " .. phase
+    )
+  end
+  state.phase, state.review = "generating", nil
   print("ok - composer hints do not offer Send during unavailable states")
 
   local file_states = { "accepted", "rejected", "pending", "cancelled", "blocked", "uncertain" }

@@ -87,6 +87,10 @@ end
 local function text(kind)
   return table.concat(vim.api.nvim_buf_get_lines(assert(buffer(kind)), 0, -1, false), "\n")
 end
+local function heading()
+  local win = assert(vim.fn.win_findbuf(assert(buffer("draft-chat")))[1])
+  return vim.api.nvim_eval_statusline(vim.wo[win].winbar, { winid = win, use_winbar = true }).str
+end
 local function compose(value)
   vim.api.nvim_buf_set_lines(assert(buffer("draft-chat-input")), 0, -1, false, { value })
 end
@@ -95,7 +99,7 @@ local function wait_for(predicate, reason)
 end
 local function phase(value)
   wait_for(function()
-    return text("draft-chat"):find("Draft · " .. value .. " ·", 1, true) ~= nil
+    return heading():find("Draft · " .. value .. " ·", 1, true) ~= nil
   end, "Chat did not display " .. value)
 end
 local function count(key, value)
@@ -226,7 +230,7 @@ local ok, reason = xpcall(function()
   local activity = #audit
   vim.cmd("NvimAIChatModel")
   wait_for(function()
-    return text("draft-chat"):find("next: fixture/second-model", 1, true) ~= nil
+    return heading():find("next: fixture/second-model", 1, true) ~= nil
   end, "Selected next-turn model did not render")
   assert(#audit == activity and text("draft-chat-input") == "Second explicit question.")
   vim.cmd("NvimAIChatSend")
@@ -289,7 +293,7 @@ local ok, reason = xpcall(function()
   vim.api.nvim_set_current_win(source_win)
   phase("review")
   assert(#vim.api.nvim_list_tabpages() == tabs + 1)
-  assert(vim.wo.diff and vim.wo.winbar:find("FROZEN STAGED PROPOSAL", 1, true))
+  assert(vim.wo.diff and vim.wo.winbar:find("Proposed", 1, true))
   assert(vim.api.nvim_get_current_line() == "proposed edit")
   assert(vim.fn.readfile(source_path)[1] == "original text")
   vim.cmd("NvimAIChat")
