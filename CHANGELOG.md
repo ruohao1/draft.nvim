@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Managed Codex returns to idle after a confirmed cancellation, so a new Send
+  can continue the same thread without unnecessary recovery.
 - Managed Codex now mounts its code-mode companion so model tools can edit selected
   copies for review. Install the native Codex 0.163.0 CLI and matching
   `codex-code-mode-host` beside it, as provided by the complete release package.

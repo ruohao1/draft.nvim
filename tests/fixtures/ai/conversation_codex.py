@@ -270,7 +270,14 @@ for line in sys.stdin:
                     reply = json.loads(next(sys.stdin))
                     assert reply.get("error", {}).get("code") == -32601
                 audit({"client_denied": True})
-            if CASE in ("early", "early-wrong", "cancel", "cancel-ack"):
+            if CASE in ("cancel", "cancel-ack"):
+                note("turn/started", threadId=THREAD, turn={"id": TURN, "status": "inProgress", "items": []})
+                note("item/started", threadId=THREAD, turnId=TURN,
+                     item={"type": "agentMessage", "id": "partial-message", "text": ""})
+                note("item/agentMessage/delta", threadId=THREAD, turnId=TURN,
+                     itemId="partial-message", delta="Partial answer before cancellation.")
+                continue
+            if CASE in ("early", "early-wrong"):
                 continue
             if CASE == "edit-held":
                 threading.Thread(target=held_answer, daemon=True).start()
