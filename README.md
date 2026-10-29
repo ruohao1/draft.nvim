@@ -50,6 +50,8 @@ Restart Neovim, then run:
 For **Codex or the updated UI**, use a
 [development checkout](docs/releases/install-upgrade-rollback.md#choose-an-available-version).
 Follow the [Codex configuration guide](docs/usage.md#codex) before opening chat.
+Use a dedicated ChatGPT login with `chat.auth_store`, or an API-key file with
+`chat.auth_file`. Close keeps the dedicated login for the next conversation.
 The beta tag does not include managed Codex.
 
 Configure Draft on the first `setup()` call. Restart after changing setup options

@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,9 @@ def helper(name):
 
 turns = helper("nvim-ai-codex-turn")
 storage = helper("nvim-ai-codex-store")
+spec = importlib.util.spec_from_file_location("fixture-auth", ROOT / "tests/fixtures/ai/codex_auth.py")
+auth_fixture = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(auth_fixture)
 
 
 class TurnTest(unittest.TestCase):
@@ -39,6 +43,7 @@ class TurnTest(unittest.TestCase):
         self.auth = self.root / "auth.json"
         self.auth.write_text('{"OPENAI_API_KEY":"synthetic-key"}')
         self.auth.chmod(0o600)
+        self.auth_store = None
         self.peer = self.root / "codex"
         self.audit, self.events = [], []
         self.gate = threading.Event()
@@ -82,6 +87,9 @@ class TurnTest(unittest.TestCase):
             host.chmod(0o700)
         config = {"backend": "codex", "codex": str(self.peer), "auth_file": str(self.auth),
                   "bwrap": os.path.realpath(shutil.which("bwrap")), "model": model}
+        if self.auth_store is not None:
+            config.pop("auth_file")
+            config["auth_store"] = str(self.auth_store)
         self.turn = turns.Turn(config, self.store, None, session=session)
         self.command = {"kind": "start", "root": str(self.project), "model": model,
                         "message": "Explicit request", "sources": [{"path": "example.txt",
@@ -110,6 +118,125 @@ class TurnTest(unittest.TestCase):
 
     def methods(self):
         return [entry["method"] for entry in self.audit if "method" in entry]
+
+    def owned(self):
+        self.auth_store = self.root / "dedicated"
+        self.auth_store.mkdir(mode=0o700)
+        self.auth = self.auth_store / "auth.json"
+        self.auth.write_text(json.dumps(auth_fixture.bundle()))
+        self.auth.chmod(0o600)
+
+    def test_owned_busy_resume_preserves_thread_until_explicit_retry(self):
+        self.owned()
+        self.start()
+        self.assertEqual(self.finish()["outcome"], "answer")
+        session = self.turn.session
+        self.assertEqual(self.store.auth_fds, ())
+        lease = storage.auth.Lease(str(self.auth_store))
+        try:
+            self.start(session=session)
+            event = self.finish()
+            self.assertEqual(event["diagnostic"], "auth_busy")
+            self.assertTrue(event["stopped"] and event["graceful"] and event["store_valid"]
+                            and event["tokens_retired"])
+            self.assertEqual(event["submission"], "not_submitted")
+            self.assertEqual(self.turn.session, session)
+            self.assertIsNone(self.turn.worker)
+            self.assertEqual(self.methods().count("turn/start"), 1)
+        finally:
+            lease.close()
+        self.start(session=session)
+        self.assertEqual(self.finish()["outcome"], "answer")
+        self.assertEqual(self.methods().count("thread/start"), 1)
+        self.assertEqual(self.methods().count("thread/resume"), 1)
+        self.assertEqual(self.methods().count("turn/start"), 2)
+
+    def test_owned_first_turn_contention_and_missing_support_are_prelaunch(self):
+        self.owned()
+        with mock.patch.object(turns.runtime, "require_owned_auth", side_effect=turns.runtime.Refused("unsupported")), \
+             mock.patch.object(storage.auth, "Lease", side_effect=AssertionError("read before support")):
+            self.start()
+            event = self.finish()
+            self.assertEqual(event["diagnostic"], "auth_support")
+            self.assertTrue(event["store_valid"])
+            self.assertIsNone(self.turn.worker)
+        self.store = storage.Store(self.root)
+        lease = storage.auth.Lease(str(self.auth_store))
+        try:
+            self.start()
+            self.assertEqual(self.finish()["diagnostic"], "auth_busy")
+            self.assertTrue(self.turn.retired_store)
+            self.assertFalse(self.store.root.exists())
+            self.assertEqual(self.methods(), [])
+        finally:
+            lease.close()
+
+    def test_owned_account_switch_refuses_before_resume_or_send(self):
+        self.owned()
+        self.start()
+        self.assertEqual(self.finish()["outcome"], "answer")
+        session = self.turn.session
+        for change in ({"user_id": "other-user"}, {"workspace_id": "other-workspace"}):
+            self.auth.write_text(json.dumps(auth_fixture.bundle(1, **change)))
+            self.start(session=session)
+            event = self.finish()
+            self.assertEqual(event["diagnostic"], "auth_identity")
+            self.assertFalse(event["store_valid"])
+            self.assertIsNone(self.turn.worker)
+            self.assertEqual(self.methods().count("turn/start"), 1)
+            self.assertNotIn("thread/resume", self.methods())
+
+    def test_owned_prelaunch_failure_releases_lease_and_clears_previous_diagnostic(self):
+        self.owned()
+        self.start()
+        self.assertEqual(self.finish()["outcome"], "answer")
+        session = self.turn.session
+        self.store.auth_diagnostic = "auth_busy"
+        self.start("missing-host", session=session)
+        event = self.finish()
+        self.assertEqual(event["diagnostic"], "launch")
+        self.assertFalse(event["store_valid"])
+        self.assertEqual(self.store.auth_fds, ())
+        storage.auth.Lease(str(self.auth_store)).close()
+        self.assertEqual(self.methods().count("turn/start"), 1)
+
+    def test_busy_resume_does_not_authorize_a_changed_store(self):
+        self.owned()
+        self.start()
+        self.assertEqual(self.finish()["outcome"], "answer")
+        session = self.turn.session
+        lease = storage.auth.Lease(str(self.auth_store))
+        try:
+            self.start(session=session)
+            self.assertEqual(self.finish()["diagnostic"], "auth_busy")
+            (self.store.path / "models_cache.json").write_bytes(b"changed while idle")
+            event = self.turn.fail()[-1]
+            self.assertFalse(event["store_valid"])
+        finally:
+            lease.close()
+
+    def test_owned_sync_failure_cannot_expose_a_frozen_review(self):
+        self.owned()
+        self.start("edit-held")
+        self.until(lambda: self.turn.stage == "running")
+        with mock.patch.object(self.store._lease, "settle", side_effect=storage.auth.Refused("auth_persistence")):
+            self.gate.set()
+            event = self.finish()
+        self.assertEqual(event["outcome"], "failed")
+        self.assertEqual(event["diagnostic"], "auth_persistence")
+        self.assertFalse(event["store_valid"])
+        self.assertIsNone(self.turn.frozen)
+        self.assertEqual(self.source.read_bytes(), b"original text\n")
+        self.assertTrue(self.auth.exists())
+
+    def test_saved_chatgpt_copy_refuses_before_worker_and_preserves_source(self):
+        self.auth.write_text(json.dumps(auth_fixture.bundle()))
+        original = self.auth.read_bytes()
+        self.start()
+        self.assertEqual(self.finish()["diagnostic"], "auth_migrate")
+        self.assertIsNone(self.turn.worker)
+        self.assertEqual(self.methods(), [])
+        self.assertTrue(self.auth.read_bytes() == original, "Migration changed source")
 
     def test_private_cache_and_journal_survive_start_resume_and_close(self):
         self.start()

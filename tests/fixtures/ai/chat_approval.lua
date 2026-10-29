@@ -108,7 +108,7 @@ return function(root, settings, backend, case)
       backend = "codex",
       model = "openai/gpt-5.4",
       codex = f.peer,
-      auth_file = f.auth_file,
+      auth_file = not (settings and settings.auth_store) and f.auth_file or nil,
       root = f.project,
     }, settings or {})
     configured.staged.opencode = root .. "/missing-opencode"

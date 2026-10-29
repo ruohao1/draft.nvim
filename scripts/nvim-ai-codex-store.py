@@ -184,7 +184,10 @@ class Store:
             raw = b""
             if auth_store is None:
                 raw = review._private_bytes(auth_file, auth.MAX_BYTES)
-                auth.validate(raw)
+                value = auth.validate(raw)
+                if value.get("OPENAI_API_KEY") is None:
+                    self.auth_diagnostic = "auth_migrate"
+                    raise Refused("Saved ChatGPT credentials require a dedicated login")
         except (OSError, ValueError, TypeError, protocol.Refused, auth.Refused):
             raise Refused("Configure a private supported Codex credential file") from None
         try:
@@ -264,6 +267,11 @@ class Store:
             self._release_auth()
             raise
         return self._worker
+
+    def abort_start(self):
+        if self._worker is not None:
+            raise Refused("Cannot release credentials before worker exit")
+        self._release_auth()
 
     def stop(self, *, outcome, session=None):
         if self._worker is None:

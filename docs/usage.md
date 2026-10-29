@@ -16,7 +16,7 @@ require("draft").setup({
   chat = {
     backend = "codex",
     model = "openai/<advertised-codex-model>",
-    auth_file = "/absolute/path/to/codex/auth.json",
+    auth_store = "/absolute/private/path/to/draft-codex",
     -- codex = "/absolute/path/to/codex",
   },
 })
@@ -42,13 +42,49 @@ or choose `backend = "opencode"` with explicit model/auth/provider options.
 Both forms accept `root`, `python` and `bwrap`. Only the selected CLI is required.
 The backend stays fixed until the conversation closes.
 
-On first Send, Draft imports only the configured, owned, single-link **0600**
-auth file, containing an OpenAI API key or saved ChatGPT login tokens. It leaves
-the source unchanged and keeps refresh writes in the private copy between
-stopped workers. Commands can read system tools and selected copies; the private
-credential and conversation store remain outside their readable filesystem.
-Draft does not copy global/project configuration, export credentials or start login.
-Close removes safely owned private state; unsafe state requires recovery.
+For a saved ChatGPT login, use `chat.auth_store`. Create a fresh login in a
+dedicated directory. Do not copy the CLI or IDE's tokens: a copy still shares
+their refresh-token family. Do not run another Codex client against this directory.
+Before login or logout, stop all Draft Codex workers.
+
+```sh
+umask 077
+draft_codex_home="$HOME/.local/state/draft-codex"
+mkdir -p "$HOME/.local/state"
+mkdir -m 700 "$draft_codex_home" # Choose a new directory if this already exists.
+CODEX_HOME="$draft_codex_home" codex -c 'cli_auth_credentials_store="file"' login
+chmod 600 "$draft_codex_home/auth.json"
+```
+
+Set `chat.auth_store` to that directory's absolute, canonical path. Draft requires
+an owned **0700** directory and an owned, single-link regular **0600** `auth.json`,
+at most **1 MiB**. Symlinks are refused. Bubblewrap must support `--bind-fd` and
+`--sync-fd`; **0.11.1** is tested. Unsupported hosts refuse before reading credentials.
+
+On each Send, Draft takes an exclusive local lease. Codex writes refreshed tokens
+directly to the dedicated file. Other Draft conversations can use the same login
+after the worker stops. A busy login preserves the draft and thread; wait for the
+other worker, then explicitly Retry or Revise. Idle chat and frozen review hold
+no lease. A different ChatGPT user or workspace requires a new conversation.
+
+Close removes conversation data and retains this login. To sign out after all
+workers stop, run `CODEX_HOME="$draft_codex_home" codex -c 'cli_auth_credentials_store="file"' logout`.
+If a refresh is interrupted, the upstream file writer can leave incomplete or
+unusable credentials. Draft preserves that file and never restores an older
+token seed. Close the affected conversation and perform a fresh dedicated login.
+
+For API keys, set `chat.auth_file` to an owned, single-link **0600** credential
+file instead. Draft copies it and leaves the source unchanged. Set exactly one
+of `auth_file` and `auth_store`. **Migration:** saved ChatGPT tokens configured
+through `auth_file` are now refused before worker launch; create the separate
+login above and change the option to `auth_store`.
+
+Commands can read system tools and selected copies; credentials and conversation
+state remain outside their readable filesystem. Draft does not import global or
+project configuration, export credentials, or start login. The lease coordinates
+cooperating local Draft processes; it does not coordinate another CLI or IDE.
+Unsafe conversation cleanup still requires recovery. Real-service login and
+refresh remain a separate opt-in acceptance check.
 
 A start acknowledgement is not a finished edit. Frozen review waits for matching
 terminal completion, process exit and source/state validation. Cancel needs a

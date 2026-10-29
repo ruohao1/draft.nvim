@@ -49,6 +49,7 @@ class Turn:
 
     def start(self, command, *, selected=None, context=None, manual_corrections=False):
         self.command, self.context, self.manual_corrections = command, context, manual_corrections
+        self.store.auth_diagnostic = None
         self.startup("sources")
         if re.fullmatch(r"openai/[a-zA-Z0-9_.-]{1,200}", command["model"]) is None:
             raise protocol.Refused("Codex requires an explicit OpenAI model")
@@ -56,13 +57,22 @@ class Turn:
         self.selected = selected if selected is not None else staging.selected_files(request)[0]
         self.task = staging.prepare_workspace(request, self.selected)
         self.startup("credentials")
+        if self.config.get("auth_store") is not None:
+            self.diagnostic = "auth_support"
+            runtime.require_owned_auth(self.config["bwrap"])
+            self.diagnostic = "credentials"
         if not self.store.initialized:
-            self.store.initialize(self.config["auth_file"])
+            self.store.initialize(self.config.get("auth_file"), auth_store=self.config.get("auth_store"))
+        self.store.acquire_auth()
         self.startup("launch")
-        argv, env = runtime.sandbox(request, self.task, self.store)
-        self.startup_deadline = time.monotonic() + 60
-        self.worker = self.store.start(argv, env=env, on_notification=self.notification,
-                                      on_request=self.request, on_write_wait=self.on_write_wait)
+        try:
+            argv, env = runtime.sandbox(request, self.task, self.store)
+            self.startup_deadline = time.monotonic() + 60
+            self.worker = self.store.start(argv, env=env, on_notification=self.notification,
+                                          on_request=self.request, on_write_wait=self.on_write_wait)
+        except Exception:
+            self.store.abort_start()
+            raise
         self.begin("initialize", {"clientInfo": {"name": "draft_conversation", "version": "0.1"}})
 
     def begin(self, method, params):
@@ -331,6 +341,8 @@ class Turn:
                 self.store.check()
             except Exception:
                 self.store_valid = False
+        if self.store.auth_diagnostic is not None:
+            self.diagnostic = self.store.auth_diagnostic
         retired = self.task is None
         if self.stopped and self.task is not None:
             try:
@@ -339,6 +351,13 @@ class Turn:
                 self.task, retired = None, True
             except OSError:
                 pass
+        if (self.worker is None and self.diagnostic == "auth_busy" and self.initial_session is not None
+                and not self.submitted and retired and not self.cancelling):
+            try:
+                self.store.check()
+                self.store_valid = True
+            except Exception:
+                self.store_valid = False
         if (not self.submitted and self.initial_session is None and self.stopped and self.graceful
                 and retired and not self.cancelling):
             try:

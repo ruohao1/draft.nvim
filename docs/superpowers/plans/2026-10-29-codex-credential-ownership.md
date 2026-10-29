@@ -273,7 +273,7 @@ credential paragraphs in `docs/superpowers/specs/2026-10-19-managed-codex-design
   retire its empty store as today. Revisions use the existing positive prior-review
   restoration path. Other failures keep their current recovery requirements.
 
-- [ ] **1. Add failing configuration and user-flow cases.** Exercise both the
+- [x] **1. Add failing configuration and user-flow cases.** Exercise both the
   Python controller and the real Neovim/controller/fixture pipeline:
 
   ```lua
@@ -292,11 +292,11 @@ credential paragraphs in `docs/superpowers/specs/2026-10-19-managed-codex-design
   missing, stale backend callbacks and unknown/private diagnostic values.
   Replace the saved-ChatGPT-copy acceptance test with migration refusal.
 
-- [ ] **2. Run `python3 -I -B tests/run.py nvim_ai_conversation_controller
+- [x] **2. Run `python3 -I -B tests/run.py nvim_ai_conversation_controller
   nvim_ai_codex_turn nvim_ai_codex_profile ai_conversation ai_chat_codex` and
   confirm the new cases fail for the intended behavior.
 
-- [ ] **3. Implement the config and lifecycle changes.** Preserve first-turn
+- [x] **3. Implement the config and lifecycle changes.** Preserve first-turn
   cleanup, acknowledged Cancel, failed startup and forced-exit proof requirements.
   Auth settlement must precede exposing a frozen proposal. Close and early
   cleanup remove the empty placeholder, databases and transcripts only.
@@ -310,12 +310,12 @@ credential paragraphs in `docs/superpowers/specs/2026-10-19-managed-codex-design
   brief and put migration/recovery detail in `docs/usage.md` and `doc/draft.txt`.
   Add one Unreleased changelog entry covering the compatibility change.
 
-- [ ] **4. Run the five affected suites plus `draft_setup`, `draft_state`,
+- [x] **4. Run the five affected suites plus `draft_setup`, `draft_state`,
   `ai_runtime` and `ai_chat_startup`.** Require unchanged project bytes, no
   automatic replay, fixed recovery messages, retained API-key sources and
   working OpenCode. Check forced exit and sync failure cannot publish review.
 
-- [ ] **5. Commit:** `feat: use dedicated Codex logins in managed chat`.
+- [x] **5. Commit:** `feat: use dedicated Codex logins in managed chat`.
 
 ### Task 4: Prove persistence and confinement with the pinned runtime
 

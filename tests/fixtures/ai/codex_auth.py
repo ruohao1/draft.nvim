@@ -2,6 +2,8 @@
 import base64
 from datetime import datetime, timezone
 import json
+from pathlib import Path
+import sys
 import time
 
 
@@ -23,3 +25,9 @@ def bundle(generation=0, *, user_id="fixture-user", workspace_id="fixture-worksp
                        "account_id": workspace_id},
             "last_refresh": datetime.fromtimestamp(CLOCK + generation, timezone.utc)
                 .isoformat().replace("+00:00", "Z")}
+
+
+if __name__ == "__main__":
+    path = Path(sys.argv[1]) / "auth.json"
+    path.write_text(json.dumps(bundle()))
+    path.chmod(0o600)

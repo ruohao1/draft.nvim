@@ -154,14 +154,16 @@ class ProfileTest(unittest.TestCase):
             with self.subTest(options=options), self.assertRaises(storage.Refused):
                 self.store.initialize(**options)
 
-    def test_private_saved_chatgpt_token_import(self):
+    def test_saved_chatgpt_copy_requires_migration_without_touching_source(self):
         value = {"auth_mode": "chatgpt", "OPENAI_API_KEY": None,
                  "tokens": {"id_token": "eyJhbGciOiJub25lIn0.e30.synthetic",
                             "access_token": "synthetic-access", "refresh_token": "synthetic-refresh",
                             "account_id": "synthetic-account"},
                  "last_refresh": "2026-10-20T00:00:00Z"}
-        self.store.initialize(self.credential(value))
-        self.assertEqual(json.loads((self.store.path / "auth.json").read_bytes()), value)
+        with self.assertRaises(storage.Refused):
+            self.store.initialize(self.credential(value))
+        self.assertEqual(self.store.auth_diagnostic, "auth_migrate")
+        self.assertFalse((self.store.path / "auth.json").exists())
         self.assertEqual(json.loads(self.source.read_bytes()), value)
 
     def test_import_once_cannot_overwrite_retained_credentials(self):

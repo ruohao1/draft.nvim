@@ -13,6 +13,25 @@ local function plain(value)
   return type(value) == "table" and getmetatable(value) == nil
 end
 
+local function auth_path(value)
+  if
+    type(value) ~= "string"
+    or #value > 4096
+    or value:sub(1, 1) ~= "/"
+    or value:find("[%z\1-\31\127]")
+  then
+    return false
+  end
+  local depth = 0
+  for part in (value:sub(2) .. "/"):gmatch("(.-)/") do
+    depth = depth + 1
+    if part == "" or part == "." or part == ".." or depth > 64 then
+      return false
+    end
+  end
+  return true
+end
+
 local function inspect_review(python, reference, token)
   if
     not plain(reference)
@@ -133,6 +152,7 @@ function M.new(options)
     bwrap = true,
     python = true,
     auth_file = true,
+    auth_store = true,
     provider = true,
     timeout_ms = true,
     stop_timeout_ms = true,
@@ -153,7 +173,7 @@ function M.new(options)
   local backend = options.backend or "opencode"
   if
     not ({ codex = true, opencode = true })[backend]
-    or (backend == "opencode" and options.codex ~= nil)
+    or (backend == "opencode" and (options.codex ~= nil or options.auth_store ~= nil))
     or (
       backend == "codex"
       and (
@@ -161,15 +181,13 @@ function M.new(options)
         or options.provider ~= nil
         or type(options.model) ~= "string"
         or not options.model:match("^openai/[%w_.-]+$")
-        or type(options.auth_file) ~= "string"
-        or options.auth_file:sub(1, 1) ~= "/"
-        or #options.auth_file > 4096
-        or options.auth_file:find("[%z\1-\31\127]")
+        or (options.auth_file == nil) == (options.auth_store == nil)
+        or not auth_path(options.auth_file or options.auth_store)
       )
     )
   then
     return nil,
-      "Invalid managed backend configuration; Codex needs an openai/model and absolute chat.auth_file"
+      "Invalid managed backend configuration; Codex needs an openai/model and exactly one absolute chat.auth_file or chat.auth_store"
   end
   if
     not script
@@ -209,6 +227,7 @@ function M.new(options)
     bwrap = bwrap,
     model = options.model,
     auth_file = options.auth_file,
+    auth_store = options.auth_store,
     provider = options.provider,
   })
   if not config then
