@@ -1,7 +1,7 @@
 # Durable Codex credential ownership
 
-Status: separate-login design approved for implementation planning on 2026-10-29.
-Runtime behavior is not implemented yet.
+Status: approved and implemented on the feature branch on 2026-10-29.
+See the [implementation validation](../../validation/2026-10-29-codex-credential-ownership.md).
 Base: Draft `e7131e4c5084392238a986a54570133e7a161428`; Codex `0.163.0`.
 
 ## Decision
@@ -15,15 +15,16 @@ Each Draft worker writes to the same credential file while it holds an exclusive
 lease. Conversation databases, transcripts and staged files keep their current
 temporary owners. Close removes conversation data and retains the login.
 
-This is the planned replacement for the saved-ChatGPT-token import contract in
-the [managed Codex design](2026-10-19-managed-codex-design.md). It does not change
-that contract until implemented and documented. No authentication changes or
-live login trials are part of this design task.
+This replaces the saved-ChatGPT-token import contract in the
+[managed Codex design](2026-10-19-managed-codex-design.md). Implementation,
+migration documentation and synthetic acceptance are complete. Live login
+acceptance remains a separate opt-in task.
 
 ## Evidence and approaches
 
-Today, `Store.initialize()` copies `chat.auth_file`. Codex can update the copy
-across turns. `Store.close()` deletes it. A new conversation imports the old
+At the baseline revision, `Store.initialize()` copies `chat.auth_file`.
+Codex can update the copy across turns. `Store.close()` deletes it.
+A new conversation imports the old
 source again. The recorded synthetic refresh probe used the real pinned Codex
 runtime and a loopback rotating-token authority. It verified replacement-token
 reuse in one store and rejection of a stale import in another. This is evidence

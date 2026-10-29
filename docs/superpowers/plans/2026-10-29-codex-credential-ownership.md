@@ -18,7 +18,7 @@ Codex 0.163.0 and its matching `codex-code-mode-host`. No new runtime service.
 **Spec:** [Approved ownership design](../specs/2026-10-29-codex-credential-ownership-design.md).
 The user approved the separate-login approach on 2026-10-29. This plan remains
 on `feat/codex-credential-ownership`, based on `e7131e4c5084392238a986a54570133e7a161428`.
-Implementation is in progress. Keep the design, plan and implementation in one PR.
+Implementation and synthetic acceptance are complete. Keep the design, plan and implementation in one PR.
 
 ## Global Constraints
 
@@ -388,25 +388,25 @@ from completed evidence. Keep historical refresh artifacts unchanged.
 **Interfaces:** No new runtime interfaces. The handoff names the tested commit,
 the commands/results, host capabilities, independent findings and live limits.
 
-- [ ] **1. Run the full provider-free suite:** `python3 -I -B tests/run.py`.
+- [x] **1. Run the full provider-free suite:** `python3 -I -B tests/run.py`.
   Run `stylua --check lua tests` and `git diff --check`. Every required check
   passes; report optional runtime skips separately from tested behavior.
   If the agent sandbox remaps trusted executable ownership or denies namespaces,
   use the supported host execution path. Never weaken the executable checks.
 
-- [ ] **2. Run the two explicit runtime suites once against the final changes.**
+- [x] **2. Run the two explicit runtime suites once against the final changes.**
   Repeat only when a later fix affects the checked behavior. Record the pinned
   CLI/companion, Bubblewrap version and zero-skip results. Document limits:
   cooperative local locking, dedicated login required, no crash-atomic refresh,
   and no live-service validation.
 
-- [ ] **3. Obtain one independent whole-branch review of a fixed revision.**
+- [x] **3. Obtain one independent whole-branch review of a fixed revision.**
   Ask it to check the five Review Focus cases, descriptor lifetime, authentication
   boundaries, compatibility and the actual affected callers. Resolve material
   findings and run checks affected by each fix. No per-task agent fan-out is needed
   for the preserved Native execution method.
 
-- [ ] **4. Commit the validation record:** `docs: record Codex credential acceptance`.
+- [x] **4. Commit the validation record:** `docs: record Codex credential acceptance`.
   Prepare one implementation PR containing the approved design, this plan, code,
   regression tests and migration docs. Do not create a planning-only PR or claim
   merge/release completion. Keep live-account acceptance as the separate next gate.
