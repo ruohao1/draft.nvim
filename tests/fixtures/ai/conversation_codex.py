@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import socket
+import signal
 import threading
 import time
 
@@ -108,11 +109,47 @@ for line in sys.stdin:
             (sessions / ("rollout-2026-10-20T00-00-00-" + params["thread"] + ".jsonl")).write_bytes(b"opaque")
         send({"id": frame["id"], "result": {}})
     elif method == "fixture/rotate-auth":
-        (Path(os.environ["CODEX_HOME"]) / "auth.json").write_text('{"OPENAI_API_KEY":"synthetic-refreshed"}')
+        path = Path(os.environ["CODEX_HOME"]) / "auth.json"
+        if params.get("corrupt"):
+            path.write_bytes(b"{")
+        elif params.get("owned"):
+            value = json.loads(path.read_bytes())
+            value["tokens"]["refresh_token"] = "synthetic-refresh-1"
+            value["tokens"]["access_token"] = "synthetic-access-1"
+            path.write_text(json.dumps(value))
+        else:
+            path.write_text('{"OPENAI_API_KEY":"synthetic-refreshed"}')
         send({"id": frame["id"], "result": {}})
     elif method == "fixture/auth-generation":
         auth = json.loads((Path(os.environ["CODEX_HOME"]) / "auth.json").read_bytes())
-        send({"id": frame["id"], "result": {"refreshed": auth.get("OPENAI_API_KEY") == "synthetic-refreshed"}})
+        send({"id": frame["id"], "result": {"refreshed": auth.get("OPENAI_API_KEY") == "synthetic-refreshed"
+              or auth.get("tokens", {}).get("refresh_token") == "synthetic-refresh-1"}})
+    elif method == "fixture/auth-isolation":
+        inherited = False
+        for name in os.listdir("/proc/self/fd"):
+            try:
+                node = os.fstat(int(name))
+                inherited |= [node.st_dev, node.st_ino] in params["identities"]
+            except OSError:
+                pass
+        send({"id": frame["id"], "result": {"inherited": inherited,
+              "lock_absent": not (Path(os.environ["CODEX_HOME"]) / ".draft.lock").exists()}})
+    elif method == "fixture/hold-writer":
+        pid = os.fork()
+        if pid == 0:
+            os.setsid()
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            for fd in (0, 1, 2):
+                os.close(fd)
+            credential = os.open(Path(os.environ["CODEX_HOME"]) / "auth.json", os.O_RDWR)
+            with socket.create_connection(("127.0.0.1", params["port"]), timeout=8) as channel:
+                channel.sendall(b"R")
+                while channel.recv(1) == b"P":
+                    os.pwrite(credential, b"", 0)  # Confirm write authority without changing tokens.
+                    Path("/tmp/project/writer-sentinel").write_bytes(b"writer alive")
+                    channel.sendall(b"W")
+            os._exit(0)
+        send({"id": frame["id"], "result": {"writer_pid": pid}})
     elif method == "fixture/grow-codex-state":
         with (Path(os.environ["CODEX_HOME"]) / params.get("name", "models_cache.json")).open("wb") as output:
             output.truncate(64 * 1024 * 1024 + 1)

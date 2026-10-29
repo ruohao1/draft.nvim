@@ -149,7 +149,7 @@ only to reuse the moved validator. Keep current import behavior until Task 3.
   tests still pass at this step. Check partial-construction and repeated-close
   paths for descriptor leaks.
 
-- [ ] **5. Commit this tested unit:** `feat: add private Codex credential leases`.
+- [x] **5. Commit this tested unit:** `feat: add private Codex credential leases`.
 
 ### Task 2: Bind credentials and preserve the lease through sandbox exit
 
@@ -184,7 +184,7 @@ and `tests/README.md`. Extend `tests/nvim_ai_codex_auth.py` for process lifetime
   require an acquired lease and add `--bind-fd` for auth and `--sync-fd` for the
   lock. Preserve the existing auth deny mask and generated environment.
 
-- [ ] **1. Add failing bind and supervisor tests.** Assert the generated argv
+- [x] **1. Add failing bind and supervisor tests.** Assert the generated argv
   mounts only the auth descriptor, never its host directory, and carries only
   the two required descriptors. A fake engine reports booleans for whether
   either inherited descriptor matches the original file identity; it must see
@@ -208,11 +208,11 @@ and `tests/README.md`. Extend `tests/nvim_ai_codex_auth.py` for process lifetime
   handshakes and bounded deadlines, not sleeps as proof. Probe a synthetic
   sentinel after exit to prove no descendant remains able to write.
 
-- [ ] **2. Run the affected tests and confirm the new contract fails.** Use
+- [x] **2. Run the affected tests and confirm the new contract fails.** Use
   `python3 -I -B tests/run.py nvim_ai_codex_auth nvim_ai_codex_profile
   nvim_ai_codex_store nvim_ai_acp_worker`. Keep existing host refusal checks.
 
-- [ ] **3. Implement descriptor handoff, store coupling and CI support.** On
+- [x] **3. Implement descriptor handoff, store coupling and CI support.** On
   `Popen` failure, release acquired credentials without changing them. On proven
   exit, attempt stable validation and sync even if the turn failed; a valid file
   does not turn a forced exit into successful review evidence. Always release
@@ -232,13 +232,13 @@ and `tests/README.md`. Extend `tests/nvim_ai_codex_auth.py` for process lifetime
   0755 at `/usr/bin/bwrap`, preserving the existing executable-specific AppArmor
   profile and namespace verification. Do not disable host restrictions globally.
 
-- [ ] **4. Run the same four suites.** Require successful lease lifetime and
+- [x] **4. Run the same four suites.** Require successful lease lifetime and
   descriptor-isolation tests. Test an older-help fixture that lacks `--bind-fd`:
   owned mode refuses before credential reads, while API-key mode still works.
   Inject a sync error and auth corruption after worker exit: both preserve auth
   and refuse reuse. No test should read token bytes during an active rewrite.
 
-- [ ] **5. Commit:** `feat: retain Codex credentials through sandbox exit`.
+- [x] **5. Commit:** `feat: retain Codex credentials through sandbox exit`.
 
 ### Task 3: Integrate Send, Close and actionable recovery
 

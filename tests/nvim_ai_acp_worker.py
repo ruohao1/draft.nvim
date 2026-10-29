@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import socket
+import sys
 import tempfile
 import time
 import unittest
@@ -69,6 +70,24 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(self.source.read_bytes(), b"original text\n")
         with self.assertRaises(acp.ProtocolError):
             self.worker.request("session/prompt", {})
+
+    def test_borrowed_descriptors_and_default_inheritance(self):
+        self.worker.close()
+        with self.source.open("rb") as stream:
+            fd = stream.fileno()
+            program = ("import json,os,sys; f=json.loads(input()); "
+                       "ok=os.path.exists('/proc/self/fd/' + sys.argv[1]); "
+                       "print(json.dumps({'jsonrpc':'2.0','id':f['id'],'result':{'inherited':ok}}),flush=True)")
+            for descriptors in ((), (fd,)):
+                self.worker = acp.Worker([sys.executable, "-I", "-c", program, str(fd)],
+                                        env={}, pass_fds=descriptors)
+                self.assertEqual(self.worker.request("probe", {}), {"inherited": bool(descriptors)})
+                self.assertTrue(self.worker.close().settled)
+                os.fstat(fd)  # Worker only borrows caller descriptors.
+            for invalid in ((fd, fd), (0,), (True,), (-1,), (999999,), [fd]):
+                with self.subTest(invalid=invalid), self.assertRaises((ValueError, OSError)):
+                    acp.Worker(["/missing"], env={}, pass_fds=invalid)
+                os.fstat(fd)
 
     def test_poll_yields_to_explicit_cancel_without_expiring_the_pending_request(self):
         pending = self.worker.begin("fixture/await-cancel", {})

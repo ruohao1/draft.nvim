@@ -64,9 +64,15 @@ class Exit(namedtuple("Exit", "reaped output_closed forced returncode fault pend
 
 class Worker:
     def __init__(self, command, *, env, rpc_timeout=15, stop_timeout=3,
-                 on_notification=None, on_request=None, guard=None, on_write_wait=None, wire="acp"):
+                 on_notification=None, on_request=None, guard=None, on_write_wait=None, wire="acp",
+                 pass_fds: tuple[int, ...] = ()):
         if wire not in ("acp", "codex"):
             raise ValueError("Unsupported worker wire mode")
+        if (not isinstance(pass_fds, tuple) or any(type(fd) is not int or fd <= 2 for fd in pass_fds)
+                or len(set(pass_fds)) != len(pass_fds)):
+            raise ValueError("Invalid borrowed worker descriptors")
+        for fd in pass_fds:
+            os.fstat(fd)
         self.wire = wire
         self.rpc_timeout, self.stop_timeout = rpc_timeout, stop_timeout
         self.on_notification, self.on_request = on_notification, on_request
@@ -89,7 +95,8 @@ class Worker:
             os.set_blocking(self.input.fileno(), False)
             os.set_blocking(self.output.fileno(), False)
             self.child = subprocess.Popen(command, env=env, stdin=input_read, stdout=output_write,
-                                          stderr=subprocess.DEVNULL, start_new_session=True, umask=0o077)
+                                          stderr=subprocess.DEVNULL, start_new_session=True, umask=0o077,
+                                          pass_fds=pass_fds)
             parent_ends.pop_all()  # close() now owns these streams.
 
     def _fail(self, reason):

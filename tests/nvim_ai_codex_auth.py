@@ -4,9 +4,14 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import select
+import shutil
+import signal
+import socket
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -250,6 +255,117 @@ else:
             self.lease().close()
         self.assertEqual(len(os.listdir("/proc/self/fd")), before)
 
+    def test_supervisor_holds_lease_until_detached_writer_exits(self):
+        def descendants(pid):
+            children = Path(f"/proc/{pid}/task/{pid}/children").read_text().split()
+            result = [int(child) for child in children]
+            for child in list(result):
+                result.extend(descendants(child))
+            return result
+
+        for action in ("normal", "TERM", "KILL", "owner-startup", "owner-turn"):
+            with self.subTest(action=action), socket.socket() as listener:
+                listener.bind(("127.0.0.1", 0))
+                listener.listen()
+                listener.settimeout(8)
+                controller = subprocess.Popen([sys.executable, "-I", "-B", __file__,
+                    "--lease-controller", str(self.directory), str(listener.getsockname()[1]), action],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                channel, pidfd = None, None
+                try:
+                    channel, _ = listener.accept()
+                    channel.settimeout(5)
+                    self.assertEqual(channel.recv(1), b"R")
+                    self.assertTrue(select.select([controller.stdout], [], [], 5)[0], "Controller handshake missing")
+                    info = json.loads(controller.stdout.readline())
+                    writers = [pid for pid in descendants(info["pid"])
+                        if Path(f"/proc/{pid}/status").read_text().split("NSpid:")[1]
+                            .splitlines()[0].split()[-1] == str(info["writer_pid"])]
+                    self.assertEqual(len(writers), 1)
+                    pidfd = os.pidfd_open(writers[0])
+                    self.refused("auth_busy")
+                    controller.stdin.write(b"release\n")
+                    controller.stdin.flush()
+                    self.assertTrue(select.select([controller.stdout], [], [], 5)[0])
+                    self.assertEqual(controller.stdout.readline(), b"released\n")
+                    self.refused("auth_busy")  # Only the supervisor retains the lock now.
+                    channel.sendall(b"P")
+                    self.assertEqual(channel.recv(1), b"W")
+                    self.assertFalse(select.select([pidfd], [], [], 0)[0])
+                    if action.startswith("owner-"):
+                        controller.kill()
+                    elif action in ("TERM", "KILL"):
+                        os.kill(info["pid"], signal.SIGTERM if action == "TERM" else signal.SIGKILL)
+                        controller.stdin.write(b"stop\n")
+                        controller.stdin.flush()
+                    else:
+                        controller.stdin.write(b"stop\n")
+                        controller.stdin.flush()
+                    deadline = time.monotonic() + 5
+                    while True:
+                        try:
+                            lease = auth.Lease(str(self.directory))
+                            break
+                        except auth.Refused as error:
+                            self.assertEqual(str(error), "auth_busy")
+                            self.assertLess(time.monotonic(), deadline, "Lease survived writer exit")
+                            select.select([pidfd], [], [], .01)
+                    try:
+                        self.assertTrue(select.select([pidfd], [], [], 0)[0], "Lease released before writer death")
+                        self.assertEqual(channel.recv(1), b"", "Descendant still owns write authority")
+                        lease.settle()
+                    finally:
+                        lease.close()
+                    self.assertTrue(self.path.read_bytes() == self.original, "Lifetime test changed auth")
+                    controller.wait(timeout=5)
+                    if not action.startswith("owner-"):
+                        self.assertEqual(controller.returncode, 0, controller.stderr.read().decode())
+                finally:
+                    if controller.poll() is None:
+                        controller.kill()
+                    controller.communicate(timeout=5)
+                    if channel is not None:
+                        channel.close()
+                    if pidfd is not None:
+                        os.close(pidfd)
+
+
+def lease_controller(directory, port, action):
+    storage = load(ROOT / "scripts/nvim-ai-codex-store.py")
+    runtime = load(ROOT / "scripts/nvim-ai-codex-runtime.py")
+    with tempfile.TemporaryDirectory(prefix="draft-lease-controller-", dir=str(Path(directory).parent)) as name:
+        parent = Path(name)
+        peer = parent / "codex"
+        shutil.copyfile(ROOT / "tests/fixtures/ai/conversation_codex.py", peer)
+        peer.chmod(0o700)
+        host = peer.with_name("codex-code-mode-host")
+        host.write_text("#!/bin/sh\nexit 0\n")
+        host.chmod(0o700)
+        (parent / "staging").mkdir(mode=0o700)
+        store = storage.Store(parent)
+        store.initialize(auth_store=directory)
+        store.acquire_auth()
+        command, env = runtime.sandbox({"codex": str(peer), "bwrap": os.path.realpath(shutil.which("bwrap")),
+            "model": "openai/gpt-5.4"}, parent, store)
+        worker = store.start(command, env=env, stop_timeout=.2)
+        info = worker.request("fixture/hold-writer", {"port": int(port)})
+        if action == "owner-turn":
+            worker.request("initialize", {})
+            worker.request("fixture/blocked", {})
+        print(json.dumps(dict(info, pid=worker.child.pid)), flush=True)
+        assert input() == "release"
+        store._release_auth()  # Deliberately drop every controller-owned credential descriptor.
+        print("released", flush=True)
+        assert input() == "stop"
+        try:
+            store.stop(outcome="completed")
+        except storage.Refused:
+            assert action in ("TERM", "KILL")
+        store.close()
+
 
 if __name__ == "__main__":
-    unittest.main()
+    if sys.argv[1:2] == ["--lease-controller"]:
+        lease_controller(*sys.argv[2:])
+    else:
+        unittest.main()

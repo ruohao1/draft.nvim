@@ -165,9 +165,9 @@ limitation. These tests use synthetic providers and require no real account.
 
 [Linux tests](../.github/workflows/linux-tests.yml) runs the complete default
 suite on pull requests and pushes, and supports manual dispatch. It uses the
-GitHub-hosted Ubuntu 24.04 image, its system Python 3, Neovim 0.12.4, and tmux 3.7c.
-Both release archives have pinned SHA-256 checksums, and both GitHub actions are
-pinned to commits. Git, Bubblewrap, ripgrep, ACL tools and tmux build dependencies
+GitHub-hosted Ubuntu 24.04 image, its system Python 3, Neovim 0.12.4, tmux 3.7c,
+and Bubblewrap 0.11.1. Release archives have pinned SHA-256 checksums, and both
+GitHub actions are pinned to commits. Git, ripgrep, ACL tools and build dependencies
 come from Ubuntu's configured package repositories; runtime versions are printed
 in each run. Ubuntu's tmux 3.4 has a percentage-split regression, so CI builds the
 same tmux 3.7c version used in local beta acceptance. The
@@ -178,6 +178,10 @@ CI uses `/usr/bin/python3` consistently with the nested confinement fixtures.
 The job loads an AppArmor user-namespace profile attached to `/usr/bin/bwrap`
 on the disposable runner; Ubuntu's global namespace restriction remains enabled.
 It checks user, PID and network namespace creation before running the suite.
+The owned Codex credential tests require `--bind-fd` and `--sync-fd`. They use
+synthetic credentials and real subprocesses to check descriptor isolation,
+exclusive ownership, controller death and detached-writer shutdown. CI builds
+Bubblewrap 0.11.1 and installs it at the same AppArmor-profiled path.
 All confinement tests remain enabled, and installed-OpenCode probes remain
 explicit opt-ins. Test logs are uploaded as `linux-test-logs` for seven days,
 including after a test failure. The job has a 25-minute deadline, with the

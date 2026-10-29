@@ -78,6 +78,7 @@ class Store:
         self.root = Path(parent) / ("nvim-ai-codex-" + secrets.token_hex(16))
         self.path = self.root / "backend-store"
         self._worker, self._failed = None, None
+        self.auth_store = self.auth_diagnostic = self._lease = self._auth_owner = None
         self._closed = self.initialized = False
         self._sealed = {}
         self._fds = ExitStack()
@@ -172,13 +173,18 @@ class Store:
         self._verify()
         return values
 
-    def initialize(self, auth_file):
+    def initialize(self, auth_file=None, *, auth_store=None):
         if self.initialized or self._worker is not None or self._closed or self._failed:
             raise Refused("Codex credentials can only be imported once")
+        if ((auth_file is None) == (auth_store is None)
+                or (auth_store is not None and not protocol.path(auth_store, absolute=True))):
+            raise Refused("Configure exactly one private Codex credential input")
         self.check()
         try:
-            raw = review._private_bytes(auth_file, 1024 * 1024)
-            auth.validate(raw)
+            raw = b""
+            if auth_store is None:
+                raw = review._private_bytes(auth_file, auth.MAX_BYTES)
+                auth.validate(raw)
         except (OSError, ValueError, TypeError, protocol.Refused, auth.Refused):
             raise Refused("Configure a private supported Codex credential file") from None
         try:
@@ -191,41 +197,90 @@ class Store:
                     os.fsync(output.fileno())
             os.mkdir("tmp", 0o700, dir_fd=self._backend)
             self._sealed = self._inventory()
+            self.auth_store = auth_store
             self.initialized = True
         except (OSError, ValueError, Refused):
             self._failed = "Codex credential import incomplete"
             raise Refused(self._failed) from None
 
+    @property
+    def auth_fds(self):
+        return (self._lease.auth_fd, self._lease.lock_fd) if self._lease is not None else ()
+
+    def acquire_auth(self):
+        self.auth_diagnostic = None
+        self.check()
+        if not self.initialized or self._worker is not None or self._lease is not None:
+            raise Refused("Codex credentials already in use or uninitialized")
+        if self.auth_store is not None:
+            try:
+                self._lease = auth.Lease(self.auth_store, expected_owner=self._auth_owner)
+                self._auth_owner = self._lease.owner
+            except auth.Refused as error:
+                self.auth_diagnostic = str(error)
+                raise Refused(self.auth_diagnostic) from None
+
+    def _release_auth(self, *, settle=False):
+        if self._lease is not None:
+            try:
+                if settle:
+                    self._lease.settle()
+            except auth.Refused as error:
+                self.auth_diagnostic = str(error)
+                self._failed = "Codex credential settlement failed"
+                raise Refused(self._failed) from None
+            finally:
+                self._lease.close()
+                self._lease = None
+
     def check(self):
         if self._closed or self._failed:
             raise Refused(self._failed or "Codex store is closed")
         try:
+            if self._lease is not None:
+                self._lease.check()
             values = self._inventory(stable=self._worker is None)
             if self._worker is None and values != self._sealed:
                 raise Refused("Codex store changed while no worker was active")
             return {path: node[1] for path, node in values.items()}
-        except (OSError, ValueError, Refused) as error:
+        except (OSError, ValueError, Refused, auth.Refused) as error:
+            if isinstance(error, auth.Refused):
+                self.auth_diagnostic = str(error)
             self._failed = str(error) if isinstance(error, Refused) else "Codex store validation failed"
             raise Refused(self._failed) from None
 
     def start(self, command, *, env, **worker_options):
         if not self.initialized or self._worker is not None:
             raise Refused("Codex store is uninitialized or already in use")
-        if "guard" in worker_options or "wire" in worker_options:
-            raise Refused("Codex store owns its guard and wire codec")
-        self.check()
-        self._worker = acp.Worker(command, env=env, guard=self.check, wire="codex", **worker_options)
+        if {"guard", "wire", "pass_fds"} & worker_options.keys():
+            raise Refused("Codex store owns its guard, descriptors and wire codec")
+        try:
+            self.check()
+            if self.auth_store is not None and self._lease is None:
+                raise Refused("Codex credential lease required")
+            self._worker = acp.Worker(command, env=env, guard=self.check, wire="codex",
+                                      pass_fds=self.auth_fds, **worker_options)
+        except BaseException:
+            self._release_auth()
+            raise
         return self._worker
 
     def stop(self, *, outcome, session=None):
         if self._worker is None:
             raise Refused("No Codex worker is active")
-        result = self._worker.close()
+        try:
+            result = self._worker.close()
+        except BaseException:
+            self._failed = "Codex worker exit unproven; explicit recovery required"
+            self._release_auth()
+            raise
         if not result.reaped or not result.output_closed:
             self._failed = "Codex worker exit unproven; explicit recovery required"
+            self._release_auth()
             raise Refused(self._failed)
         self._worker = None
         try:
+            self._release_auth(settle=True)
             if self._failed or not result.settled or outcome not in ("completed", "cancelled"):
                 raise Refused(self._failed or "Codex worker outcome cannot authorize reuse")
             values = self._inventory()
@@ -245,6 +300,7 @@ class Store:
             return
         if self._worker is not None:
             raise Refused("Cannot remove Codex state before worker exit is proven")
+        self._release_auth()
         try:
             values = self._inventory(budget=False)
             # Validate the entire tree before deletion; never follow or adopt replacements.
