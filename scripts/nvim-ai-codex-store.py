@@ -22,6 +22,7 @@ def helper(name):
 review = helper("nvim-ai-review")
 protocol = helper("nvim-ai-conversation-protocol")
 acp = helper("nvim-ai-acp-worker")
+auth = helper("nvim-ai-codex-auth")
 ProtocolError = acp.ProtocolError
 MAX_BYTES, MAX_ENTRIES, MAX_DEPTH = 64 * 1024 * 1024, 4096, 8
 UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
@@ -62,34 +63,6 @@ def _allowed(path, directory):
     except ValueError:
         return False
     return True
-
-
-def _auth(raw):
-    value = protocol.decode_json(raw)
-    if not isinstance(value, dict) or value.keys() - {
-            "auth_mode", "OPENAI_API_KEY", "tokens", "last_refresh"}:
-        raise ValueError()
-    mode, key, tokens = value.get("auth_mode"), value.get("OPENAI_API_KEY"), value.get("tokens")
-    if mode not in (None, "apikey", "chatgpt"):
-        raise ValueError()
-    if key is not None:
-        if not isinstance(key, str) or not key.strip() or tokens is not None or mode == "chatgpt":
-            raise ValueError()
-    else:
-        if (mode == "apikey" or not isinstance(tokens, dict)
-                or tokens.keys() - {"id_token", "access_token", "refresh_token", "account_id"}
-                or any(not isinstance(tokens.get(k), str) or not tokens[k].strip()
-                       for k in ("id_token", "access_token", "refresh_token"))
-                or (tokens.get("account_id") is not None
-                    and (not isinstance(tokens["account_id"], str) or not tokens["account_id"]))):
-            raise ValueError()
-        if re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", tokens["id_token"]) is None:
-            raise ValueError()
-    if value.get("last_refresh") is not None:
-        stamp = value["last_refresh"]
-        if (not isinstance(stamp, str) or not stamp.endswith("Z")
-                or datetime.fromisoformat(stamp).tzinfo is None):
-            raise ValueError()
 
 
 class Store:
@@ -205,8 +178,8 @@ class Store:
         self.check()
         try:
             raw = review._private_bytes(auth_file, 1024 * 1024)
-            _auth(raw)
-        except (OSError, ValueError, TypeError, protocol.Refused):
+            auth.validate(raw)
+        except (OSError, ValueError, TypeError, protocol.Refused, auth.Refused):
             raise Refused("Configure a private supported Codex credential file") from None
         try:
             self._verify()
