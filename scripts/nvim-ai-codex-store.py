@@ -28,7 +28,7 @@ UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 DATABASES = {"goals_1.sqlite", "logs_2.sqlite", "memories_1.sqlite", "queue_1.sqlite",
              "state_5.sqlite", "thread_history_1.sqlite"}
 FILES = {"auth.json", "config.toml", "installation_id", ".sandbox_migration", "models_cache.json"} | {
-    name + suffix for name in DATABASES for suffix in ("", "-wal", "-shm")}
+    name + suffix for name in DATABASES for suffix in ("", "-wal", "-shm", "-journal")}
 
 
 class Refused(RuntimeError):

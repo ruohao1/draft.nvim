@@ -93,13 +93,15 @@ for line in sys.stdin:
         home = Path(os.environ["CODEX_HOME"])
         for name in (".sandbox_migration", "state_5.sqlite", "state_5.sqlite-wal", "logs_2.sqlite",
                      "goals_1.sqlite", "memories_1.sqlite", "queue_1.sqlite", "thread_history_1.sqlite",
-                     "models_cache.json"):
+                     "models_cache.json", "memories_1.sqlite-journal"):
             (home / name).write_bytes(b"opaque")
         (home / "installation_id").write_text("00000000-0000-4000-8000-000000000002")
         (home / "installation_id").chmod(0o644)
         locks = home / "thread-writer-locks"
         locks.mkdir(mode=0o700, exist_ok=True)
         (locks / ".coordination.lock").touch(mode=0o600)
+        if params.get("remove_journal"):
+            (home / "memories_1.sqlite-journal").unlink()
         if params.get("rollout", True):
             sessions = home / "sessions/2026/10/20"
             sessions.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -112,7 +114,7 @@ for line in sys.stdin:
         auth = json.loads((Path(os.environ["CODEX_HOME"]) / "auth.json").read_bytes())
         send({"id": frame["id"], "result": {"refreshed": auth.get("OPENAI_API_KEY") == "synthetic-refreshed"}})
     elif method == "fixture/grow-codex-state":
-        with (Path(os.environ["CODEX_HOME"]) / "models_cache.json").open("wb") as output:
+        with (Path(os.environ["CODEX_HOME"]) / params.get("name", "models_cache.json")).open("wb") as output:
             output.truncate(64 * 1024 * 1024 + 1)
         send({"id": frame["id"], "result": {}})
     elif method == "fixture/codex-many-entries":
@@ -209,6 +211,7 @@ for line in sys.stdin:
             continue
         if method == "initialize":
             (Path(os.environ["CODEX_HOME"]) / "models_cache.json").write_bytes(b"opaque fixture cache")
+            (Path(os.environ["CODEX_HOME"]) / "memories_1.sqlite-journal").write_bytes(b"opaque journal")
             result = {"userAgent": "draft_conversation/" + ("0.999.0" if CASE == "wrong-version" else "0.163.0") + " (fixture)",
                       "codexHome": "/home/agent/.codex", "platformFamily": "unix", "platformOs": "linux"}
         elif method == "model/list":
