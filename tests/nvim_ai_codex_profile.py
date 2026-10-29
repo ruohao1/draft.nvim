@@ -65,6 +65,9 @@ class ProfileTest(unittest.TestCase):
         filesystem.update({"/home/agent/.codex/" + name: "deny" for name in denied})
         self.assertEqual(profile["permissions"]["draft"]["filesystem"].get(
             "/home/agent/.codex/models_cache.json"), "deny")
+        for database in ("goals_1", "logs_2", "memories_1", "queue_1", "state_5", "thread_history_1"):
+            self.assertEqual(profile["permissions"]["draft"]["filesystem"].get(
+                "/home/agent/.codex/" + database + ".sqlite-journal"), "deny")
         self.assertEqual(profile["permissions"], {"draft": {
             "filesystem": filesystem, "network": {"enabled": False}}})
 

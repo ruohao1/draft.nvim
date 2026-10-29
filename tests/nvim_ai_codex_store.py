@@ -106,6 +106,48 @@ class StoreTest(unittest.TestCase):
         self.assertFalse(self.store.root.exists())
         self.assertEqual(self.neighbor.read_text(), "leave this alone")
 
+    def test_rollback_journal_lifetime_reuse_and_seal(self):
+        self.seed()
+        journal = self.store.path / "memories_1.sqlite-journal"
+        self.assertEqual(stat.S_IMODE(journal.stat().st_mode), 0o600)
+        self.assertIn(journal.name, self.store.check())
+        worker = self.start()
+        worker.request("fixture/codex-state", {"thread": THREAD, "remove_journal": True})
+        self.assertNotIn(journal.name, self.store.check())
+        worker.request("fixture/codex-state", {"thread": THREAD})
+        self.assertIn(journal.name, self.store.check())
+        self.store.stop(outcome="completed", session=THREAD)
+        with journal.open("ab") as output:
+            output.write(b"tampered")
+        with self.assertRaises(storage.Refused):
+            self.start()
+        self.store.close()
+        self.assertFalse(self.store.root.exists())
+        self.assertEqual(self.source.read_text(), '{"OPENAI_API_KEY":"synthetic-original"}')
+
+    def test_unknown_or_nested_journals_refuse_cleanup_before_deletion(self):
+        self.seed()
+        for name in ("unknown.sqlite-journal", "memories_2.sqlite-journal",
+                     "auth.json-journal", "sessions/memories_1.sqlite-journal"):
+            with self.subTest(name=name):
+                target = self.store.path / name
+                target.write_bytes(b"opaque")
+                target.chmod(0o600)
+                try:
+                    with self.assertRaises(storage.Refused):
+                        self.store.close()
+                    self.assertTrue((self.store.path / "state_5.sqlite").exists())
+                finally:
+                    target.unlink()
+
+    def test_rollback_journal_counts_toward_the_byte_budget(self):
+        worker = self.start()
+        worker.request("fixture/grow-codex-state", {"name": "memories_1.sqlite-journal"})
+        with self.assertRaisesRegex(storage.Refused, "byte budget"):
+            self.store.stop(outcome="completed")
+        self.store.close()
+        self.assertFalse(self.store.root.exists())
+
     def test_metadata_inspection_never_reads_payload_bytes(self):
         self.seed()
         original_open = storage.os.open
@@ -117,6 +159,7 @@ class StoreTest(unittest.TestCase):
             values = self.store.check()
             self.assertIn(ROLLOUT, values)
             self.assertIn("models_cache.json", values)
+            self.assertIn("memories_1.sqlite-journal", values)
 
     def test_missing_rollout_and_forced_exit_cannot_resume(self):
         worker = self.start()
@@ -164,10 +207,13 @@ class StoreTest(unittest.TestCase):
     def test_links_modes_and_unknown_entries_refuse_cleanup_before_deletion(self):
         self.seed()
         for case in ("extra", "mode", "auth-mode", "symlink", "hardlink", "fifo", "depth",
-                     "cache-mode", "cache-symlink", "cache-hardlink"):
+                     "cache-mode", "cache-symlink", "cache-hardlink",
+                     "journal-mode", "journal-symlink", "journal-hardlink", "journal-fifo",
+                     "journal-directory"):
             with self.subTest(case=case):
-                target = self.store.path / ("models_cache.json" if case.startswith("cache-") else ROLLOUT)
-                case = case.removeprefix("cache-")
+                target = self.store.path / ("models_cache.json" if case.startswith("cache-") else
+                    "memories_1.sqlite-journal" if case.startswith("journal-") else ROLLOUT)
+                case = case.removeprefix("cache-").removeprefix("journal-")
                 extra = self.store.path / "unapproved-secret-name"
                 backup = self.parent / "saved-rollout"
                 if case == "extra":
@@ -185,6 +231,8 @@ class StoreTest(unittest.TestCase):
                     target.rename(backup)
                     if case == "symlink":
                         target.symlink_to(self.neighbor)
+                    elif case == "directory":
+                        target.mkdir(mode=0o700)
                     else:
                         os.mkfifo(target, mode=0o600)
                 try:
@@ -206,7 +254,7 @@ class StoreTest(unittest.TestCase):
                     elif case == "hardlink":
                         backup.unlink()
                     else:
-                        target.unlink()
+                        target.rmdir() if case == "directory" else target.unlink()
                         backup.rename(target)
 
     def test_foreign_payload_owner_refuses_cleanup_before_any_deletion(self):
