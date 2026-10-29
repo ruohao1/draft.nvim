@@ -331,7 +331,7 @@ matching `codex-code-mode-host` beside it. The complete `codex-package` release
 archive provides both under `bin/`; the single-CLI archive does not:
 
 ```sh
-python3 -I -B tests/run.py --codex /absolute/path/to/codex nvim_ai_codex_runtime
+python3 -I -B tests/run.py --codex /absolute/path/to/codex nvim_ai_codex_runtime nvim_ai_codex_auth_runtime
 ```
 
 This uses synthetic credentials and a loopback Responses SSE provider. It does
@@ -351,6 +351,15 @@ it introduces no public provider override. The separate confinement/hostile
 configuration probes still use the production sandbox and worker directly.
 Logs contain synthetic protocol evidence and retained-state metadata, never
 account credentials or the contents of the retained databases and rollouts.
+
+The credential suite adds a rotating synthetic ChatGPT authority. It checks
+replacement-token reuse after Close/new conversation and stopped-worker resume.
+Direct, symlink, proc-root and descriptor aliases must deny reads and
+non-destructive write-open attempts before and after refresh. An empty successful
+read is a failure. Both direct RPC and model-issued code-mode commands must run
+and return the expected denial sentinel. The engine sees the bound auth file,
+but no credential directory, lease file or inherited credential descriptors.
+Refresh endpoints exist only in the fixture; no live login or service is used.
 
 The Linux workflow has a `codex_runtime` dispatch input, default false. When
 selected it verifies the complete package checksum, extracts only `bin/codex`

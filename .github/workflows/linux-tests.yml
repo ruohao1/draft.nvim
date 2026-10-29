@@ -135,7 +135,7 @@ jobs:
 
       - name: Run the optional Codex runtime audit
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.codex_runtime }}
-        run: /usr/bin/python3 -I -B tests/run.py --codex "$DRAFT_TEST_CODEX_PATH" nvim_ai_codex_runtime
+        run: /usr/bin/python3 -I -B tests/run.py --codex "$DRAFT_TEST_CODEX_PATH" nvim_ai_codex_runtime nvim_ai_codex_auth_runtime
 
       - name: Upload test logs
         if: ${{ always() }}

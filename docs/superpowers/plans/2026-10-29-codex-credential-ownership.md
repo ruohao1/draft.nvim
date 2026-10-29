@@ -336,7 +336,7 @@ Use the existing `tests/run.py --codex ABSOLUTE_PATH` opt-in and
 path was supplied. An explicit audit must fail on wrong version, missing host
 capability, absent companion or failed confinement; it must not skip these cases.
 
-- [ ] **1. Add the rotating-authority and pinned-runtime acceptance test.** In
+- [x] **1. Add the rotating-authority and pinned-runtime acceptance test.** In
   test code only, redirect `chatgpt_base_url`, `openai_base_url` and
   `CODEX_REFRESH_TOKEN_URL_OVERRIDE` to loopback. Reuse the recorded probe's
   controlled refresh technique; production gains no endpoint override.
@@ -358,12 +358,12 @@ capability, absent companion or failed confinement; it must not skip these cases
   Do not infer refresh from RPC success or by backdating `last_refresh` alone.
   Test Close/new conversation and stopped-worker resume as distinct cases.
 
-- [ ] **2. Run the new explicit suite before accepting its assertions.** Use
+- [x] **2. Run the new explicit suite before accepting its assertions.** Use
   `python3 -I -B tests/run.py --codex /absolute/path/to/codex
   nvim_ai_codex_auth_runtime`. Record failures accurately and correct fixture
   routing against the pinned source; do not broaden allowed network requests.
 
-- [ ] **3. Add real nested-command denial checks before and after refresh.**
+- [x] **3. Add real nested-command denial checks before and after refresh.**
   Exercise direct auth access, a workspace symlink, proc-root aliases and
   descriptor aliases with both reads and non-destructive write-open attempts.
   Require permission denial or confirmed absence of an alias; never accept an
@@ -372,12 +372,12 @@ capability, absent companion or failed confinement; it must not skip these cases
   Verify the provider history contains no synthetic token. Recheck outer-parent
   directory/lease absence and unchanged real project files.
 
-- [ ] **4. Run `python3 -I -B tests/run.py --codex /absolute/path/to/codex
+- [x] **4. Run `python3 -I -B tests/run.py --codex /absolute/path/to/codex
   nvim_ai_codex_runtime nvim_ai_codex_auth_runtime`.** Both suites pass with zero
   skips on the supported host. Wire both names into the existing optional CI
   audit. Keep default provider-free tests independent of installed Codex.
 
-- [ ] **5. Commit:** `test: verify durable Codex refresh and credential isolation`.
+- [x] **5. Commit:** `test: verify durable Codex refresh and credential isolation`.
 
 ### Task 5: Verify the complete change and prepare one implementation PR
 
