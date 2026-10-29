@@ -110,10 +110,13 @@ local function shown(path, decision)
   local wins = vim.api.nvim_tabpage_list_wins(staged.status().review_tab)
   eq(#wins, 2, "both diff panels remain open")
   for _, win in ipairs(wins) do
-    assert(
-      vim.wo[win].winbar:find("[" .. (decision or "pending") .. "] " .. path .. " ·", 1, true),
-      "both panels must show " .. path .. ": " .. vim.wo[win].winbar
-    )
+    local title = vim.api.nvim_eval_statusline(
+      vim.wo[win].winbar,
+      { winid = win, use_winbar = true, maxwidth = 250 }
+    ).str
+    assert(title:find("[" .. (decision or "pending") .. "]", 1, true), title)
+    assert(title:find(path, 1, true), "both panels must identify " .. path .. ": " .. title)
+    assert(title:find("Saved", 1, true) or title:find("Proposed", 1, true), title)
   end
 end
 

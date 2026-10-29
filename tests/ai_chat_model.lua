@@ -68,6 +68,10 @@ local function visible(text)
   assert(
     vim.wait(1000, function()
       local lines = vim.api.nvim_buf_get_lines(buffer("draft-chat"), 0, -1, false)
+      for _, win in ipairs(vim.fn.win_findbuf(buffer("draft-chat"))) do
+        lines[#lines + 1] =
+          vim.api.nvim_eval_statusline(vim.wo[win].winbar, { winid = win, use_winbar = true }).str
+      end
       return table.concat(lines, "\n"):find(text, 1, true) ~= nil
     end, 10),
     "Missing visible model information: " .. text

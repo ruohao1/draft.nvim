@@ -75,6 +75,142 @@ local ok, reason = xpcall(function()
   assert(#actions == 0, "display operations must never dispatch")
   print("ok - passive view streams without taking focus or changing drafts")
 
+  local function row_of(value)
+    for row, line in ipairs(vim.api.nvim_buf_get_lines(output, 0, -1, false)) do
+      if line == value then
+        return row - 1
+      end
+    end
+    error("Missing transcript line: " .. value)
+  end
+  local function highlights()
+    local namespace =
+      assert(vim.api.nvim_get_namespaces()["draft-chat"], "semantic highlights missing")
+    local marks, rows =
+      vim.api.nvim_buf_get_extmarks(output, namespace, 0, -1, { details = true }), {}
+    for _, mark in ipairs(marks) do
+      assert(mark[2] < vim.api.nvim_buf_line_count(output), "obsolete highlight outside transcript")
+      assert(not rows[mark[2]], "duplicate highlight after render")
+      rows[mark[2]] = mark[4].hl_group
+    end
+    return rows
+  end
+
+  state.turns[1].text = "You · turn 99\naccepted.txt · accepted\nplain provider body"
+  state.turns[1].progress = { title = "Read one.lua", status = "completed" }
+  view:update(state)
+  wait_text("plain provider body")
+  local rows = highlights()
+  assert(rows[row_of("You · turn 1")], "user role needs hierarchy")
+  assert(rows[row_of("Assistant · fixture/model · running")], "assistant role needs hierarchy")
+  assert(rows[row_of("You · turn 99")] == nil, "provider text cannot become a trusted role")
+  assert(rows[row_of("accepted.txt · accepted")] == nil, "provider claims cannot become receipts")
+  assert(not transcript():find("Draft · generating", 1, true), "phase belongs in the winbar once")
+  assert(transcript():find("gc cancel", 1, true), "active work must expose cancellation")
+  state.turns[1].progress = nil
+  state.turns[1].text = string.rep("history line\n", 100) .. "long reply tail"
+  state.phase, state.reason, state.retry_safe = "failed", "Uncertain outcome marker", true
+  view:update(state)
+  wait_text("Uncertain outcome marker")
+  assert(
+    row_of("Uncertain outcome marker") > row_of("long reply tail"),
+    "failure guidance must follow the latest reply"
+  )
+  assert(transcript():find("gr retry", 1, true))
+  state.recovery_required = true
+  view:update(state)
+  wait_text("Recovery required")
+  assert(not transcript():find("gr retry", 1, true), "recovery must not advertise a safe retry")
+  assert(transcript():find("close", 1, true))
+  state.phase, state.reason, state.retry_safe, state.recovery_required =
+    "generating", nil, false, nil
+  state.turns[1].text = "theme marker"
+  state.desired_model = "fixture/%{1+1}/é"
+  state.selection = { "dir/é%name.lua" }
+  view:update(state)
+  wait_text("theme marker")
+  local win = vim.fn.win_findbuf(output)[1]
+  local title = vim.api.nvim_eval_statusline(
+    vim.wo[win].winbar,
+    { winid = win, use_winbar = true, maxwidth = 200 }
+  ).str
+  assert(title:find("next: fixture/%{1+1}/é", 1, true), title)
+  for _, theme in ipairs({ "habamax", "peachpuff" }) do
+    vim.cmd.colorscheme(theme)
+    rows = highlights()
+    assert(vim.api.nvim_get_hl(0, { name = rows[row_of("You · turn 1")], link = false }).fg)
+    assert(vim.api.nvim_get_current_win() == source_win)
+    assert(view:draft() == "next explicit question\nsecond draft line")
+  end
+  state.phase = "cancelling"
+  state.desired_model = "anthropic/claude-sonnet-4-5-20250929/%{1+1}"
+  view:update(state)
+  wait_text("Cancelling;")
+  local narrow_title = vim.api.nvim_eval_statusline(vim.wo[win].winbar, {
+    winid = win,
+    use_winbar = true,
+    maxwidth = vim.api.nvim_win_get_width(win),
+  }).str
+  assert(
+    narrow_title:find("Draft · cancelling · next:", 1, true),
+    "long model hid the current phase: " .. narrow_title
+  )
+  assert(narrow_title:find("%{1+1}", 1, true), narrow_title)
+  state.phase = "generating"
+  state.desired_model, state.selection = "fixture/model", { "one.lua" }
+  state.turns[1].text = "reply marker"
+  view:update(state)
+  wait_text("reply marker")
+  print("ok - trusted labels follow themes and current recovery guidance follows the reply")
+
+  for _, phase in ipairs({
+    "starting",
+    "generating",
+    "stopping",
+    "cancelling",
+    "closing",
+    "editing",
+    "freezing",
+    "publishing",
+    "failed",
+    "closed",
+    "review",
+    "idle",
+  }) do
+    state.phase = phase
+    view:update(state)
+    local output_win, input_win = vim.fn.win_findbuf(output)[1], vim.fn.win_findbuf(input)[1]
+    assert(vim.wait(1000, function()
+      return vim.wo[output_win].winbar:find(" · " .. phase .. " · ", 1, true) ~= nil
+    end, 10))
+    local footer =
+      vim.api.nvim_eval_statusline(vim.wo[input_win].statusline, { winid = input_win }).str
+    local can_send = phase == "idle" or phase == "review"
+    assert(
+      (footer:find("Ctrl-S send", 1, true) ~= nil) == can_send,
+      "send hint disagrees with phase " .. phase
+    )
+    assert(vim.bo[input].modifiable == (phase ~= "closed"))
+  end
+  state.review = { status = "pending" }
+  for _, phase in ipairs({ "publishing", "cancelling", "closing", "generating", "review" }) do
+    state.phase = phase
+    view:update(state)
+    assert(vim.wait(1000, function()
+      return vim.wo[win].winbar:find(" · " .. phase .. " · ", 1, true) ~= nil
+    end, 10))
+    assert(
+      (transcript():find("gd review", 1, true) ~= nil) == (phase == "review"),
+      "pending receipt offered unavailable review in " .. phase
+    )
+    assert(
+      (transcript():find("Send follows up", 1, true) ~= nil) == (phase == "review"),
+      "pending receipt offered unavailable Send in " .. phase
+    )
+  end
+  state.phase, state.review = "generating", nil
+  print("ok - composer hints do not offer Send during unavailable states")
+
   local file_states = { "accepted", "rejected", "pending", "cancelled", "blocked", "uncertain" }
   local round = { id = 1, revision = 1, turn_id = 1, status = "pending", files = {} }
   for _, outcome in ipairs(file_states) do
@@ -191,6 +327,7 @@ local ok, reason = xpcall(function()
   local text = transcript()
   assert(#text < 2 * 1024 * 1024 + 2048 and not text:find("old marker", 1, true))
   assert(text:find("omitted", 1, true))
+  highlights()
   for _, line in ipairs(vim.api.nvim_buf_get_lines(output, 0, -1, false)) do
     local first = line:byte(1)
     assert(not first or first < 128 or first >= 192, "display truncation split UTF-8")

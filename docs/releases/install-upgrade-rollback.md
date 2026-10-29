@@ -44,8 +44,15 @@ For local development instead, replace the release spec with:
 
 A `dir` spec uses the files on disk; a lockfile does not pin that local checkout.
 Record `git -C ~/src/draft.nvim rev-parse HEAD` before testing. Alternatively,
-prepend that directory to `runtimepath` and call `require("draft").setup()` as
-shown in the [README](../../README.md#install).
+add the checkout directly from your Neovim configuration:
+
+```lua
+vim.opt.runtimepath:prepend(vim.fn.expand("~/src/draft.nvim"))
+require("draft").setup()
+```
+
+Managed Codex requires development code beyond the beta tag. Follow the
+[Codex configuration guide](../usage.md#codex) on the first setup call.
 
 ## Fresh installation
 

@@ -37,7 +37,7 @@ local function send(message)
   vim.cmd("NvimAIChatSend")
 end
 local function shown(path)
-  assert(vim.wo.diff and vim.wo.winbar:find("FROZEN STAGED PROPOSAL", 1, true))
+  assert(vim.wo.diff and vim.wo.winbar:find("Proposed", 1, true))
   assert(vim.wo.winbar:find(path, 1, true))
 end
 local ok, reason = xpcall(function()
