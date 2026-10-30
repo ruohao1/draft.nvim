@@ -36,12 +36,14 @@ def configuration(path):
     if not isinstance(value, dict):
         raise protocol.Refused("Invalid trusted controller configuration")
     backend = value.get("backend", "opencode")
-    required = {"bwrap", "model", "codex", "auth_file"} if backend == "codex" else {"bwrap", "model", "opencode"}
-    allowed = required | {"backend"} if backend == "codex" else required | {"backend", "auth_file", "provider"}
+    required = {"bwrap", "model", "codex"} if backend == "codex" else {"bwrap", "model", "opencode"}
+    allowed = required | {"backend", "auth_file", "auth_store"} if backend == "codex" else required | {"backend", "auth_file", "provider"}
     if (backend not in ("opencode", "codex") or not required <= value.keys() or value.keys() - allowed
             or not protocol.model(value["model"])
             or not all(protocol.path(value[key], True) for key in (backend, "bwrap"))
             or ("auth_file" in value and not protocol.path(value["auth_file"], True))
+            or ("auth_store" in value and not protocol.path(value["auth_store"], True))
+            or (backend == "codex" and ("auth_file" in value) == ("auth_store" in value))
             or (backend == "codex" and re.fullmatch(r"openai/[a-zA-Z0-9_.-]{1,200}", value["model"]) is None)
             or ("provider" in value and (not isinstance(value["provider"], dict)
                  or set(value["provider"]) != {value["model"].split("/", 1)[0]}))):

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Managed Codex can retain a dedicated ChatGPT login across Close with
+  `chat.auth_store`. Concurrent Draft workers serialize access, and a busy login
+  preserves the conversation for explicit retry. This mode requires Bubblewrap
+  descriptor support (0.11.1 tested). `chat.auth_file` now accepts API keys only;
+  saved ChatGPT setups must create a separate login and switch to `auth_store`.
+  See [setup and recovery](docs/usage.md#codex).
+
 - Managed Codex accepts private SQLite rollback journals for its known databases,
   avoiding startup refusals when the pinned CLI creates a journal. Journals remain
   subject to the existing state checks and command read restrictions.

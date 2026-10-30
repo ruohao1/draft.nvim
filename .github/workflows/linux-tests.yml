@@ -36,7 +36,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             acl apparmor bison bubblewrap build-essential git \
-            libevent-dev libncurses-dev pkg-config python3 ripgrep
+            libcap-dev libevent-dev libncurses-dev libselinux1-dev \
+            meson ninja-build pkg-config python3 ripgrep
+
+      - name: Install Bubblewrap 0.11.1
+        run: |
+          archive="$RUNNER_TEMP/bubblewrap-0.11.1.tar.xz"
+          curl --fail --location --retry 3 \
+            https://github.com/containers/bubblewrap/releases/download/v0.11.1/bubblewrap-0.11.1.tar.xz \
+            --output "$archive"
+          printf '%s  %s\n' \
+            c1b7455a1283b1295879a46d5f001dfd088c0bb0f238abb5e128b3583a246f71 \
+            "$archive" | sha256sum --check --strict
+          tar --extract --xz --file "$archive" --directory "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/bubblewrap-0.11.1"
+          meson setup build --prefix=/usr -Dman=disabled -Dtests=false \
+            -Dbash_completion=disabled -Dzsh_completion=disabled
+          meson compile -C build
+          sudo install --mode=0755 build/bwrap /usr/bin/bwrap
 
       - name: Allow Bubblewrap namespaces on the disposable runner
         run: |
@@ -118,7 +135,7 @@ jobs:
 
       - name: Run the optional Codex runtime audit
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.codex_runtime }}
-        run: /usr/bin/python3 -I -B tests/run.py --codex "$DRAFT_TEST_CODEX_PATH" nvim_ai_codex_runtime
+        run: /usr/bin/python3 -I -B tests/run.py --codex "$DRAFT_TEST_CODEX_PATH" nvim_ai_codex_runtime nvim_ai_codex_auth_runtime
 
       - name: Upload test logs
         if: ${{ always() }}

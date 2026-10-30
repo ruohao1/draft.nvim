@@ -12,7 +12,7 @@ local function scenario(name, run)
   count = count + 1
   print("ok - " .. name)
 end
-local function fixture()
+local function fixture(backend)
   local driver = { requests = {}, sequence = 0 }
   function driver:send(command, receive)
     self.requests[#self.requests + 1] = { command = vim.deepcopy(command), receive = receive }
@@ -31,6 +31,7 @@ local function fixture()
     return request.receive(envelope)
   end
   local options = {
+    backend = backend,
     root = "/tmp/conversation-fixture",
     selection = { "first.txt", "second.txt" },
     model = "fixture/model",
@@ -41,6 +42,33 @@ end
 local function act(owner, action)
   return owner:dispatch(action, owner:snapshot().view_revision)
 end
+scenario("credential diagnostics belong only to Codex and contain fixed recovery text", function()
+  for _, backend in ipairs({ "codex", "opencode" }) do
+    for _, diagnostic in ipairs({
+      "auth_support",
+      "auth_busy",
+      "auth_identity",
+      "auth_persistence",
+      "auth_migrate",
+    }) do
+      local owner, driver = fixture(backend)
+      assert(act(owner, { kind = "submit", text = "PRIVATE_PROMPT" }))
+      assert(driver:emit(1, { kind = "stopping" }))
+      local accepted = driver:emit(1, {
+        kind = "settled",
+        outcome = "failed",
+        diagnostic = diagnostic,
+        stopped = true,
+        graceful = true,
+        store_valid = true,
+        tokens_retired = true,
+        submission = "not_submitted",
+      })
+      assert(not not accepted == (backend == "codex"))
+      assert(not owner:snapshot().reason:find("PRIVATE_", 1, true))
+    end
+  end
+end)
 
 scenario("startup stages and failure causes are bounded and never authorize replay", function()
   for _, submitted in ipairs({ false, true }) do

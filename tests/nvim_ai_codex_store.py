@@ -25,6 +25,9 @@ def helper(name):
 
 storage = helper("nvim-ai-codex-store")
 runtime = helper("nvim-ai-codex-runtime")
+spec = importlib.util.spec_from_file_location("fixture-auth", ROOT / "tests/fixtures/ai/codex_auth.py")
+auth_fixture = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(auth_fixture)
 
 
 class StoreTest(unittest.TestCase):
@@ -68,6 +71,7 @@ class StoreTest(unittest.TestCase):
         argv, env = runtime.sandbox(
             {"codex": str(self.peer), "bwrap": os.path.realpath(shutil.which("bwrap")),
              "model": "openai/gpt-5.4"}, task, self.store)
+        self.last_command, self.last_env = argv, env
         worker = self.store.start(argv, env=env, rpc_timeout=1, stop_timeout=.2, **options)
         self.workers.append(worker)
         return worker
@@ -75,6 +79,115 @@ class StoreTest(unittest.TestCase):
     def seed(self):
         self.start().request("fixture/codex-state", {"thread": THREAD})
         self.store.stop(outcome="completed", session=THREAD)
+
+    def owned(self):
+        self.store.close()
+        self.directory = self.parent / "dedicated"
+        self.directory.mkdir(mode=0o700)
+        self.auth_path = self.directory / "auth.json"
+        self.auth_path.write_text(json.dumps(auth_fixture.bundle()))
+        self.auth_path.chmod(0o600)
+        self.store = storage.Store(self.parent)
+        self.store.initialize(auth_store=str(self.directory))
+        self.store.acquire_auth()
+
+    def test_owned_mount_preserves_tokens_and_does_not_leak_descriptors(self):
+        self.owned()
+        identities = [[os.fstat(fd).st_dev, os.fstat(fd).st_ino] for fd in self.store.auth_fds]
+        worker = self.start()
+        self.assertIn("--bind-fd", self.last_command)
+        self.assertIn("--sync-fd", self.last_command)
+        self.assertNotIn(str(self.directory), self.last_command)
+        self.assertNotIn("--as-pid-1", self.last_command)
+        self.assertNotIn("OPENAI_API_KEY", self.last_env)
+        result = worker.request("fixture/auth-isolation", {"identities": identities})
+        self.assertEqual(result, {"inherited": False, "lock_absent": True})
+        self.assertEqual((self.store.path / "auth.json").read_bytes(), b"")
+        worker.request("fixture/rotate-auth", {"owned": True})
+        self.store.stop(outcome="completed")
+        self.assertEqual(self.store.auth_fds, ())
+        self.assertTrue(json.loads(self.auth_path.read_bytes())["tokens"]["refresh_token"]
+                        == "synthetic-refresh-1", "Refreshed auth was not persisted")
+        self.store.acquire_auth()
+        second = self.start()
+        self.assertEqual(second.request("fixture/auth-generation", {}), {"refreshed": True})
+        self.store.stop(outcome="completed")
+        self.store.close()
+        self.assertTrue(self.auth_path.exists())
+        self.assertTrue((self.directory / ".draft.lock").exists())
+
+    def test_owned_launch_failure_releases_without_overwriting_credentials(self):
+        self.owned()
+        original = self.auth_path.read_bytes()
+        for options in ({"pass_fds": ()}, {"guard": None}, {"wire": "codex"}):
+            with self.assertRaises(storage.Refused):
+                self.store.start(["/not-used"], env={}, **options)
+        with self.assertRaises(OSError):
+            self.store.start(["/does-not-exist"], env={})
+        self.assertEqual(self.store.auth_fds, ())
+        self.assertTrue(self.auth_path.read_bytes() == original, "Auth changed on launch failure")
+        self.store.acquire_auth()
+        self.store.close()
+        storage.auth.Lease(str(self.directory)).close()
+
+    def test_owned_sync_failure_preserves_auth_and_refuses_reuse(self):
+        self.owned()
+        self.start().request("fixture/rotate-auth", {"owned": True})
+        with mock.patch.object(storage.auth.os, "fsync", side_effect=OSError("PRIVATE")):
+            with self.assertRaises(storage.Refused):
+                self.store.stop(outcome="completed")
+        self.assertEqual(self.store.auth_diagnostic, "auth_persistence")
+        self.assertEqual(self.store.auth_fds, ())
+        with self.assertRaises(storage.Refused):
+            self.store.acquire_auth()
+        self.store.close()
+        storage.auth.Lease(str(self.directory)).close()
+
+    def test_owned_corrupt_or_changed_identity_never_restores_a_seed(self):
+        self.owned()
+        self.start().request("fixture/rotate-auth", {"corrupt": True})
+        with self.assertRaises(storage.Refused):
+            self.store.stop(outcome="completed")
+        self.assertEqual(self.store.auth_diagnostic, "auth_persistence")
+        self.assertEqual(self.auth_path.read_bytes(), b"{")
+        self.assertEqual(self.store.auth_fds, ())
+        self.store.close()
+        self.assertEqual(self.auth_path.read_bytes(), b"{")
+
+    def test_owned_forced_exit_settles_credentials_but_never_reuses_state(self):
+        self.owned()
+        worker = self.start()
+        worker.request("fixture/rotate-auth", {"owned": True})
+        worker.request("fixture/blocked", {})
+        with self.assertRaises(storage.Refused):
+            self.store.stop(outcome="completed")
+        self.assertTrue(worker.close().forced)
+        self.assertEqual(self.store.auth_fds, ())
+        with self.assertRaises(storage.Refused):
+            self.store.acquire_auth()
+        lease = storage.auth.Lease(str(self.directory))
+        try:
+            lease.settle()
+        finally:
+            lease.close()
+
+    def test_owned_unknown_exit_closes_only_local_lease_and_refuses_cleanup(self):
+        self.owned()
+        worker = self.start()
+        worker.request("fixture/auth-generation", {})
+        lease = self.store._lease
+        borrowed = os.dup(lease.lock_fd)
+        try:
+            with mock.patch.object(worker, "close", return_value=storage.acp.Exit(False, False, True, None, None, True)):
+                with self.assertRaises(storage.Refused):
+                    self.store.stop(outcome="failed")
+            self.assertEqual(self.store.auth_fds, ())
+            with self.assertRaises(storage.Refused):
+                self.store.close()
+            with self.assertRaisesRegex(storage.auth.Refused, "auth_busy"):
+                storage.auth.Lease(str(self.directory))
+        finally:
+            os.close(borrowed)
 
     def test_private_auth_import_and_rotation(self):
         original = self.source.read_bytes()

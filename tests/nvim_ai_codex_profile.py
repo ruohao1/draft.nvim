@@ -8,6 +8,7 @@ import shutil
 import tomllib
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -117,14 +118,52 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(copied.stat().st_nlink, 1)
         self.assertEqual(copied.stat().st_uid, os.getuid())
 
-    def test_private_saved_chatgpt_token_import(self):
+    def test_owned_placeholder_never_reads_or_copies_credentials(self):
+        directory = self.parent / "not-yet-read"
+        with mock.patch.object(storage.review, "_private_bytes", side_effect=AssertionError("read")):
+            self.store.initialize(auth_store=str(directory))
+        self.assertEqual((self.store.path / "auth.json").read_bytes(), b"")
+        self.assertFalse(directory.exists())
+        self.assertEqual(self.store.auth_fds, ())
+        with self.assertRaises(runtime.Refused):
+            self.sandbox()
+
+    def test_owned_auth_support_is_bounded_and_environment_is_sanitized(self):
+        probe = self.parent / "bwrap-probe"
+        cases = [("print('--bind-fd FD DEST\\n--sync-fd FD')", True),
+                 ("print('--sync-fd FD')", False),
+                 ("print('--bind-fd --sync-fd'); raise SystemExit(1)", False),
+                 ("print('x' * 65537)", False),
+                 ("import time; time.sleep(6)", False)]
+        for script, accepted in cases:
+            with self.subTest(script=script):
+                probe.write_text("#!/usr/bin/python3\nimport os, sys\n"
+                    "assert sys.argv[1:] == ['--help']\n"
+                    "assert 'OPENAI_API_KEY' not in os.environ and 'CODEX_HOME' not in os.environ\n" + script)
+                probe.chmod(0o700)
+                with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "synthetic", "CODEX_HOME": "/unused"}):
+                    if accepted:
+                        runtime.require_owned_auth(str(probe))
+                    else:
+                        with self.assertRaises(runtime.Refused):
+                            runtime.require_owned_auth(str(probe))
+
+    def test_exactly_one_auth_input(self):
+        for options in ({}, {"auth_file": str(self.source), "auth_store": str(self.parent)},
+                        {"auth_store": "relative"}):
+            with self.subTest(options=options), self.assertRaises(storage.Refused):
+                self.store.initialize(**options)
+
+    def test_saved_chatgpt_copy_requires_migration_without_touching_source(self):
         value = {"auth_mode": "chatgpt", "OPENAI_API_KEY": None,
                  "tokens": {"id_token": "eyJhbGciOiJub25lIn0.e30.synthetic",
                             "access_token": "synthetic-access", "refresh_token": "synthetic-refresh",
                             "account_id": "synthetic-account"},
                  "last_refresh": "2026-10-20T00:00:00Z"}
-        self.store.initialize(self.credential(value))
-        self.assertEqual(json.loads((self.store.path / "auth.json").read_bytes()), value)
+        with self.assertRaises(storage.Refused):
+            self.store.initialize(self.credential(value))
+        self.assertEqual(self.store.auth_diagnostic, "auth_migrate")
+        self.assertFalse((self.store.path / "auth.json").exists())
         self.assertEqual(json.loads(self.source.read_bytes()), value)
 
     def test_import_once_cannot_overwrite_retained_credentials(self):

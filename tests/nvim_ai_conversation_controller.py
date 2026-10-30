@@ -81,6 +81,24 @@ class ControllerTest(unittest.TestCase):
                 self.assertEqual(result.stdout, b'')
                 self.assertNotIn(b'{bad}', result.stderr)
 
+    def test_owned_auth_configuration_is_passive_and_backend_specific(self):
+        base = {"backend": "codex", "codex": "/missing/unused-codex", "bwrap": "/missing/bwrap",
+                "model": "openai/gpt-5.4", "auth_store": str(self.root / "missing-dedicated")}
+        frame = self.close_frame()
+        frame["command"]["model"] = "openai/gpt-5.4"
+        for change, accepted in (({}, True), ({"auth_file": "/unused"}, False),
+                ({"auth_store": None}, False), ({"auth_store": "relative"}, False),
+                ({"auth_store": "/tmp/../private"}, False), ({"auth_store": "/tmp/"}, False),
+                ({"backend": "opencode", "opencode": "/unused"}, False)):
+            with self.subTest(change=change):
+                self.config.write_text(json.dumps(dict(base, **change)))
+                result = self.invoke(json.dumps(frame).encode() + b'\n')
+                self.assertEqual(result.returncode == 0, accepted, result.stderr)
+                self.assertEqual(list(self.root.iterdir()), [self.config])
+        base.pop("auth_store")
+        self.config.write_text(json.dumps(base))
+        self.assertNotEqual(self.invoke(json.dumps(frame).encode() + b'\n').returncode, 0)
+
     def test_untrusted_launch_file_is_refused_even_for_passive_close(self):
         self.config.chmod(0o644)
         result = self.invoke(json.dumps(self.close_frame()).encode() + b'\n')

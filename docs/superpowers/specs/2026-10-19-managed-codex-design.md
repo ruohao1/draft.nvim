@@ -146,15 +146,14 @@ shell snapshots, updates and analytics for this bounded workflow. Verify the
 pinned profile's effective behavior; merely finding an option in a schema is
 not acceptance evidence.
 
-On first Send, securely load only the explicitly configured Codex credential
-file and the supported OpenAI authentication form. Support an API key or saved
-ChatGPT login tokens through Codex's file credential store; reject unrelated
-credential types and keyring-only profiles with a truthful setup error. The
-original credential file stays unchanged. A private writable copy belongs to
-this conversation, so Codex can refresh that copy across its turns. Do not
-export refreshed credentials, copy user configuration, log tokens or start a
-login flow. Token refresh and account access need opt-in real-account validation;
-source inspection alone does not prove them.
+Credential ownership was revised by the
+[durable credential design](2026-10-29-codex-credential-ownership-design.md).
+`auth_file` copies API-key credentials and preserves the source. Saved ChatGPT
+credentials use a fresh dedicated login through `auth_store`, with a descriptor
+mount and an exclusive lease covering the writer's full lifetime. Close retains
+that login. Refuse saved ChatGPT input through the old copy option with migration
+guidance. Do not copy another client's token family, export tokens, copy user
+configuration or start login. Live account access still needs opt-in validation.
 
 ## Codex state ownership
 
@@ -178,10 +177,10 @@ accept that mode for credential, rollout or database files. Writable helper
 aliases, caches and bundled code belong to disposable scratch mounts, not the
 retained payload. Refuse unexpected entries rather than repairing them silently.
 
-Keep credentials separate from general artifact inspection: validate their
-bounded private file at import, retain the copied file as owned state, and never
-include its bytes in diagnostics. Close removes proven-owned state after exit;
-unsafe cleanup remains visible for explicit recovery.
+Keep credentials separate from general artifact inspection. Validate copied
+API-key input at import and dedicated credentials under their lease. Never put
+credential bytes in diagnostics. Close removes proven-owned conversation state
+after exit and retains the dedicated login; unsafe cleanup requires recovery.
 
 ## Protocol and lifecycle
 

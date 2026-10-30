@@ -9,6 +9,7 @@ local tools = require("ai.tools")
 local resolve, spawn, fs_open, readfile =
   tools.resolve, vim.uv.spawn, vim.uv.fs_open, vim.fn.readfile
 local launches, auth_reads, forbidden = 0, 0, "opencode"
+local locks = {}
 tools.resolve = function(name)
   if name == forbidden then
     return nil, "Other backend is deliberately unavailable"
@@ -70,7 +71,70 @@ local function requests(method)
   end
   return count
 end
+local function owned_directory(name)
+  local path = directory(name)
+  local fixture = assert(vim.api.nvim_get_runtime_file("tests/fixtures/ai/codex_auth.py", false)[1])
+  local result = vim.system({ "/usr/bin/python3", "-I", "-B", fixture, path }):wait()
+  assert(result.code == 0, result.stderr)
+  return path
+end
+local function take_lock(path)
+  local ready = false
+  local fd = assert(vim.uv.fs_open(path .. "/.draft.lock", "a", 384))
+  vim.uv.fs_close(fd)
+  local process = vim.system({
+    "flock",
+    "-n",
+    path .. "/.draft.lock",
+    "/usr/bin/python3",
+    "-c",
+    "print('ready', flush=True); input()",
+  }, {
+    stdin = true,
+    stdout = function(_, data)
+      ready = ready or (data ~= nil and data:find("ready", 1, true) ~= nil)
+    end,
+  })
+  locks[#locks + 1] = process
+  assert(
+    vim.wait(3000, function()
+      return ready
+    end, 10),
+    "Contender did not acquire the lease"
+  )
+  return function()
+    process:write("release\n")
+    assert(process:wait(3000).code == 0)
+  end
+end
 local ok, reason = xpcall(function()
+  local passive_store = root .. "/PRIVATE_MISSING_STORE"
+  f = make(directory("owned-passive"), { auth_store = passive_store }, "codex", "answer")
+  assert(f.owner(), "Dedicated credentials must be accepted without reading them")
+  assert(f.configuration.auth_file == nil and f.configuration.auth_store == passive_store)
+  for _, change in ipairs({
+    { auth_file = "/unused" },
+    { auth_store = "relative" },
+    { auth_store = "/tmp/../private" },
+    { auth_store = "/tmp/" },
+    { auth_store = "/" },
+    { auth_store = false },
+  }) do
+    assert(
+      not require("ai.conversation_controller").new(
+        vim.tbl_extend("force", f.configuration, change)
+      )
+    )
+  end
+  vim.cmd("NvimAIChatHide")
+  vim.cmd("NvimAIChat")
+  health()
+  assert(launches == 0 and auth_reads == 0 and #f.audit == 0)
+  f.cleanup()
+  f = nil
+  assert(not vim.uv.fs_stat(passive_store), "Passive Close created credential state")
+  launches, auth_reads = 0, 0
+
   f = make(directory("passive"), {}, "codex", "answer")
   assert(f.owner(), "The configured Codex backend must open without OpenCode")
   assert(f.configuration.backend == "codex" and f.configuration.model == "openai/gpt-5.4")
@@ -134,6 +198,9 @@ local ok, reason = xpcall(function()
   pending()
   vim.ui.select = select
   assert(f.snapshot().backend == "opencode", "A stale model picker cannot change the new backend")
+  assert(not require("ai.conversation_controller").new(vim.tbl_extend("force", f.configuration, {
+    auth_store = root .. "/private-codex-only",
+  })))
   assert(not old_owner:dispatch({ kind = "choose-model", model = "openai/gpt-5.4" }, old_view))
   f.compose("OpenCode remains independent")
   vim.cmd("NvimAIChatSend")
@@ -144,7 +211,86 @@ local ok, reason = xpcall(function()
   forbidden = "opencode"
   print("ok - explicit backend, passive status, runtime lease and stale owner fences")
 
+  local owned = owned_directory("dedicated-login")
+  local release = take_lock(owned)
+  f = make(directory("owned-busy"), { auth_store = owned }, "codex", "answer")
+  f.compose("First explicit request")
+  vim.cmd("NvimAIChatSend")
+  f.phase("failed")
+  f.rendered("already in use")
+  assert(f.snapshot().retry_safe and not f.snapshot().recovery_required)
+  assert(requests("turn/start") == 0)
+  release()
+  vim.cmd("NvimAIChatRetry")
+  f.phase("idle")
+  assert(requests("turn/start") == 1 and requests("thread/start") == 1)
+  release = take_lock(owned)
+  f.compose("Blocked continuation")
+  vim.cmd("NvimAIChatSend")
+  f.compose("PRIVATE_UNSENT")
+  vim.cmd("NvimAIChatHide")
+  f.phase("failed")
+  vim.cmd("NvimAIChat")
+  assert(f.snapshot().retry_safe and not f.snapshot().recovery_required)
+  assert(f.text("draft-chat-input") == "PRIVATE_UNSENT")
+  assert(requests("turn/start") == 1 and requests("thread/resume") == 0)
+  assert(not health():find("PRIVATE_", 1, true))
+  release()
+  vim.cmd("NvimAIChatRetry")
+  f.phase("idle")
+  assert(requests("turn/start") == 2 and requests("thread/resume") == 1)
+  f.cleanup()
+  f = nil
+  assert(vim.uv.fs_stat(owned .. "/auth.json"))
+
+  f = make(directory("owned-busy-review"), { auth_store = owned }, "codex", "edit")
+  f.compose("Create a proposal")
+  vim.cmd("NvimAIChatSend")
+  f.phase("review")
+  local prior = vim.deepcopy(f.snapshot().review)
+  release = take_lock(owned)
+  f.compose("Blocked revision")
+  vim.cmd("NvimAIChatSend")
+  f.compose("PRIVATE_REVIEW_DRAFT")
+  assert(
+    vim.wait(12000, function()
+      local state = f.snapshot()
+      return state.phase == "review"
+        and state.reason
+        and state.reason:find("already in use", 1, true)
+    end, 10),
+    vim.inspect(f.snapshot())
+  )
+  assert(f.snapshot().review.token == prior.token and not f.snapshot().recovery_required)
+  assert(f.text("draft-chat-input") == "PRIVATE_REVIEW_DRAFT")
+  assert(requests("turn/start") == 1 and requests("thread/resume") == 0)
+  release()
+  vim.cmd("NvimAIChatSend")
+  assert(
+    vim.wait(12000, function()
+      return f.snapshot().phase == "review" and f.snapshot().review.token ~= prior.token
+    end, 10),
+    vim.inspect(f.snapshot())
+  )
+  assert(requests("turn/start") == 2 and requests("thread/resume") == 1)
+  f.cleanup()
+  f = nil
+  print("ok - owned login contention preserves draft, thread and prior review")
+
+  local old_bwrap = root .. "/old-bwrap"
+  vim.fn.writefile({ "#!/bin/sh", "printf '%s\\n' '--sync-fd FD'" }, old_bwrap)
+  assert(vim.uv.fs_chmod(old_bwrap, 448))
   for _, case in ipairs({
+    {
+      name = "auth-support",
+      options = { auth_store = root .. "/PRIVATE_UNREAD_STORE", bwrap = old_bwrap },
+      hint = "Bubblewrap",
+    },
+    {
+      name = "auth-migrate",
+      options = { auth_file = owned .. "/auth.json" },
+      hint = "chat.auth_store",
+    },
     {
       name = "credentials",
       options = { auth_file = root .. "/PRIVATE_AUTH.json" },
@@ -364,6 +510,10 @@ local ok, reason = xpcall(function()
 end, debug.traceback)
 if f then
   f.cleanup()
+end
+for _, process in ipairs(locks) do
+  process:kill(9)
+  process:wait(3000)
 end
 tools.resolve, vim.uv.spawn, vim.uv.fs_open, vim.fn.readfile = resolve, spawn, fs_open, readfile
 backends.health, vim.ui.select = native_health, original_select

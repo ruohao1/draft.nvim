@@ -375,7 +375,17 @@ function M.new(options)
     diagnostics.launch =
       "Codex could not start in its sandbox. Install Codex 0.163.0 with its matching codex-code-mode-host beside the native executable; run :checkhealth draft."
     diagnostics.credentials =
-      "Codex credentials could not be loaded. Check chat.auth_file: an owned 0600 API-key or saved ChatGPT token file is required."
+      "Codex credentials could not be loaded. Check chat.auth_file for an API key, or chat.auth_store for a private dedicated login; auth.json must be owned mode 0600."
+    diagnostics.auth_support =
+      "Dedicated Codex login needs Bubblewrap with --bind-fd and --sync-fd support. Install Bubblewrap 0.11.1, then Retry."
+    diagnostics.auth_busy =
+      "The dedicated Codex login is already in use. Wait for the other Draft worker to stop, then explicitly Retry or Revise."
+    diagnostics.auth_identity =
+      "The dedicated Codex login has a missing or different user or workspace identity. Close chat, check the dedicated login, then start a New conversation."
+    diagnostics.auth_persistence =
+      "Codex credentials could not be validated or saved after shutdown. Close chat and check the dedicated login; a fresh login may be required."
+    diagnostics.auth_migrate =
+      "Saved ChatGPT tokens can no longer use chat.auth_file. Create a fresh dedicated Codex login and configure chat.auth_store; see :help draft-chat-codex."
     diagnostics.model =
       "Codex did not advertise or confirm the selected model. Check chat.model, then close chat."
     diagnostics.compatibility =
@@ -669,7 +679,7 @@ function M.new(options)
       and (
         event.outcome ~= "failed"
         or type(event.diagnostic) ~= "string"
-        or not DIAGNOSTICS[event.diagnostic]
+        or not diagnostics[event.diagnostic]
       )
     then
       return fail("Invalid conversation diagnostic; explicit recovery required")
