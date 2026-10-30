@@ -75,9 +75,57 @@ controller, review registry, worker and Lua callers. It found no Critical,
 Important or Minor issues. It inspected the recorded evidence without rerunning
 the suites. No implementation finding was deferred.
 
-This is synthetic acceptance, not a live-service trial or release. No real account
-credential, login, refresh or model call was used. A dedicated login is required;
+The checks above used synthetic credentials and providers. A dedicated login is required;
 locking coordinates cooperating local Draft processes, not another CLI, IDE or
 machine. Codex's upstream truncate/write refresh is not crash-atomic. Interrupted
 refresh can require a fresh login; Draft preserves the latest file and never
 restores an obsolete token seed.
+
+## Live acceptance — 2026-10-29
+
+A separately authorized trial passed on candidate
+`df978e022d7e6dbcc52122b455b474e5bf10d402`, with the same pinned CLI, companion,
+editor and Bubblewrap versions. The user completed a fresh device login on the
+test VM. Existing CLI/IDE credentials were not imported. The operator was the
+Codex agent, using a disposable project and `openai/gpt-6.1-sol`.
+
+One explicit `getAuthStatus` request used `includeToken=false` and
+`refreshToken=true` through the production Store, worker and sandbox.
+After the writer exited, the trusted observer confirmed replacement access and
+refresh tokens, a newer `last_refresh`, unchanged user/workspace identity and
+stable auth/lock inodes. It recorded booleans only. The temporary auth placeholder
+stayed empty. Closing that Store removed conversation state and retained the login.
+
+The first editor Send requested one exact change to a disposable Lua file.
+The frozen proposal was read-only and matched the requested bytes. Saved files
+stayed unchanged until the actual `a` key approved it. Only the selected file
+changed, and the accepted receipt sequence was 1.
+
+Public Close followed by `:NvimAIChatNew` created a new conversation and thread.
+A second minimal Send returned the requested reply using the retained login.
+It changed no files. Both editor workers settled normally; the old conversation
+store disappeared, and final Close retained a valid login. Exactly two Sends
+and one explicit refresh occurred. The agent made no prompt retry.
+
+Before live submission, the synthetic observer and passive editor preflight
+passed. Two harness assumptions were corrected: New requires `NvimAIChatNew`,
+and Close may start the cleanup controller without starting a provider worker.
+Product code was unchanged. The first unauthenticated device-login process timed
+out; the replacement login succeeded before the live trial.
+
+The live wrapper exited 0 and removed its temporary AppArmor profile. A root
+observer found no test process, open handle or inspection error. Both Codex
+conversation stores were absent, and stock/global security policy was unchanged.
+After the user approved cleanup on 2026-10-30, the dedicated login was logged
+out under its exclusive lease. The auth file, retained review directory,
+disposable project, test checkout and tools were removed. A final root observer
+confirmed no matching process, open handle or inspection error and unchanged
+host policy. The operator preserved 24 allowlisted evidence files locally,
+including exact proposal/published bytes and three terminal captures. The
+archive checksum and all live-result assertions passed. No credentials or
+private conversation stores were exported. Cleanup made no additional model
+request. No release or merge was performed.
+
+This proves one fresh-login, refresh, review and Close/New path on the recorded
+host. It does not establish other accounts or workspaces, cross-client locking,
+crash-atomic refresh, internal HTTP request counts, billing or long-term use.

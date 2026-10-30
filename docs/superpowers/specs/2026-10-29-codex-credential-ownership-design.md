@@ -17,8 +17,9 @@ temporary owners. Close removes conversation data and retains the login.
 
 This replaces the saved-ChatGPT-token import contract in the
 [managed Codex design](2026-10-19-managed-codex-design.md). Implementation,
-migration documentation and synthetic acceptance are complete. Live login
-acceptance remains a separate opt-in task.
+migration documentation and synthetic acceptance are complete. A separately
+authorized fresh-login trial and its cleanup are also complete. The linked
+validation record states the tested scope and remaining limits.
 
 ## Evidence and approaches
 
